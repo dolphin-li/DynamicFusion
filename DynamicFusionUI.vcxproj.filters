@@ -1,0 +1,290 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;cxx;c;def</Extensions>
+    </Filter>
+    <Filter Include="Form Files">
+      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
+      <Extensions>ui</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{D9D6E242-F8AF-46E4-B9FD-80ECBC20BA3E}</UniqueIdentifier>
+      <Extensions>qrc;*</Extensions>
+      <ParseFiles>false</ParseFiles>
+    </Filter>
+    <Filter Include="Generated Files">
+      <UniqueIdentifier>{71ED8ED8-ACB9-4CE9-BBE1-E00B30144E11}</UniqueIdentifier>
+      <Extensions>moc;h;cpp</Extensions>
+      <SourceControlFiles>False</SourceControlFiles>
+    </Filter>
+    <Filter Include="Generated Files\Debug">
+      <UniqueIdentifier>{455a4bf2-a56f-4efe-b611-d3adc6a8d871}</UniqueIdentifier>
+      <Extensions>cpp;moc</Extensions>
+      <SourceControlFiles>False</SourceControlFiles>
+    </Filter>
+    <Filter Include="Generated Files\Release">
+      <UniqueIdentifier>{ce249c8c-cc75-4416-ac0a-7ccfefce3546}</UniqueIdentifier>
+      <Extensions>cpp;moc</Extensions>
+      <SourceControlFiles>False</SourceControlFiles>
+    </Filter>
+    <Filter Include="viewers">
+      <UniqueIdentifier>{e11f90ce-7dab-4a91-a62d-fc9958235b45}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm">
+      <UniqueIdentifier>{2e9c289a-a568-4255-9436-92561761d596}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\bfgs">
+      <UniqueIdentifier>{84d65665-bb4c-45fc-83e9-11bab6c17ea5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\camera">
+      <UniqueIdentifier>{292cd2df-9c8e-4e22-b6b3-488fdfa1d6b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\freeimage">
+      <UniqueIdentifier>{dc00676a-3a34-4840-8a0d-62c3675136a1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\kdtree">
+      <UniqueIdentifier>{3e6fcd55-c65d-46ed-8cb5-e0b56f052f1f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\ldpmat">
+      <UniqueIdentifier>{b662b1bb-b931-4a31-ac07-8eaf9add1ebd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\mpu">
+      <UniqueIdentifier>{96d34eef-72ca-4ed4-9da0-296309ffe821}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\renderable">
+      <UniqueIdentifier>{1ab18bab-3feb-45f0-82a5-d90197bef117}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\DynamicFusion">
+      <UniqueIdentifier>{c5c0c16a-87ec-4051-85cf-129b1e0af533}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="dynamicfusionui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Debug\moc_dynamicfusionui.cpp">
+      <Filter>Generated Files\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Release\moc_dynamicfusionui.cpp">
+      <Filter>Generated Files\Release</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\qrc_dynamicfusionui.cpp">
+      <Filter>Generated Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthViewer.cpp">
+      <Filter>viewers</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Debug\moc_DepthViewer.cpp">
+      <Filter>Generated Files\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Release\moc_DepthViewer.cpp">
+      <Filter>Generated Files\Release</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\BFGS\BFGSFit.cpp">
+      <Filter>algorithm\bfgs</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\BFGS\program.cpp">
+      <Filter>algorithm\bfgs</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\BFGS\solver.cpp">
+      <Filter>algorithm\bfgs</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\camera\Camera.cpp">
+      <Filter>algorithm\camera</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\FreeImage\CFreeImage.cpp">
+      <Filter>algorithm\freeimage</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\kdtree\AABB.cpp">
+      <Filter>algorithm\kdtree</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\kdtree\KdTree.cpp">
+      <Filter>algorithm\kdtree</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\kdtree\Primitive.cpp">
+      <Filter>algorithm\kdtree</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\mpu\Convolution_Helper.cpp">
+      <Filter>algorithm\mpu</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\mpu\MarchingCube.cpp">
+      <Filter>algorithm\mpu</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\mpu\VolumeData.cpp">
+      <Filter>algorithm\mpu</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\Renderable\AbstractMesh.cpp">
+      <Filter>algorithm\renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\Renderable\bmesh.cpp">
+      <Filter>algorithm\renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\Renderable\BoneMesh.cpp">
+      <Filter>algorithm\renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\Renderable\GLNode.cpp">
+      <Filter>algorithm\renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\Renderable\ObjMesh.cpp">
+      <Filter>algorithm\renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\global_data_holder.cpp">
+      <Filter>algorithm</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\util.cpp">
+      <Filter>algorithm</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\MicrosoftKinect.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\device_memory.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="dynamicfusionui.ui">
+      <Filter>Form Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="dynamicfusionui.qrc">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="dynamicfusionui.h">
+      <Filter>Source Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="DepthViewer.h">
+      <Filter>viewers</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="GeneratedFiles\ui_dynamicfusionui.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\BFGS\BFGSFit.h">
+      <Filter>algorithm\bfgs</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\BFGS\program.h">
+      <Filter>algorithm\bfgs</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\BFGS\solver.h">
+      <Filter>algorithm\bfgs</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\camera\Camera.h">
+      <Filter>algorithm\camera</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\camera\fmath.h">
+      <Filter>algorithm\camera</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\FreeImage\CFreeImage.h">
+      <Filter>algorithm\freeimage</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\AABB.h">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\BSphere.h">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\common.h">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\KdTree.h">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\nanoflann.hpp">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\PointTree.h">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\Primitive.h">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\kdtree\Ray.h">
+      <Filter>algorithm\kdtree</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\ldpMat\half.hpp">
+      <Filter>algorithm\ldpmat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\ldpMat\ldp_basic_mat.h">
+      <Filter>algorithm\ldpmat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\ldpMat\ldp_basic_vec.h">
+      <Filter>algorithm\ldpmat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\ldpMat\ldpdef.h">
+      <Filter>algorithm\ldpmat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\ldpMat\Quaternion.h">
+      <Filter>algorithm\ldpmat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\mpu\Convolution_Helper.h">
+      <Filter>algorithm\mpu</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\mpu\MarchingCube.h">
+      <Filter>algorithm\mpu</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\mpu\VolumeData.h">
+      <Filter>algorithm\mpu</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\AbstractMesh.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\bmesh.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\bmesh_private.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\BoneMesh.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\Error.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\GLNode.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\ObjMesh.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\Renderable\Renderable.h">
+      <Filter>algorithm\renderable</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\global_data_holder.h">
+      <Filter>algorithm</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\global_param.h">
+      <Filter>algorithm</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\LMSolver.h">
+      <Filter>algorithm</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\util.h">
+      <Filter>algorithm</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\MicrosoftKinect.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\kinect_util.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\device_array.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\device_memory.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+  </ItemGroup>
+</Project>

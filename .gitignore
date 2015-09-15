@@ -1,0 +1,47 @@
+# folders
+data/*
+tmp/*
+GeneratedFiles/*
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.sdf
+*.opensdf
+*.suo
+*.pdb
+*.ilk
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Data Files
+*.depth
+*.fdepth
+*.png
+*.dvol
+*.cvol
+*.dfusion
+*.hfdvol
