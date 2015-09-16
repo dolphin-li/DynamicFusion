@@ -9,10 +9,10 @@ void GlobalDataHolder::init()
 	m_depth_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
 	m_depth_d.create(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
 
-	m_view_normalmap = true;
+	m_view_normalmap = false;
 	m_lights.pos = make_float3(0, 0, 0);
-	m_lights.amb = make_float3(0.2, 0.2, 0.2);
-	m_lights.diffuse = make_float3(0.7, 0.7, 0.7);
+	m_lights.amb = make_float3(0.3, 0.3, 0.3);
+	m_lights.diffuse = make_float3(0.8, 0.8, 0.8);
 }
 
 void GlobalDataHolder::saveDepth(const std::vector<dfusion::depthtype>& depth_h, std::string filename)
