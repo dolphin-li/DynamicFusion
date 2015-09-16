@@ -21,10 +21,13 @@ public:
 	void on_actionLoad_triggered();
 	void on_actionLoad_frames_triggered();
 	void on_actionRecord_frames_triggered();
+	void on_actionLoad_volume_triggered();
 protected:
 	void frameLoading();
 	void frameSaving();
 	void frameLive();
+
+	void updateLoadedStaticVolume();
 private:
 	Ui::DynamicFusionUIClass ui;
 
@@ -34,6 +37,7 @@ private:
 		Loading,
 		Saving,
 		Live,
+		ShowLoadedStaticVolume,
 	};
 	State m_state;
 	QString m_currentPath;

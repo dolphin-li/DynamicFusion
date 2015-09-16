@@ -4,10 +4,10 @@
 #include <cuda_gl_interop.h>
 #include <cudagl.h>
 
-#define CHECK_GL_ERROR {\
+#define CHECK_GL_ERROR(str) {\
 GLenum err = glGetError();\
 if (err != GL_NO_ERROR)\
-printf("GL Error: %s\n", gluErrorString(err)); }
+printf("[%s]GL Error: %s\n", str, gluErrorString(err)); }
 
 DepthViewer::DepthViewer(QWidget *parent)
 : QGLWidget(parent)
@@ -33,8 +33,8 @@ void DepthViewer::setImage_h(const dfusion::depthtype* image_h, int w, int h)
 		m_depthColors_h[i_pixel] = ldp::UChar4(c[0] * 255, c[1] * 255, c[2] * 255, 255);
 	}
 
-	m_gl_func.glBindTexture(GL_TEXTURE_2D, m_texture_id);
-	m_gl_func.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, m_depthColors_h.data());
+	glBindTexture(GL_TEXTURE_2D, m_texture_id);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, m_depthColors_h.data());
 	updateGL();
 }
 
@@ -44,18 +44,19 @@ void DepthViewer::setImage_d(PtrStepSz<dfusion::depthtype> image_d)
 	cudaSafeCall(cudaGLMapBufferObject((void**)&m_pbo_buffer.data, m_pbo_id));
 	dfusion::calc_temperature_jet(image_d, m_pbo_buffer, 300, 700);	cudaSafeCall(cudaGLUnmapBufferObject(m_pbo_id));
 
-	m_gl_func.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
-	m_gl_func.glBindTexture(GL_TEXTURE_2D, m_texture_id);
-	m_gl_func.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_pbo_buffer.cols,
+	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
+	glBindTexture(GL_TEXTURE_2D, m_texture_id);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_pbo_buffer.cols,
 		m_pbo_buffer.rows, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	CHECK_GL_ERROR;
+	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	CHECK_GL_ERROR("setImage_d");
 	updateGL();
 }
 
 void DepthViewer::initializeGL()
 {
 	makeCurrent();
-	m_gl_func.initializeOpenGLFunctions();
+	m_gl_func = new QGLFunctions(this->context());
 	glEnable(GL_TEXTURE_2D);
 	glDisable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
@@ -66,26 +67,28 @@ void DepthViewer::initializeGL()
 	m_camera.lookAt(ldp::Float3(0, 0, 1), ldp::Float3(0, 0, 0), ldp::Float3(0, 1, 0));
 
 	// gen texture
-	m_gl_func.glBindTexture(GL_TEXTURE_2D, 0);
-	m_gl_func.glGenTextures(1, &m_texture_id);
-	m_gl_func.glBindTexture(GL_TEXTURE_2D, m_texture_id);
-	m_gl_func.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_gl_func.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_gl_func.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT,
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenTextures(1, &m_texture_id);
+	glBindTexture(GL_TEXTURE_2D, m_texture_id);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT,
 		0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
-	m_gl_func.glBindTexture(GL_TEXTURE_2D, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
 	m_depthColors_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
 
-	// gen buffer and map to cuda
-	m_gl_func.glGenBuffers(1, &m_pbo_id);
-	m_gl_func.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);	m_gl_func.glBufferData(GL_PIXEL_UNPACK_BUFFER,
+	// gen buffer and map to cuda	
+	do{
+		m_gl_func->glGenBuffers(1, &m_pbo_id);
+	} while (dfusion::is_pbo_id_used_push_new(m_pbo_id));
+	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);	m_gl_func->glBufferData(GL_PIXEL_UNPACK_BUFFER,
 		dfusion::KINECT_WIDTH * dfusion::KINECT_HEIGHT * 4,
 		NULL, GL_DYNAMIC_COPY);
 	cudaSafeCall(cudaGLRegisterBufferObject(m_pbo_id));
 	m_pbo_buffer.rows = dfusion::KINECT_HEIGHT;
 	m_pbo_buffer.cols = dfusion::KINECT_WIDTH;
 	m_pbo_buffer.step = dfusion::KINECT_WIDTH * sizeof(uchar4);
-	m_gl_func.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
 }
 

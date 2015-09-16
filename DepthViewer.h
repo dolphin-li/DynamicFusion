@@ -18,7 +18,7 @@ public:
 	void resizeGL(int w, int h);
 	void paintGL();
 protected:
-	QOpenGLFunctions m_gl_func;
+	QGLFunctions *m_gl_func;
 	GLuint m_texture_id;
 	Camera m_camera;
 	std::vector<ldp::UChar4> m_depthColors_h;

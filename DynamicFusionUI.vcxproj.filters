@@ -145,6 +145,21 @@
     <ClCompile Include="algorithm\DynamicFusion\device_memory.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\RayCaster.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\TsdfVolume.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="RayCastViewer.cpp">
+      <Filter>viewers</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Debug\moc_RayCastViewer.cpp">
+      <Filter>Generated Files\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Release\moc_RayCastViewer.cpp">
+      <Filter>Generated Files\Release</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -157,6 +172,9 @@
       <Filter>Source Files</Filter>
     </CustomBuild>
     <CustomBuild Include="DepthViewer.h">
+      <Filter>viewers</Filter>
+    </CustomBuild>
+    <CustomBuild Include="RayCastViewer.h">
       <Filter>viewers</Filter>
     </CustomBuild>
   </ItemGroup>
@@ -281,9 +299,24 @@
     <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\RayCaster.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\defininations.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\TsdfVolume.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\RayCaster.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\TsdfVolume.cu">
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
   </ItemGroup>

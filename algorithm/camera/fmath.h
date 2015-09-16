@@ -15,6 +15,9 @@ namespace fmath {
 
 	/** pi-s */
 #pragma push_macro("PI")
+#pragma push_macro("FLT_EPSILON")
+#pragma push_macro("FLT_MIN")
+#pragma push_macro("FLT_MAX")
 #undef PI
 	const float PI			= 3.141592653589793f;
 	const float TWO_PI		= 2 * PI;
@@ -171,7 +174,9 @@ namespace fmath {
 	{
         return (input < min) ? min : (input > max) ? max : input;
     }
-
+#pragma pop_macro("FLT_MAX")
+#pragma pop_macro("FLT_MIN")
+#pragma pop_macro("FLT_EPSILON")
 #pragma pop_macro("PI")
 }; /*namespace fmath*/
 

@@ -952,12 +952,25 @@ public:
 		return R;
 	}
 
+	void setRotationPart(const ldp_basic_mat3<T>& R)
+	{
+		for (int y = 0; y < 3; y++)
+		for (int x = 0; x < 3; x++)
+			(*this)(y, x) = R(y, x);
+	}
+
 	ldp_basic_vec3<T> getTranslationPart()const
 	{
 		ldp_basic_vec3<T> t;
 		for (int y = 0; y < 3; y++)
 			t[y] = (*this)(y, 3);
 		return t;
+	}
+
+	void setTranslationPart(const ldp_basic_vec3<T>& t)
+	{
+		for (int y = 0; y < 3; y++)
+			(*this)(y, 3) = t[y];
 	}
 };
 

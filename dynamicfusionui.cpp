@@ -9,7 +9,6 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	m_frameIndex = 0;
 	g_dataholder.init();
 
-
 	startTimer(30);
 }
 
@@ -20,14 +19,11 @@ DynamicFusionUI::~DynamicFusionUI()
 
 void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 {
-	if (m_state == DynamicFusionUI::Pause)
-		return;
-
 	gtime_t time_s = gtime_now();
 
 	try
 	{
-		// process a new kinect frame.
+		//// process a new kinect frame.
 		switch (m_state)
 		{
 		case DynamicFusionUI::Loading:
@@ -47,6 +43,16 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 		//// visualize the depth via jet map, calculate it on GPU
 		//ui.widgetDepth->setImage_h(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT);
 		ui.widgetDepth->setImage_d(g_dataholder.m_depth_d);
+
+		//// process viewers
+		switch (m_state)
+		{
+		case DynamicFusionUI::ShowLoadedStaticVolume:
+			updateLoadedStaticVolume();
+			break;
+		default:
+			break;
+		}
 	}
 	catch (std::exception e)
 	{
@@ -125,6 +131,20 @@ void DynamicFusionUI::frameLive()
 		dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
 }
 
+void DynamicFusionUI::updateLoadedStaticVolume()
+{
+	Camera cam;
+	ui.widgetWarpedView->getCameraInfo(cam);
+	cam.setViewPort(0, dfusion::KINECT_WIDTH, 0, dfusion::KINECT_HEIGHT);
+	g_dataholder.m_rayCaster.setCamera(cam);
+
+	g_dataholder.m_rayCaster.shading(g_dataholder.m_lights,
+		g_dataholder.m_warpedview_shading, 
+		g_dataholder.m_view_normalmap);
+
+	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
+}
+
 void DynamicFusionUI::on_actionSave_triggered()
 {
 
@@ -135,6 +155,7 @@ void DynamicFusionUI::on_actionLoad_triggered()
 }
 void DynamicFusionUI::on_actionLoad_frames_triggered()
 {
+	State lastState = m_state;
 	m_state = DynamicFusionUI::Pause;
 	m_currentPath = QFileDialog::getExistingDirectory(this, "load folder");
 	if (m_currentPath != "")
@@ -143,9 +164,7 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		m_state = DynamicFusionUI::Loading;
 	}
 	else
-	{
-		m_state = DynamicFusionUI::Live;
-	}
+		m_state = lastState;
 }
 void DynamicFusionUI::on_actionRecord_frames_triggered()
 {
@@ -167,4 +186,31 @@ void DynamicFusionUI::on_actionRecord_frames_triggered()
 	{
 		m_state = DynamicFusionUI::Live;
 	}
+}
+void DynamicFusionUI::on_actionLoad_volume_triggered()
+{
+	State lastState = m_state;
+	m_state = DynamicFusionUI::Pause;
+	QString name = QFileDialog::getOpenFileName(this, "load volume", "");
+	if (!name.isEmpty())
+	{
+		m_state = DynamicFusionUI::ShowLoadedStaticVolume;
+		try
+		{
+			mpu::VolumeData volume;
+			volume.load(name.toStdString().c_str());
+			g_dataholder.m_volume.initFromHost(&volume);
+			g_dataholder.m_rayCaster.init(g_dataholder.m_volume);
+
+			////debug
+			//g_dataholder.m_volume.download(&volume);
+			//volume.save((name+"_test.dvol").toStdString().c_str());
+		}
+		catch (std::exception e)
+		{
+			std::cout << e.what() << std::endl;
+		}
+	}
+	else
+		m_state = lastState;
 }
