@@ -152,6 +152,8 @@
     <ClCompile Include="algorithm\BFGS\solver.cpp" />
     <ClCompile Include="algorithm\camera\Camera.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\device_memory.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\MarchingCubes.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MicrosoftKinect.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\RayCaster.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\TsdfVolume.cpp" />
@@ -256,9 +258,11 @@
     <ClInclude Include="algorithm\camera\fmath.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_array.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_memory.h" />
-    <ClInclude Include="algorithm\DynamicFusion\defininations.h" />
+    <ClInclude Include="algorithm\DynamicFusion\definations.h" />
+    <ClInclude Include="algorithm\DynamicFusion\GpuMesh.h" />
     <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h" />
     <ClInclude Include="algorithm\DynamicFusion\kinect_util.h" />
+    <ClInclude Include="algorithm\DynamicFusion\MarchingCubes.h" />
     <ClInclude Include="algorithm\DynamicFusion\MicrosoftKinect.h" />
     <ClInclude Include="algorithm\DynamicFusion\RayCaster.h" />
     <ClInclude Include="algorithm\DynamicFusion\TsdfVolume.h" />
@@ -350,7 +354,9 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="algorithm\DynamicFusion\GpuMesh.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\MarchingCubes.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\RayCaster.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\TsdfVolume.cu" />
   </ItemGroup>

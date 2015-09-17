@@ -133,6 +133,7 @@ void DynamicFusionUI::frameLive()
 
 void DynamicFusionUI::updateLoadedStaticVolume()
 {
+#if 1
 	Camera cam;
 	ui.widgetWarpedView->getCameraInfo(cam);
 	cam.setViewPort(0, dfusion::KINECT_WIDTH, 0, dfusion::KINECT_HEIGHT);
@@ -143,6 +144,21 @@ void DynamicFusionUI::updateLoadedStaticVolume()
 		g_dataholder.m_view_normalmap);
 
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
+#else
+
+#if 0
+	g_dataholder.m_marchCube.run(g_dataholder.m_mesh);
+	///debug1
+	static int a = 0;
+	if (a == 0)
+	{
+		a = 1;
+		ObjMesh mesh;
+		g_dataholder.meshCopy(g_dataholder.m_mesh, mesh);
+		mesh.saveObj("D:/1.obj");
+	}
+#endif
+#endif
 }
 
 void DynamicFusionUI::on_actionSave_triggered()
@@ -200,11 +216,17 @@ void DynamicFusionUI::on_actionLoad_volume_triggered()
 			mpu::VolumeData volume;
 			volume.load(name.toStdString().c_str());
 			g_dataholder.m_volume.initFromHost(&volume);
-			g_dataholder.m_rayCaster.init(g_dataholder.m_volume);
 
-			////debug
-			//g_dataholder.m_volume.download(&volume);
-			//volume.save((name+"_test.dvol").toStdString().c_str());
+			//g_dataholder.m_rayCaster.init(g_dataholder.m_volume);
+			g_dataholder.m_marchCube.init(&g_dataholder.m_volume, 256, 2);
+
+#if 0
+			//debug
+			g_dataholder.m_volume.download(&volume);
+			volume.save((name+"_test.dvol").toStdString().c_str());
+#endif
+
+
 		}
 		catch (std::exception e)
 		{

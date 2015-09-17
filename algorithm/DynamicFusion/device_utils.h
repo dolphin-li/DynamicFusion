@@ -39,7 +39,7 @@
 #ifndef YZ_KINFU_PCL_GPU_KINFU_CUDA_UTILS_HPP_
 #define YZ_KINFU_PCL_GPU_KINFU_CUDA_UTILS_HPP_
 
-#include "defininations.h"
+#include "definations.h"
 
 #pragma push_macro("min")
 #pragma push_macro("max")

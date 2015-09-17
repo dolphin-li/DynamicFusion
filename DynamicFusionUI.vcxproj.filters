@@ -160,6 +160,12 @@
     <ClCompile Include="GeneratedFiles\Release\moc_RayCastViewer.cpp">
       <Filter>Generated Files\Release</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\MarchingCubes.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -302,10 +308,16 @@
     <ClInclude Include="algorithm\DynamicFusion\RayCaster.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
-    <ClInclude Include="algorithm\DynamicFusion\defininations.h">
+    <ClInclude Include="algorithm\DynamicFusion\TsdfVolume.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
-    <ClInclude Include="algorithm\DynamicFusion\TsdfVolume.h">
+    <ClInclude Include="algorithm\DynamicFusion\MarchingCubes.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\GpuMesh.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\definations.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
   </ItemGroup>
@@ -317,6 +329,12 @@
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
     <CudaCompile Include="algorithm\DynamicFusion\TsdfVolume.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\MarchingCubes.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\GpuMesh.cu">
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
   </ItemGroup>

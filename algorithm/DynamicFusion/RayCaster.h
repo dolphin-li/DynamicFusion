@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defininations.h"
+#include "definations.h"
 
 class Camera;
 

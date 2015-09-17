@@ -2,7 +2,7 @@
 
 #include <QtOpenGL>
 #include "Camera.h"
-#include "defininations.h"
+#include "definations.h"
 class RayCastViewer : public QGLWidget
 {
 	Q_OBJECT
