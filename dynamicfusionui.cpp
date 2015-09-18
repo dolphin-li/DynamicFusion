@@ -5,9 +5,11 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 {
 	ui.setupUi(this);
 	setAcceptDrops(true);
+	m_frameIndex = 0;
 	m_state = DynamicFusionUI::Live;
 	m_renderType = RenderRayCasting;
-	m_frameIndex = 0;
+	updateUiFromParam();
+
 	g_dataholder.init();
 
 	startTimer(30);
@@ -92,6 +94,38 @@ void DynamicFusionUI::dropEvent(QDropEvent *ev)
 	{
 
 	}
+}
+
+void DynamicFusionUI::updateUiFromParam()
+{
+	ui.rbMarchCube->setChecked(m_renderType == RenderMarchCube);
+	ui.rbRayCasting->setChecked(m_renderType == RenderRayCasting);
+
+	if (g_dataholder.m_dparam.volume_resolution[0] == 128)
+		ui.rbResX128->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[0] == 256)
+		ui.rbResX256->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[0] == 384)
+		ui.rbResX384->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[0] == 512)
+		ui.rbResX512->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[1] == 128)
+		ui.rbResY128->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[1] == 256)
+		ui.rbResY256->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[1] == 384)
+		ui.rbResY384->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[1] == 512)
+		ui.rbResY512->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[2] == 128)
+		ui.rbResZ128->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[2] == 256)
+		ui.rbResZ256->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[2] == 384)
+		ui.rbResZ384->setChecked(true);
+	if (g_dataholder.m_dparam.volume_resolution[2] == 512)
+		ui.rbResZ512->setChecked(true);
+	ui.sbVoxelsPerMeter->setValue(g_dataholder.m_dparam.voxels_per_meter);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -221,6 +255,12 @@ void DynamicFusionUI::on_actionLoad_volume_triggered()
 				g_dataholder.m_marchCube.init(&g_dataholder.m_volume, 
 					g_dataholder.m_dparam.marching_cube_tile_size, 
 					g_dataholder.m_dparam.marching_cube_level);
+
+				g_dataholder.m_dparam.volume_resolution[0] = volume.getResolution()[0];
+				g_dataholder.m_dparam.volume_resolution[1] = volume.getResolution()[1];
+				g_dataholder.m_dparam.volume_resolution[2] = volume.getResolution()[2];
+				g_dataholder.m_dparam.voxels_per_meter = std::lroundf(1.f/volume.getVoxelSize());
+				updateUiFromParam();
 			}
 			catch (std::exception e)
 			{
@@ -261,4 +301,57 @@ void DynamicFusionUI::on_rbRayCasting_clicked()
 void DynamicFusionUI::on_rbMarchCube_clicked()
 {
 	m_renderType = RenderMarchCube;
+}
+
+void DynamicFusionUI::on_rbResX128_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[0] = 128;
+}
+void DynamicFusionUI::on_rbResX256_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[0] = 256;
+}
+void DynamicFusionUI::on_rbResX384_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[0] = 384;
+}
+void DynamicFusionUI::on_rbResX512_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[0] = 512;
+}
+void DynamicFusionUI::on_rbResY128_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[1] = 128;
+}
+void DynamicFusionUI::on_rbResY256_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[1] = 256;
+}
+void DynamicFusionUI::on_rbResY384_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[1] = 384;
+}
+void DynamicFusionUI::on_rbResY512_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[1] = 512;
+}
+void DynamicFusionUI::on_rbResZ128_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[2] = 128;
+}
+void DynamicFusionUI::on_rbResZ256_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[2] = 256;
+}
+void DynamicFusionUI::on_rbResZ384_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[2] = 384;
+}
+void DynamicFusionUI::on_rbResZ512_clicked()
+{
+	g_dataholder.m_dparam.volume_resolution[2] = 512;
+}
+void DynamicFusionUI::on_sbVoxelsPerMeter_valueChanged(int v)
+{
+	g_dataholder.m_dparam.voxels_per_meter = v;
 }

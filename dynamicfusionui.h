@@ -25,7 +25,23 @@ public:
 	void on_actionSave_current_mesh_triggered();
 	void on_rbRayCasting_clicked();
 	void on_rbMarchCube_clicked();
+
+	void on_rbResX128_clicked();
+	void on_rbResX256_clicked();
+	void on_rbResX384_clicked();
+	void on_rbResX512_clicked();
+	void on_rbResY128_clicked();
+	void on_rbResY256_clicked();
+	void on_rbResY384_clicked();
+	void on_rbResY512_clicked();
+	void on_rbResZ128_clicked();
+	void on_rbResZ256_clicked();
+	void on_rbResZ384_clicked();
+	void on_rbResZ512_clicked();
+	void on_sbVoxelsPerMeter_valueChanged(int v);
 protected:
+	void updateUiFromParam();
+
 	void frameLoading();
 	void frameSaving();
 	void frameLive();
