@@ -52,6 +52,7 @@
     <addaction name="actionLoad_frames"/>
     <addaction name="actionRecord_frames"/>
     <addaction name="actionLoad_volume"/>
+    <addaction name="actionSave_current_mesh"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuOp"/>
@@ -75,7 +76,40 @@
    <attribute name="dockWidgetArea">
     <number>8</number>
    </attribute>
-   <widget class="QWidget" name="dockWidgetContents"/>
+   <widget class="QWidget" name="dockWidgetContents">
+    <widget class="QGroupBox" name="groupBox">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>10</y>
+       <width>101</width>
+       <height>73</height>
+      </rect>
+     </property>
+     <property name="title">
+      <string>View Type</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_2">
+      <item row="0" column="0">
+       <widget class="QRadioButton" name="rbRayCasting">
+        <property name="text">
+         <string>Ray Casting</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QRadioButton" name="rbMarchCube">
+        <property name="text">
+         <string>March Cube</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </widget>
   </widget>
   <action name="actionLoad_frames">
    <property name="text">
@@ -106,6 +140,11 @@
   <action name="actionLoad_volume">
    <property name="text">
     <string>load volume</string>
+   </property>
+  </action>
+  <action name="actionSave_current_mesh">
+   <property name="text">
+    <string>save current mesh</string>
    </property>
   </action>
  </widget>

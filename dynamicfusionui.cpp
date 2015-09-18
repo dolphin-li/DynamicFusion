@@ -6,6 +6,7 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	ui.setupUi(this);
 	setAcceptDrops(true);
 	m_state = DynamicFusionUI::Live;
+	m_renderType = RenderRayCasting;
 	m_frameIndex = 0;
 	g_dataholder.init();
 
@@ -133,32 +134,29 @@ void DynamicFusionUI::frameLive()
 
 void DynamicFusionUI::updateLoadedStaticVolume()
 {
-#if 1
 	Camera cam;
 	ui.widgetWarpedView->getCameraInfo(cam);
 	cam.setViewPort(0, dfusion::KINECT_WIDTH, 0, dfusion::KINECT_HEIGHT);
+	cam.setPerspective(KINECT_DEPTH_V_FOV, float(dfusion::KINECT_WIDTH)/dfusion::KINECT_HEIGHT, 
+		KINECT_NEAREST_METER, 30.f);
 	g_dataholder.m_rayCaster.setCamera(cam);
 
-	g_dataholder.m_rayCaster.shading(g_dataholder.m_lights,
-		g_dataholder.m_warpedview_shading, 
-		g_dataholder.m_view_normalmap);
+	switch (m_renderType)
+	{
+	case DynamicFusionUI::RenderRayCasting:
+		g_dataholder.m_rayCaster.shading(g_dataholder.m_lights,
+			g_dataholder.m_warpedview_shading,
+			g_dataholder.m_view_normalmap);
+		break;
+	case DynamicFusionUI::RenderMarchCube:
+		g_dataholder.m_marchCube.run(g_dataholder.m_mesh);
+		g_dataholder.m_mesh.renderToImg(cam, g_dataholder.m_lights, g_dataholder.m_warpedview_shading);
+		break;
+	default:
+		break;
+	}
 
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
-#else
-
-#if 0
-	g_dataholder.m_marchCube.run(g_dataholder.m_mesh);
-	///debug1
-	static int a = 0;
-	if (a == 0)
-	{
-		a = 1;
-		ObjMesh mesh;
-		g_dataholder.meshCopy(g_dataholder.m_mesh, mesh);
-		mesh.saveObj("D:/1.obj");
-	}
-#endif
-#endif
 }
 
 void DynamicFusionUI::on_actionSave_triggered()
@@ -205,34 +203,62 @@ void DynamicFusionUI::on_actionRecord_frames_triggered()
 }
 void DynamicFusionUI::on_actionLoad_volume_triggered()
 {
-	State lastState = m_state;
-	m_state = DynamicFusionUI::Pause;
-	QString name = QFileDialog::getOpenFileName(this, "load volume", "");
-	if (!name.isEmpty())
+	try
 	{
-		m_state = DynamicFusionUI::ShowLoadedStaticVolume;
-		try
+		State lastState = m_state;
+		m_state = DynamicFusionUI::Pause;
+		QString name = QFileDialog::getOpenFileName(this, "load volume", "");
+		if (!name.isEmpty())
 		{
-			mpu::VolumeData volume;
-			volume.load(name.toStdString().c_str());
-			g_dataholder.m_volume.initFromHost(&volume);
+			m_state = DynamicFusionUI::ShowLoadedStaticVolume;
+			try
+			{
+				mpu::VolumeData volume;
+				volume.load(name.toStdString().c_str());
+				g_dataholder.m_volume.initFromHost(&volume);
 
-			//g_dataholder.m_rayCaster.init(g_dataholder.m_volume);
-			g_dataholder.m_marchCube.init(&g_dataholder.m_volume, 256, 2);
-
-#if 0
-			//debug
-			g_dataholder.m_volume.download(&volume);
-			volume.save((name+"_test.dvol").toStdString().c_str());
-#endif
-
-
+				g_dataholder.m_rayCaster.init(g_dataholder.m_volume);
+				g_dataholder.m_marchCube.init(&g_dataholder.m_volume, 
+					g_dataholder.m_dparam.marching_cube_tile_size, 
+					g_dataholder.m_dparam.marching_cube_level);
+			}
+			catch (std::exception e)
+			{
+				std::cout << e.what() << std::endl;
+			}
 		}
-		catch (std::exception e)
+		else
+			m_state = lastState;
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_actionSave_current_mesh_triggered()
+{
+	try
+	{
+		QString name = QFileDialog::getSaveFileName(this, "save mesh", "", ".obj");
+		if (!name.isEmpty())
 		{
-			std::cout << e.what() << std::endl;
+			if (!name.endsWith(".obj"))
+				name.append(".obj");
+			ObjMesh mesh;
+			g_dataholder.m_mesh.toObjMesh(mesh);
+			mesh.saveObj(name.toStdString().c_str());
 		}
 	}
-	else
-		m_state = lastState;
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_rbRayCasting_clicked()
+{
+	m_renderType = RenderRayCasting;
+}
+void DynamicFusionUI::on_rbMarchCube_clicked()
+{
+	m_renderType = RenderMarchCube;
 }

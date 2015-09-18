@@ -27,18 +27,17 @@ namespace dfusion
 		const float b = cam.getViewPortBottom();
 		const float	f = (b-t) * 0.5f / tanf(cam.getFov() * fmath::DEG_TO_RAD * 0.5f);
 
+		// origion
+		ldp::Float3 ori(m_volume->getOrigion().x, m_volume->getOrigion().y, m_volume->getOrigion().z);
+		ldp::Mat4f Omat = ldp::Mat4f().eye();
+		Omat.setTranslationPart(ori);
+
 		// -y, -z
 		ldp::Mat4f nynz = ldp::Mat4f().eye();
 		nynz(1, 1) = nynz(2, 2) = -1;
-		ldp::Mat4f M = nynz * cam.getModelViewMatrix();
-		ldp::Mat4f world2volume = M.inv();
-		ldp::Float3 ori(m_volume->getOrigion().x, m_volume->getOrigion().y, m_volume->getOrigion().z);
-		world2volume.setTranslationPart(world2volume.getTranslationPart() - ori);
 
-		ldp::Mat4f volume2world = world2volume.inv();
-		ldp::Mat4f camera2volume = world2volume;
-		volume2world = world2volume.inv();
-		camera2volume = world2volume;
+		ldp::Mat4f volume2world = nynz * cam.getModelViewMatrix() * Omat;
+		ldp::Mat4f camera2volume = volume2world.inv();
 
 		// camera intrinsic
 		m_intr.cx = (r + l)*0.5f - 0.5f;

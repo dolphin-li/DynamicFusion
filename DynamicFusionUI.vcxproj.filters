@@ -166,6 +166,9 @@
     <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\DynamicFusionParam.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -318,6 +321,9 @@
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
     <ClInclude Include="algorithm\DynamicFusion\definations.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\DynamicFusionParam.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
   </ItemGroup>

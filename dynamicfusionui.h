@@ -22,6 +22,9 @@ public:
 	void on_actionLoad_frames_triggered();
 	void on_actionRecord_frames_triggered();
 	void on_actionLoad_volume_triggered();
+	void on_actionSave_current_mesh_triggered();
+	void on_rbRayCasting_clicked();
+	void on_rbMarchCube_clicked();
 protected:
 	void frameLoading();
 	void frameSaving();
@@ -39,7 +42,13 @@ private:
 		Live,
 		ShowLoadedStaticVolume,
 	};
+	enum RenderType
+	{
+		RenderRayCasting,
+		RenderMarchCube,
+	};
 	State m_state;
+	RenderType m_renderType;
 	QString m_currentPath;
 	int m_frameIndex;
 };

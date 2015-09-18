@@ -3,6 +3,8 @@
 #include <cuda_gl_interop.h>
 #include <cudagl.h>
 #include "glut.h"
+#include "MicrosoftKinect.h"
+#include "kinect_util.h"
 
 #define CHECK_GL_ERROR(str) {\
 	GLenum err = glGetError(); \
@@ -14,6 +16,7 @@ RayCastViewer::RayCastViewer(QWidget *parent)
 {
 	m_rootTrans.eye();
 	m_defaultRootTrans.eye();
+	m_dataScale = 1;
 	m_id = 0;
 
 	m_defaultCameraLocation = ldp::Float3(0, 0, 2);
@@ -43,9 +46,8 @@ void RayCastViewer::initializeGL()
 		g_dataholder.m_lights.diffuse.y,
 		g_dataholder.m_lights.diffuse.z);
 	glLightfv(GL_LIGHT0, GL_DIFFUSE, sv.ptr());
-	ldp::Float3 sa = 0.f;
 	glLightfv(GL_LIGHT0, GL_AMBIENT, &g_dataholder.m_lights.amb.x);
-	glLightfv(GL_LIGHT0, GL_SPECULAR, sa.ptr());
+	glLightfv(GL_LIGHT0, GL_SPECULAR, &g_dataholder.m_lights.spec.x);
 
 	m_camera.lookAt(m_defaultCameraLocation, m_defaultCameraLocation + 
 		m_defaultCameraDirection, m_defaultCameraUp);
@@ -61,13 +63,12 @@ void RayCastViewer::initializeGL()
 	glBindTexture(GL_TEXTURE_2D, 0);
 
 	// gen buffer and map to cuda
-	do{
-		m_gl_func->glGenBuffers(1, &m_pbo_id);
-	} while (dfusion::is_pbo_id_used_push_new(m_pbo_id));
+	m_gl_func->glGenBuffers(1, &m_pbo_id);
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);	m_gl_func->glBufferData(GL_PIXEL_UNPACK_BUFFER,
 		dfusion::KINECT_WIDTH * dfusion::KINECT_HEIGHT * 4,
 		NULL, GL_DYNAMIC_COPY);
-	cudaSafeCall(cudaGLRegisterBufferObject(m_pbo_id));
+	cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_pbo_cuda_res, m_pbo_id,
+		cudaGraphicsMapFlagsWriteDiscard));
 	m_pbo_buffer.rows = dfusion::KINECT_HEIGHT;
 	m_pbo_buffer.cols = dfusion::KINECT_WIDTH;
 	m_pbo_buffer.step = dfusion::KINECT_WIDTH * sizeof(uchar4);
@@ -77,11 +78,11 @@ void RayCastViewer::initializeGL()
 void RayCastViewer::resizeGL(int w, int h)
 {
 	float aspect = w / (float)(h ? h : 1);
-	float scale = std::min(float(w) / float(640), float(h) / float(480));
-	float w1 = float(640 * scale);
-	float h1 = float(480 * scale);
+	float scale = std::min(float(w) / float(dfusion::KINECT_WIDTH), float(h) / float(dfusion::KINECT_HEIGHT));
+	float w1 = float(dfusion::KINECT_WIDTH * scale);
+	float h1 = float(dfusion::KINECT_HEIGHT * scale);
 	m_camera.setViewPort((w - w1) / 2, (w - w1) / 2 + w1, (h - h1) / 2, (h - h1) / 2 + h1);
-	m_camera.setPerspective(45.6f, aspect, 0.3f, 30.f);
+	m_camera.setPerspective(KINECT_DEPTH_V_FOV, aspect, KINECT_NEAREST_METER, 30.f);
 }
 
 void RayCastViewer::setSameView(const RayCastViewer* other)
@@ -151,7 +152,10 @@ void RayCastViewer::setRayCastingShadingImage(const dfusion::ColorMap& img)
 		throw std::exception("setRayCastingShadingImage: size not matched!");
 
 	makeCurrent();
-	cudaSafeCall(cudaGLMapBufferObject((void**)&m_pbo_buffer.data, m_pbo_id));	dfusion::copyColorMapToPbo(img, m_pbo_buffer);	cudaSafeCall(cudaGLUnmapBufferObject(m_pbo_id));
+	size_t num_bytes = 0;
+	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0));
+	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res));	dfusion::copyColorMapToPbo(img, m_pbo_buffer);
+	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0));
 
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
 	glBindTexture(GL_TEXTURE_2D, m_texture_id);
@@ -252,16 +256,17 @@ void RayCastViewer::mouseMoveEvent(QMouseEvent*ev)
 		{
 			m_camera.arcballDrag(ldp::Float2(ev->pos().x(), ev->pos().y())); 
 		}
+
+		if (m_buttons == Qt::MouseButton::RightButton)
+		{
+			QPoint dif = ev->pos() - m_lastPos;
+			ldp::Float3 t(-(float)dif.x() / width(), (float)dif.y() / height(), 0);
+			t = m_camera.getModelViewMatrix().getRotationPart().inv() * t * m_dataScale;
+			for (int k = 0; k < 3; k++)
+				m_rootTrans(k, 3) -= t[k];
+		}
 	}
 
-	if (m_buttons == Qt::MouseButton::RightButton)
-	{
-		QPoint dif = ev->pos() - m_lastPos;
-		ldp::Float3 t(-(float)dif.x() / width(), (float)dif.y() / height(), 0);
-		t = m_camera.getModelViewMatrix().getRotationPart().inv() * t * m_dataScale;
-		for (int k = 0; k < 3; k++)
-			m_rootTrans(k, 3) -= t[k];
-	}
 
 	// backup last position
 	m_lastPos = ev->pos();

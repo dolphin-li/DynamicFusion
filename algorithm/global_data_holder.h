@@ -9,6 +9,7 @@
 #include "RayCaster.h"
 #include "MarchingCubes.h"
 #include "GpuMesh.h"
+#include "DynamicFusionParam.h"
 class GlobalDataHolder
 {
 public:
@@ -16,10 +17,9 @@ public:
 
 	static void saveDepth(const std::vector<dfusion::depthtype>& depth_h, std::string filename);
 	static void loadDepth(std::vector<dfusion::depthtype>& depth_h, std::string filename);
-
-	static void meshCopy(const dfusion::GpuMesh& gmesh, ObjMesh& mesh);
 public:
 	Microsoft_Kinect m_kinect;
+	dfusion::Param m_dparam;
 	std::vector<dfusion::depthtype> m_depth_h;
 	dfusion::DepthMap m_depth_d;
 	dfusion::RayCaster m_rayCaster;

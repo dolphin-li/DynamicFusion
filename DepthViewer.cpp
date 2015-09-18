@@ -41,8 +41,12 @@ void DepthViewer::setImage_h(const dfusion::depthtype* image_h, int w, int h)
 void DepthViewer::setImage_d(PtrStepSz<dfusion::depthtype> image_d)
 {
 	makeCurrent();
-	cudaSafeCall(cudaGLMapBufferObject((void**)&m_pbo_buffer.data, m_pbo_id));
-	dfusion::calc_temperature_jet(image_d, m_pbo_buffer, 300, 700);	cudaSafeCall(cudaGLUnmapBufferObject(m_pbo_id));
+
+	size_t num_bytes = 0;
+	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0));
+	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res));
+	dfusion::calc_temperature_jet(image_d, m_pbo_buffer, 300, 700);
+	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0));
 
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
 	glBindTexture(GL_TEXTURE_2D, m_texture_id);
@@ -78,13 +82,12 @@ void DepthViewer::initializeGL()
 	m_depthColors_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
 
 	// gen buffer and map to cuda	
-	do{
-		m_gl_func->glGenBuffers(1, &m_pbo_id);
-	} while (dfusion::is_pbo_id_used_push_new(m_pbo_id));
+	m_gl_func->glGenBuffers(1, &m_pbo_id);
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);	m_gl_func->glBufferData(GL_PIXEL_UNPACK_BUFFER,
 		dfusion::KINECT_WIDTH * dfusion::KINECT_HEIGHT * 4,
 		NULL, GL_DYNAMIC_COPY);
-	cudaSafeCall(cudaGLRegisterBufferObject(m_pbo_id));
+	cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_pbo_cuda_res, m_pbo_id,
+		cudaGraphicsMapFlagsWriteDiscard));
 	m_pbo_buffer.rows = dfusion::KINECT_HEIGHT;
 	m_pbo_buffer.cols = dfusion::KINECT_WIDTH;
 	m_pbo_buffer.step = dfusion::KINECT_WIDTH * sizeof(uchar4);

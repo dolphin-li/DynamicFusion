@@ -48,4 +48,5 @@ protected:
 	GLuint m_texture_id;
 	PtrStepSz<uchar4> m_pbo_buffer;
 	GLuint m_pbo_id;
+	cudaGraphicsResource* m_pbo_cuda_res;
 };

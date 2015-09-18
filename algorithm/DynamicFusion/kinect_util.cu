@@ -3,18 +3,6 @@
 #include <set>
 namespace dfusion
 {
-#pragma region --pbo
-	bool is_pbo_id_used_push_new(unsigned int id)
-	{
-		static std::set<unsigned int> pboSet;
-		if (pboSet.find(id) != pboSet.end())
-			return true;
-		pboSet.insert(id);
-		return false;
-	}
-#pragma endregion
-
-
 #pragma region --copy_kernel
 
 	__global__ void copy_colormap_kernel(PtrStepSz<PixelRGBA> src,

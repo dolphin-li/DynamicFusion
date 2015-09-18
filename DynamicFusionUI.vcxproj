@@ -152,6 +152,7 @@
     <ClCompile Include="algorithm\BFGS\solver.cpp" />
     <ClCompile Include="algorithm\camera\Camera.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\device_memory.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\DynamicFusionParam.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MarchingCubes.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MicrosoftKinect.cpp" />
@@ -259,6 +260,7 @@
     <ClInclude Include="algorithm\DynamicFusion\device_array.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_memory.h" />
     <ClInclude Include="algorithm\DynamicFusion\definations.h" />
+    <ClInclude Include="algorithm\DynamicFusion\DynamicFusionParam.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuMesh.h" />
     <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h" />
     <ClInclude Include="algorithm\DynamicFusion\kinect_util.h" />
