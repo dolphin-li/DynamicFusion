@@ -257,12 +257,11 @@ namespace dfusion
 		if (x >= dst.cols || y >= dst.rows)
 			return;
 
-		const int R = 6;       //static_cast<int>(sigma_space * 1.5);
-		const int D = R * 2 + 1;
+		enum{
+			R = 6
+		};
 
 		depthtype value = tex2D(g_bitex, x, y);
-		int tx = min(x - D / 2 + D, dst.cols - 1);
-		int ty = min(y - D / 2 + D, dst.rows - 1);
 
 		float sum1 = 0;
 		float sum2 = 0;
@@ -401,5 +400,60 @@ namespace dfusion
 		computeNmapKernel << <grid, block >> >(rows, cols, vmap, nmap);
 		cudaSafeCall(cudaGetLastError());
 	}
+#pragma endregion
+
+#pragma region --pydDown
+	texture<depthtype, cudaTextureType2D, cudaReadModeElementType> g_pydtex;
+	__global__ void pyrDownKernel(PtrStepSz<depthtype> dst, float sigma_color)
+	{
+		int x = blockIdx.x * blockDim.x + threadIdx.x;
+		int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+		if (x >= dst.cols || y >= dst.rows)
+			return;
+
+		enum{
+			R = 2
+		};
+
+		depthtype center = tex2D(g_pydtex, 2*x, 2*y); // src.ptr(2 * y)[2 * x];
+
+		depthtype sum = 0;
+		int count = 0;
+
+#pragma unroll
+		for (int cy = -R; cy <= R; ++cy)
+		{
+#pragma unroll
+			for (int cx = -R; cx <= R; ++cx)
+			{
+				depthtype val = tex2D(g_pydtex, cx+2*x, cy+2*y);
+				if (abs(val - center) < 3 * sigma_color)
+				{
+					sum += val;
+					++count;
+				}
+			}
+		}
+		dst.ptr(y)[x] = sum / count;
+	}
+
+	void pyrDown(const DepthMap& src, DepthMap& dst)
+	{
+		dst.create(src.rows() / 2, src.cols() / 2);
+
+		// bind src to texture
+		size_t offset;
+		cudaChannelFormatDesc desc = cudaCreateChannelDesc<depthtype>();
+		cudaBindTexture2D(&offset, &g_pydtex, src.ptr(), &desc, src.cols(), src.rows(), src.step());
+		assert(offset == 0);
+
+		dim3 block(32, 8);
+		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
+
+		pyrDownKernel << <grid, block >> >(dst, sigma_color);
+		cudaSafeCall(cudaGetLastError());
+	}
+
 #pragma endregion
 }

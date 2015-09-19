@@ -25,4 +25,7 @@ namespace dfusion
 	// compute vertex/normal from kinect depth
 	void createVMap(const Intr& intr, const DepthMap& depth, MapArr& vmap);
 	void createNMap(const MapArr& vmap, MapArr& nmap);
+
+	// /2 scale
+	void pyrDown(const DepthMap& src, DepthMap& dst);
 }

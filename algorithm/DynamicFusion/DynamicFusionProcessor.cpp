@@ -134,7 +134,7 @@ namespace dfusion
 		ColorMap& img, bool use_ray_casting)
 	{
 		//debug
-		generateImage(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], img, light);
+		generateImage(m_vmap_curr_pyd[2], m_nmap_curr_pyd[2], img, light);
 		return;
 
 		Camera cam = *m_camera;
@@ -187,5 +187,21 @@ namespace dfusion
 		bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
 		createVMap(m_kinect_intr(0), m_depth_curr_pyd[0], m_vmap_curr_pyd[0]);
 		createNMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
+
+		//	create pyramid
+		for (int i = 1; i < RIGID_ALIGN_PYD_LEVELS; ++i)
+			pyrDown(m_depth_curr_pyd[i - 1], m_depth_curr_pyd[i]);
+
+		//	calculate point cloud and normal map
+		for (int i = 0; i < RIGID_ALIGN_PYD_LEVELS; ++i)
+		{
+			//	opengl camera coordinate, -z is camera direction
+			createVMap(m_kinect_intr(i), m_depth_curr_pyd[i], m_vmap_curr_pyd[i]);	
+			createNMap(m_vmap_curr_pyd[i], m_nmap_curr_pyd[i]);
+		}
+
+		//	if it is the first frame, no volume to align, so stop here
+		if (m_frame_id == 0)
+			return;
 	}
 }
