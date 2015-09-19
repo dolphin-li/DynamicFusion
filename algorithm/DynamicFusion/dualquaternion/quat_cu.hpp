@@ -668,6 +668,24 @@ class Quat_cu{
         return mat;
     }
 
+	void to_angleAxis(Vec3& axis, float& angle)const
+	{
+		const float scale = get_vec_part().norm();
+
+		if (scale == float(0) || w() > float(1) || w() < float(-1))
+		{
+			angle = 0.0f;
+			axis[0] = 0.0f;
+			axis[1] = 1.0f;
+			axis[2] = 0.0f;
+		}
+		else
+		{
+			angle = float(2.0) * acosf(w());
+			axis = get_vec_part() / scale;
+		}
+	}
+
     Vec3 get_vec_part() const
     {
         return Vec3(coeff[1], coeff[2], coeff[3]);

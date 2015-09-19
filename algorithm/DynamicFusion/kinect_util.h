@@ -16,6 +16,13 @@ namespace dfusion
 	// normal to color
 	void generateNormalMap(const MapArr& nmap, ColorMap& dst, Mat33 R);
 
-	//
+	// a simple copy function
 	void copyColorMapToPbo(PtrStepSz<PixelRGBA> src, PtrStepSz<uchar4> dst);
+
+	// depth map smoothing
+	void bilateralFilter(const DepthMap& src, DepthMap& dst);
+
+	// compute vertex/normal from kinect depth
+	void createVMap(const Intr& intr, const DepthMap& depth, MapArr& vmap);
+	void createNMap(const MapArr& vmap, MapArr& nmap);
 }

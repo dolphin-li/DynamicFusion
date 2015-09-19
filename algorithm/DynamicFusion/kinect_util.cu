@@ -119,43 +119,43 @@ namespace dfusion
 
 		__device__ __forceinline__ void operator () () const
 		{
-				int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
-				int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
+			int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
+			int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
 
-				if (x >= dst.cols || y >= dst.rows)
-					return;
+			if (x >= dst.cols || y >= dst.rows)
+				return;
 
-				float3 v, n;
-				v.x = vmap.ptr(y)[x];
-				n.x = nmap.ptr(y)[x];
+			float3 v, n;
+			v.x = vmap.ptr(y)[x];
+			n.x = nmap.ptr(y)[x];
 
-				PixelRGBA color;
-				color.a = color.r = color.g = color.b = 0;
+			PixelRGBA color;
+			color.a = color.r = color.g = color.b = 0;
 
-				if (!isnan(v.x) && !isnan(n.x))
+			if (!isnan(v.x) && !isnan(n.x))
+			{
+				v.y = vmap.ptr(y + dst.rows)[x];
+				v.z = vmap.ptr(y + 2 * dst.rows)[x];
+
+				n.y = nmap.ptr(y + dst.rows)[x];
+				n.z = nmap.ptr(y + 2 * dst.rows)[x];
+
+				float3 acc_vec = make_float3(0.f, 0.f, 0.f);
 				{
-					v.y = vmap.ptr(y + dst.rows)[x];
-					v.z = vmap.ptr(y + 2 * dst.rows)[x];
-
-					n.y = nmap.ptr(y + dst.rows)[x];
-					n.z = nmap.ptr(y + 2 * dst.rows)[x];
-
-					float3 acc_vec = make_float3(0.f, 0.f, 0.f);
-					{
-						float3 vec = normalized(light.pos - v);
-						float w = max(0.f, dot(vec, n));
-						acc_vec.x += w * light.diffuse.x;
-						acc_vec.y += w * light.diffuse.y;
-						acc_vec.z += w * light.diffuse.z;
-					}
-					color.r = max(0, min(255, int(acc_vec.x*255.f)));
-					color.g = max(0, min(255, int(acc_vec.y*255.f)));
-					color.b = max(0, min(255, int(acc_vec.z*255.f)));
-					color.a = 255;
+					float3 vec = normalized(light.pos - v);
+					float w = max(0.f, dot(vec, n));
+					acc_vec.x += w * light.diffuse.x;
+					acc_vec.y += w * light.diffuse.y;
+					acc_vec.z += w * light.diffuse.z;
 				}
-
-				dst.ptr(y)[x] = color;
+				color.r = max(0, min(255, int(acc_vec.x*255.f)));
+				color.g = max(0, min(255, int(acc_vec.y*255.f)));
+				color.b = max(0, min(255, int(acc_vec.z*255.f)));
+				color.a = 255;
 			}
+
+			dst.ptr(y)[x] = color;
+		}
 	};
 
 	__global__ void generateImageKernel(const ImageGenerator ig)
@@ -171,6 +171,7 @@ namespace dfusion
 		ig.light = light;
 		ig.dst = dst;
 
+		dst.create(vmap.rows() / 3, vmap.cols());
 		dim3 block(ImageGenerator::CTA_SIZE_X, ImageGenerator::CTA_SIZE_Y);
 		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
 
@@ -244,5 +245,161 @@ namespace dfusion
 
 #pragma endregion
 
+#pragma region --bilateral
+	const float sigma_color = 30;     //in mm
+	const float sigma_space = 4.5;     // in pixels
+	texture<depthtype, cudaTextureType2D, cudaReadModeElementType> g_bitex;
+	__global__ void bilateralKernel( PtrStepSz<depthtype> dst, 
+		float sigma_space2_inv_half, float sigma_color2_inv_half)
+	{
+		int x = threadIdx.x + blockIdx.x * blockDim.x;
+		int y = threadIdx.y + blockIdx.y * blockDim.y;
+		if (x >= dst.cols || y >= dst.rows)
+			return;
 
+		const int R = 6;       //static_cast<int>(sigma_space * 1.5);
+		const int D = R * 2 + 1;
+
+		depthtype value = tex2D(g_bitex, x, y);
+		int tx = min(x - D / 2 + D, dst.cols - 1);
+		int ty = min(y - D / 2 + D, dst.rows - 1);
+
+		float sum1 = 0;
+		float sum2 = 0;
+#pragma unroll
+		for (int cy = -R; cy <= R; ++cy)
+		{
+#pragma unroll
+			for (int cx = -R; cx <= R; ++cx)
+			{
+				depthtype tmp = tex2D(g_bitex, cx + x, cy + y);
+				float space2 = cx*cx + cy*cy;
+				float color2 = (value - tmp) * (value - tmp);
+				float weight = __expf(-(space2 * sigma_space2_inv_half + color2 * sigma_color2_inv_half));
+				sum1 += tmp * weight;
+				sum2 += weight;
+			}
+		}
+
+		float res = sum1 / sum2;
+		dst.ptr(y)[x] = (isnan(res) || isinf(res)) ? 0 : res;
+	}
+	
+	void bilateralFilter(const DepthMap& src, DepthMap& dst)
+	{
+		dim3 block(32, 8);
+		dim3 grid(divUp(src.cols(), block.x), divUp(src.rows(), block.y));
+
+		dst.create(src.rows(), src.cols());
+
+		// bind src to texture
+		size_t offset;
+		cudaChannelFormatDesc desc = cudaCreateChannelDesc<depthtype>();
+		cudaBindTexture2D(&offset, &g_bitex, src.ptr(), &desc, src.cols(), src.rows(), src.step());
+		assert(offset == 0);
+
+		bilateralKernel << <grid, block >> >(dst, 0.5f / (sigma_space * sigma_space), 
+			0.5f / (sigma_color * sigma_color));
+
+		cudaSafeCall(cudaGetLastError());
+	}
+#pragma endregion
+
+#pragma region --compute vmap, nmap
+	__global__ void computeVmapKernel(const PtrStepSz<depthtype> depth, PtrStep<float> vmap, float fx_inv, float fy_inv, float cx, float cy)
+	{
+		int u = threadIdx.x + blockIdx.x * blockDim.x;
+		int v = threadIdx.y + blockIdx.y * blockDim.y;
+
+		if (u < depth.cols && v < depth.rows)
+		{
+			float z = depth.ptr(v)[u] * 0.001f; // load and convert: mm -> meters
+
+			if (z != 0)
+			{
+				float vx = z * (u - cx) * fx_inv;
+				float vy = -z * (v - cy) * fy_inv;
+				float vz = -z;
+
+				vmap.ptr(v)[u] = vx;
+				vmap.ptr(v + depth.rows)[u] = vy;
+				vmap.ptr(v + depth.rows * 2)[u] = vz;
+			}
+			else
+				vmap.ptr(v)[u] = numeric_limits<float>::quiet_NaN();
+
+		}
+	}
+
+	__global__ void computeNmapKernel(int rows, int cols, const PtrStep<float> vmap, PtrStep<float> nmap)
+	{
+		int u = threadIdx.x + blockIdx.x * blockDim.x;
+		int v = threadIdx.y + blockIdx.y * blockDim.y;
+
+		if (u >= cols || v >= rows)
+			return;
+
+		if (u == cols - 1 || u == 0 || v == rows - 1 || v == 0)
+		{
+			nmap.ptr(v)[u] = numeric_limits<float>::quiet_NaN();
+			return;
+		}
+
+		float3 v00, v01, v10;
+		v00.x = vmap.ptr(v)[u];
+		v01.x = vmap.ptr(v)[u + 1];
+		v10.x = vmap.ptr(v - 1)[u];
+
+		if (!isnan(v00.x) && !isnan(v01.x) && !isnan(v10.x))
+		{
+			v00.y = vmap.ptr(v + rows)[u];
+			v01.y = vmap.ptr(v + rows)[u + 1];
+			v10.y = vmap.ptr(v - 1 + rows)[u];
+
+			v00.z = vmap.ptr(v + 2 * rows)[u];
+			v01.z = vmap.ptr(v + 2 * rows)[u + 1];
+			v10.z = vmap.ptr(v - 1 + 2 * rows)[u];
+
+			float3 r = normalized(cross(v01 - v00, v10 - v00));
+
+			nmap.ptr(v)[u] = r.x;
+			nmap.ptr(v + rows)[u] = r.y;
+			nmap.ptr(v + 2 * rows)[u] = r.z;
+		}
+		else
+			nmap.ptr(v)[u] = numeric_limits<float>::quiet_NaN();
+	}
+
+	void createVMap(const Intr& intr, const DepthMap& depth, MapArr& vmap)
+	{
+		vmap.create(depth.rows() * 3, depth.cols());
+
+		dim3 block(32, 8);
+		dim3 grid(1, 1, 1);
+		grid.x = divUp(depth.cols(), block.x);
+		grid.y = divUp(depth.rows(), block.y);
+
+		float fx = intr.fx, cx = intr.cx;
+		float fy = intr.fy, cy = intr.cy;
+
+		computeVmapKernel << <grid, block >> >(depth, vmap, 1.f / fx, 1.f / fy, cx, cy);
+		cudaSafeCall(cudaGetLastError());
+	}
+
+	void createNMap(const MapArr& vmap, MapArr& nmap)
+	{
+		nmap.create(vmap.rows(), vmap.cols());
+
+		int rows = vmap.rows() / 3;
+		int cols = vmap.cols();
+
+		dim3 block(32, 8);
+		dim3 grid(1, 1, 1);
+		grid.x = divUp(cols, block.x);
+		grid.y = divUp(rows, block.y);
+
+		computeNmapKernel << <grid, block >> >(rows, cols, vmap, nmap);
+		cudaSafeCall(cudaGetLastError());
+	}
+#pragma endregion
 }

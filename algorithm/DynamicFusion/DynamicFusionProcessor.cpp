@@ -5,6 +5,7 @@
 #include "TsdfVolume.h"
 #include "Camera.h"
 #include "WarpField.h"
+#include "fmath.h"
 
 namespace dfusion
 {
@@ -38,6 +39,15 @@ namespace dfusion
 		m_camera->setViewPort(0, KINECT_WIDTH, 0, KINECT_HEIGHT);
 		m_camera->setPerspective(KINECT_DEPTH_V_FOV, float(KINECT_WIDTH) / KINECT_HEIGHT,
 			KINECT_NEAREST_METER, 30.f);
+		const float l = m_camera->getViewPortLeft();
+		const float r = m_camera->getViewPortRight();
+		const float t = m_camera->getViewPortTop();
+		const float b = m_camera->getViewPortBottom();
+		const float	f = (b - t) * 0.5f / tanf(m_camera->getFov() * fmath::DEG_TO_RAD * 0.5f);
+		m_kinect_intr.fx = f;
+		m_kinect_intr.fy = f;
+		m_kinect_intr.cx = (l + r) / 2;
+		m_kinect_intr.cy = (t + b) / 2;
 
 		// volume
 		m_volume = new TsdfVolume();
@@ -57,6 +67,14 @@ namespace dfusion
 		m_rayCaster = new RayCaster();
 		m_rayCaster->init(*m_volume);
 
+		// maps
+		m_depth_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
+		m_vmap_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
+		m_nmap_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
+		m_depth_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
+		m_vmap_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
+		m_nmap_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
+
 		// finally reset----------------------
 		reset();
 	}
@@ -72,6 +90,12 @@ namespace dfusion
 			delete m_framesWarpFields[i];
 		m_framesWarpFields.clear();
 		m_frame_id = 0;
+		m_depth_curr_pyd.clear();
+		m_vmap_curr_pyd.clear();
+		m_nmap_curr_pyd.clear();
+		m_depth_prev_pyd.clear();
+		m_vmap_prev_pyd.clear();
+		m_nmap_prev_pyd.clear();
 	}
 
 	void DynamicFusionProcessor::reset()
@@ -97,6 +121,7 @@ namespace dfusion
 
 	void DynamicFusionProcessor::processFrame(const DepthMap& depth)
 	{
+		m_depth_input = depth;
 		estimateWarpField();
 		nonRigidTsdfFusion();
 		surfaceExtractionMC();
@@ -108,6 +133,10 @@ namespace dfusion
 	void DynamicFusionProcessor::shading(const Camera& userCam, LightSource light, 
 		ColorMap& img, bool use_ray_casting)
 	{
+		//debug
+		generateImage(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], img, light);
+		return;
+
 		Camera cam = *m_camera;
 		cam.setModelViewMatrix(userCam.getModelViewMatrix()*m_camera->getModelViewMatrix());
 
@@ -124,7 +153,7 @@ namespace dfusion
 
 	void DynamicFusionProcessor::estimateWarpField()
 	{
-
+		rigid_align();
 	}
 
 	void DynamicFusionProcessor::nonRigidTsdfFusion()
@@ -153,4 +182,10 @@ namespace dfusion
 
 	}
 
+	void DynamicFusionProcessor::rigid_align()
+	{
+		bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
+		createVMap(m_kinect_intr(0), m_depth_curr_pyd[0], m_vmap_curr_pyd[0]);
+		createNMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
+	}
 }

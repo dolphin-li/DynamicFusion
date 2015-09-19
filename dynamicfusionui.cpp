@@ -47,7 +47,7 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 		//// visualize the depth via jet map, calculate it on GPU
 		//ui.widgetDepth->setImage_h(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT);
 		ui.widgetDepth->setImage_d(g_dataholder.m_depth_d);
-		ldp::tic();
+
 		//// process viewers
 		switch (m_state)
 		{
@@ -61,7 +61,6 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 		default:
 			break;
 		}
-		ldp::toc();
 	}
 	catch (std::exception e)
 	{

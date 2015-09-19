@@ -31,6 +31,8 @@ namespace dfusion
 		void insertNewDeformNodes();
 		void updateRegularizationGraph();
 		void updateKNNField();
+
+		void rigid_align();
 	private:
 		Param m_param;
 		Camera* m_camera;
@@ -40,7 +42,20 @@ namespace dfusion
 		GpuMesh* m_canoMesh;
 		GpuMesh* m_warpedMesh;
 		std::vector<WarpField*> m_framesWarpFields;
+		Intr m_kinect_intr;
 
 		int m_frame_id;
+
+		// for rigid align
+		enum{
+			RIGID_ALIGN_PYD_LEVELS = 3
+		};
+		DepthMap m_depth_input;
+		std::vector<DepthMap> m_depth_curr_pyd;
+		std::vector<MapArr> m_vmap_curr_pyd;
+		std::vector<MapArr> m_nmap_curr_pyd;
+		std::vector<DepthMap> m_depth_prev_pyd;
+		std::vector<MapArr> m_vmap_prev_pyd;
+		std::vector<MapArr> m_nmap_prev_pyd;
 	};
 }
