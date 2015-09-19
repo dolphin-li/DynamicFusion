@@ -59,6 +59,15 @@
     <Filter Include="algorithm\DynamicFusion">
       <UniqueIdentifier>{c5c0c16a-87ec-4051-85cf-129b1e0af533}</UniqueIdentifier>
     </Filter>
+    <Filter Include="algorithm\DynamicFusion\dual_quat">
+      <UniqueIdentifier>{4ad2c057-41f2-404c-9370-ce52a3cd020b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="algorithm\DynamicFusion\cudpp">
+      <UniqueIdentifier>{cb44cf24-f016-4a5f-8198-b288482c3ff1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="profile">
+      <UniqueIdentifier>{f8272d94-6746-4bd6-9ce5-8e49d7c6c478}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -168,6 +177,15 @@
     </ClCompile>
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionParam.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\WarpField.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.cpp">
+      <Filter>algorithm\DynamicFusion\cudpp</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -326,6 +344,42 @@
     <ClInclude Include="algorithm\DynamicFusion\DynamicFusionParam.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\DynamicFusionProcessor.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\WarpField.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\dual_quat_cu.hpp">
+      <Filter>algorithm\DynamicFusion\dual_quat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\mat3.hpp">
+      <Filter>algorithm\DynamicFusion\dual_quat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\point3.hpp">
+      <Filter>algorithm\DynamicFusion\dual_quat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\quat_cu.hpp">
+      <Filter>algorithm\DynamicFusion\dual_quat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\transfo.hpp">
+      <Filter>algorithm\DynamicFusion\dual_quat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\vec3.hpp">
+      <Filter>algorithm\DynamicFusion\dual_quat</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp.h">
+      <Filter>algorithm\DynamicFusion\cudpp</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_hash.h">
+      <Filter>algorithm\DynamicFusion\cudpp</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.h">
+      <Filter>algorithm\DynamicFusion\cudpp</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_config.h">
+      <Filter>algorithm\DynamicFusion\cudpp</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
@@ -343,5 +397,16 @@
     <CudaCompile Include="algorithm\DynamicFusion\GpuMesh.cu">
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\WarpField.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Activity5.nvact">
+      <Filter>profile</Filter>
+    </None>
   </ItemGroup>
 </Project>

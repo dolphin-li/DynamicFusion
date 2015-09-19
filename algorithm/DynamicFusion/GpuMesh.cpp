@@ -244,6 +244,11 @@ namespace dfusion
 		m_cuda_res_fbo = nullptr;
 	}
 
+	GpuMesh::GpuMesh(GpuMesh& rhs)
+	{
+		copyFrom(rhs);
+	}
+
 	GpuMesh::~GpuMesh()
 	{
 		release();
@@ -254,6 +259,9 @@ namespace dfusion
 	{
 		if (m_num != n)
 			release();
+
+		if (n == 0)
+			return;
 
 		if (m_vbo_id == 0)
 		{
@@ -268,8 +276,11 @@ namespace dfusion
 			CHECK_NOT_EQUAL(m_vbo_id, 0);
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
 			glBufferData(GL_ARRAY_BUFFER, 2*n*sizeof(float3), 0, GL_DYNAMIC_DRAW);
-			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res, m_vbo_id,
-				cudaGraphicsMapFlagsWriteDiscard));
+			if (n)// when n==0, it may crash.
+			{
+				cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res, m_vbo_id,
+					cudaGraphicsMapFlagsNone));
+			}
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 			m_num = n;
@@ -279,10 +290,9 @@ namespace dfusion
 	void GpuMesh::release()
 	{
 		if (m_vbo_id != 0)
-		{
 			glDeleteBuffers(1, &m_vbo_id);
+		if (m_cuda_res)
 			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res));
-		}
 		m_verts_d = nullptr;
 		m_normals_d = nullptr;
 		m_cuda_res = nullptr;
@@ -290,10 +300,27 @@ namespace dfusion
 		m_num = 0;
 	}
 
+	void GpuMesh::copyFrom(GpuMesh& rhs)
+	{
+		create(rhs.num());
+
+		rhs.lockVertsNormals();
+		lockVertsNormals();
+
+		cudaMemcpy(verts(), rhs.verts(), num() * 2 * sizeof(float3), cudaMemcpyDeviceToDevice);
+
+		unlockVertsNormals();
+		rhs.unlockVertsNormals();
+	}
+
 	void GpuMesh::lockVertsNormals()
 	{
 		// has been locked before
 		if (m_verts_d)
+			return;
+
+		// no available data
+		if (m_cuda_res == nullptr)
 			return;
 
 		size_t num_bytes = 0;
@@ -342,6 +369,13 @@ namespace dfusion
 
 		if (m_render_fbo_id == 0)
 		{
+			if (g_hdc == nullptr)
+			{
+				create_context_gpumesh();
+				if (!wglMakeCurrent(g_hdc, g_glrc))
+					throw std::exception("wglMakeCurrent error");
+			}
+
 			m_width = w;
 			m_height = h;
 

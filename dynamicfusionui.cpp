@@ -6,6 +6,7 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	ui.setupUi(this);
 	setAcceptDrops(true);
 	m_frameIndex = 0;
+	m_view_normalmap = false;
 	m_state = DynamicFusionUI::Live;
 	m_renderType = RenderRayCasting;
 	updateUiFromParam();
@@ -46,16 +47,21 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 		//// visualize the depth via jet map, calculate it on GPU
 		//ui.widgetDepth->setImage_h(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT);
 		ui.widgetDepth->setImage_d(g_dataholder.m_depth_d);
-
+		ldp::tic();
 		//// process viewers
 		switch (m_state)
 		{
 		case DynamicFusionUI::ShowLoadedStaticVolume:
 			updateLoadedStaticVolume();
 			break;
+		case DynamicFusionUI::Live:
+		case DynamicFusionUI::Loading:
+			updateDynamicFusion();
+			break;
 		default:
 			break;
 		}
+		ldp::toc();
 	}
 	catch (std::exception e)
 	{
@@ -180,7 +186,7 @@ void DynamicFusionUI::updateLoadedStaticVolume()
 	case DynamicFusionUI::RenderRayCasting:
 		g_dataholder.m_rayCaster.shading(g_dataholder.m_lights,
 			g_dataholder.m_warpedview_shading,
-			g_dataholder.m_view_normalmap);
+			m_view_normalmap);
 		break;
 	case DynamicFusionUI::RenderMarchCube:
 		g_dataholder.m_marchCube.run(g_dataholder.m_mesh);
@@ -190,6 +196,20 @@ void DynamicFusionUI::updateLoadedStaticVolume()
 		break;
 	}
 
+	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
+}
+
+void DynamicFusionUI::updateDynamicFusion()
+{
+	g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
+
+	Camera cam;
+	ui.widgetWarpedView->getCameraInfo(cam);
+	cam.setViewPort(0, dfusion::KINECT_WIDTH, 0, dfusion::KINECT_HEIGHT);
+	cam.setPerspective(KINECT_DEPTH_V_FOV, float(dfusion::KINECT_WIDTH) / dfusion::KINECT_HEIGHT,
+		KINECT_NEAREST_METER, 30.f);
+	g_dataholder.m_processor.shading(cam, g_dataholder.m_lights, 
+		g_dataholder.m_warpedview_shading, false);
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
 }
 

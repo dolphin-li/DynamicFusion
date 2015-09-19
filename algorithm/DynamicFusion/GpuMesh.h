@@ -18,11 +18,13 @@ namespace dfusion
 	{
 	public:
 		GpuMesh();
+		GpuMesh(GpuMesh& rhs);
 		~GpuMesh();
 
 		// n: number of vertices
 		void create(size_t n);
 		void release();
+		void copyFrom(GpuMesh& rhs);
 
 		void lockVertsNormals();
 		void unlockVertsNormals();

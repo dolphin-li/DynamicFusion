@@ -1,7 +1,6 @@
 #include "MarchingCubes.h"
 #include "TsdfVolume.h"
-#include <thrust\scan.h>
-#include <thrust\device_ptr.h>
+#include "cudpp\cudpp_wrapper.h"
 #include "helper_math.h"
 #include "GpuMesh.h"
 namespace dfusion
@@ -565,7 +564,6 @@ namespace dfusion
 
 #pragma endregion
 
-
 #pragma region --classifyVoxel
 	// classify voxel based on number of vertices it will generate
 	// one thread per voxel
@@ -608,12 +606,27 @@ namespace dfusion
 		unsigned int *voxelOccupied, unsigned int *voxelOccupiedScan, unsigned int numVoxels)
 	{
 		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
-		unsigned int i = __mul24(blockId, blockDim.x) + threadIdx.x;
+		unsigned int i = __mul24(blockId, blockDim.x<<3) + threadIdx.x;
 
-		if (voxelOccupied[i] && (i < numVoxels))
+#pragma unroll
+		for (int k = 0; k < 8; k++)
 		{
-			compactedVoxelArray[voxelOccupiedScan[i]] = i;
+			if (voxelOccupied[i] && (i < numVoxels))
+				compactedVoxelArray[voxelOccupiedScan[i]] = i;
+			i += blockDim.x;
 		}
+	}
+
+	static unsigned int get_scanned_sum(unsigned int* d_ary, unsigned int* d_scan, int n)
+	{
+		unsigned int lastElement, lastScanElement;
+		cudaSafeCall(cudaMemcpy((void *)&lastElement,
+			(void *)(d_ary + n- 1),
+			sizeof(unsigned int), cudaMemcpyDeviceToHost));
+		cudaSafeCall(cudaMemcpy((void *)&lastScanElement,
+			(void *)(d_scan + n - 1),
+			sizeof(unsigned int), cudaMemcpyDeviceToHost));
+		return lastElement + lastScanElement;
 	}
 
 	void MarchingCubes::classifyVoxel(Tile& tile)
@@ -623,66 +636,27 @@ namespace dfusion
 			divUp((tile.end.y - tile.begin.y)>>tile.level, block.y),
 			divUp((tile.end.z - tile.begin.z)>>tile.level, block.z));
 
-		// memory zero
-		cudaMemset(m_voxelVerts.ptr(), 0, m_voxelVerts.elem_size*tile.num_voxels);
-		cudaMemset(m_voxelOccupied.ptr(), 0, m_voxelOccupied.elem_size*tile.num_voxels);
-		cudaMemset(m_compVoxelArray.ptr(), 0, m_compVoxelArray.elem_size*tile.num_voxels);
-
 		// compute number of vertices of each voxel
 		classifyVoxelKernel << <grid, block >> >(m_volTex, tile, m_voxelVerts.ptr(),
 			m_voxelOccupied.ptr(), m_isoValue);
 		cudaSafeCall(cudaGetLastError(), "classifyVoxel");
 
-		// get number of active voxels
-		thrust::exclusive_scan(thrust::device_ptr<unsigned int>(m_voxelOccupied.ptr()),
-			thrust::device_ptr<unsigned int>(m_voxelOccupied.ptr() + tile.num_voxels),
-			thrust::device_ptr<unsigned int>(m_voxelOccupiedScan.ptr()));
+		// scan to get total number of vertices
+		cudpp_wrapper::exlusive_scan(m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
+		cudpp_wrapper::exlusive_scan(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_voxels);
+		tile.num_activeVoxels = get_scanned_sum(m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
+		tile.nverts = get_scanned_sum(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_voxels);
 		cudaSafeCall(cudaGetLastError(), "scan");
 
-		// read back values to calculate total number of non-empty voxels
-		// since we are using an exclusive scan, the total is the last value of
-		// the scan result plus the last value in the input array
-		{
-			unsigned int lastElement, lastScanElement;
-			cudaSafeCall(cudaMemcpy((void *)&lastElement,
-				(void *)(m_voxelOccupied.ptr() + tile.num_voxels - 1),
-				sizeof(unsigned int), cudaMemcpyDeviceToHost));
-			cudaSafeCall(cudaMemcpy((void *)&lastScanElement,
-				(void *)(m_voxelOccupiedScan.ptr() + tile.num_voxels - 1),
-				sizeof(unsigned int), cudaMemcpyDeviceToHost));
-			tile.num_activeVoxels = lastElement + lastScanElement;
-		}
-
 		if (tile.num_activeVoxels == 0)
-		{
-			// return if there are no full voxels
-			tile.nverts = 0;
 			return;
-		}
 
 		// compact voxel index array
-		dim3 block1(1024);
-		dim3 grid1(divUp(tile.num_voxels, block1.x));
+		dim3 block1(512);
+		dim3 grid1(divUp(tile.num_voxels, block1.x<<3));
 		compactVoxelsKernel << <grid1, block1 >> >(m_compVoxelArray.ptr(), 
 			m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
 		cudaSafeCall(cudaGetLastError(), "compact voxels");
-
-		// get number of vertices
-		thrust::exclusive_scan(thrust::device_ptr<unsigned int>(m_voxelVerts.ptr()),
-			thrust::device_ptr<unsigned int>(m_voxelVerts.ptr() + tile.num_voxels),
-			thrust::device_ptr<unsigned int>(m_voxelVertsScan.ptr()));
-
-		// readback total number of vertices
-		{
-			unsigned int lastElement, lastScanElement;
-			cudaSafeCall(cudaMemcpy((void *)&lastElement,
-				(void *)(m_voxelVerts.ptr() + tile.num_voxels - 1),
-				sizeof(unsigned int), cudaMemcpyDeviceToHost));
-			cudaSafeCall(cudaMemcpy((void *)&lastScanElement,
-				(void *)(m_voxelVertsScan.ptr() + tile.num_voxels - 1),
-				sizeof(unsigned int), cudaMemcpyDeviceToHost));
-			tile.nverts = lastElement + lastScanElement;
-		}
 	}
 #pragma endregion
 
@@ -831,6 +805,8 @@ namespace dfusion
 	void MarchingCubes::generateTriangles(const Tile& tile, GpuMesh& result)
 	{
 		result.create(tile.nverts);
+		if (tile.nverts == 0)
+			return;
 
 		dim3 block(GEN_TRI_N_THREADS);
 		dim3 grid(divUp(tile.num_voxels, block.x));

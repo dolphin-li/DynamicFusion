@@ -10,6 +10,7 @@
 #include "MarchingCubes.h"
 #include "GpuMesh.h"
 #include "DynamicFusionParam.h"
+#include "DynamicFusionProcessor.h"
 class GlobalDataHolder
 {
 public:
@@ -18,17 +19,18 @@ public:
 	static void saveDepth(const std::vector<dfusion::depthtype>& depth_h, std::string filename);
 	static void loadDepth(std::vector<dfusion::depthtype>& depth_h, std::string filename);
 public:
+	dfusion::DynamicFusionProcessor m_processor;
 	Microsoft_Kinect m_kinect;
 	dfusion::Param m_dparam;
-	std::vector<dfusion::depthtype> m_depth_h;
-	dfusion::DepthMap m_depth_d;
-	dfusion::RayCaster m_rayCaster;
-	dfusion::MarchingCubes m_marchCube;
 	dfusion::LightSource m_lights;
 
+	std::vector<dfusion::depthtype> m_depth_h;
+	dfusion::DepthMap m_depth_d;
 	dfusion::ColorMap m_warpedview_shading;
-	bool m_view_normalmap;
 
+	// the following is used for debugging/visualizing loaded volumes.
+	dfusion::RayCaster m_rayCaster;
+	dfusion::MarchingCubes m_marchCube;
 	dfusion::TsdfVolume m_volume;
 	dfusion::GpuMesh m_mesh;
 private:

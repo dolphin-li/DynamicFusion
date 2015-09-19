@@ -103,7 +103,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <OutputFile>$(OutDir)\$(ProjectName)d.exe</OutputFile>
-      <AdditionalLibraryDirectories>$(KINECTSDK10_DIR)\lib\amd64;$(ProjectDir)\algorithm\freeimage;$(ProjectDir)\algorithm\freeglut;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(KINECTSDK10_DIR)\lib\amd64;$(ProjectDir)\algorithm\DynamicFusion\cudpp;$(ProjectDir)\algorithm\freeimage;$(ProjectDir)\algorithm\freeglut;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>qtmaind.lib;Qt5Cored.lib;Qt5Guid.lib;Qt5OpenGLd.lib;opengl32.lib;glu32.lib;Qt5Widgetsd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
@@ -138,7 +138,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <OutputFile>$(OutDir)\$(ProjectName).exe</OutputFile>
-      <AdditionalLibraryDirectories>$(KINECTSDK10_DIR)\lib\amd64;$(ProjectDir)\algorithm\freeimage;$(ProjectDir)\algorithm\freeglut;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(KINECTSDK10_DIR)\lib\amd64;$(ProjectDir)\algorithm\DynamicFusion\cudpp;$(ProjectDir)\algorithm\freeimage;$(ProjectDir)\algorithm\freeglut;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalDependencies>qtmain.lib;Qt5Core.lib;Qt5Gui.lib;Qt5OpenGL.lib;opengl32.lib;glu32.lib;Qt5Widgets.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
@@ -151,13 +151,16 @@
     <ClCompile Include="algorithm\BFGS\program.cpp" />
     <ClCompile Include="algorithm\BFGS\solver.cpp" />
     <ClCompile Include="algorithm\camera\Camera.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\device_memory.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionParam.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MarchingCubes.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MicrosoftKinect.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\RayCaster.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\TsdfVolume.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\WarpField.cpp" />
     <ClCompile Include="algorithm\FreeImage\CFreeImage.cpp" />
     <ClCompile Include="algorithm\global_data_holder.cpp" />
     <ClCompile Include="algorithm\kdtree\AABB.cpp" />
@@ -257,10 +260,21 @@
     <ClInclude Include="algorithm\BFGS\solver.h" />
     <ClInclude Include="algorithm\camera\Camera.h" />
     <ClInclude Include="algorithm\camera\fmath.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_config.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_hash.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_array.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_memory.h" />
     <ClInclude Include="algorithm\DynamicFusion\definations.h" />
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\dual_quat_cu.hpp" />
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\mat3.hpp" />
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\point3.hpp" />
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\quat_cu.hpp" />
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\transfo.hpp" />
+    <ClInclude Include="algorithm\DynamicFusion\dualquaternion\vec3.hpp" />
     <ClInclude Include="algorithm\DynamicFusion\DynamicFusionParam.h" />
+    <ClInclude Include="algorithm\DynamicFusion\DynamicFusionProcessor.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuMesh.h" />
     <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h" />
     <ClInclude Include="algorithm\DynamicFusion\kinect_util.h" />
@@ -268,6 +282,7 @@
     <ClInclude Include="algorithm\DynamicFusion\MicrosoftKinect.h" />
     <ClInclude Include="algorithm\DynamicFusion\RayCaster.h" />
     <ClInclude Include="algorithm\DynamicFusion\TsdfVolume.h" />
+    <ClInclude Include="algorithm\DynamicFusion\WarpField.h" />
     <ClInclude Include="algorithm\FreeImage\CFreeImage.h" />
     <ClInclude Include="algorithm\global_data_holder.h" />
     <ClInclude Include="algorithm\global_param.h" />
@@ -356,11 +371,16 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\GpuMesh.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\MarchingCubes.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\RayCaster.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\TsdfVolume.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\WarpField.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Activity5.nvact" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

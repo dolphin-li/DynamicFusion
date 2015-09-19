@@ -47,6 +47,7 @@ protected:
 	void frameLive();
 
 	void updateLoadedStaticVolume();
+	void updateDynamicFusion();
 private:
 	Ui::DynamicFusionUIClass ui;
 
@@ -66,6 +67,7 @@ private:
 	State m_state;
 	RenderType m_renderType;
 	QString m_currentPath;
+	bool m_view_normalmap;
 	int m_frameIndex;
 };
 
