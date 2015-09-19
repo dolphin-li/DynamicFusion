@@ -601,7 +601,7 @@ namespace dfusion
 		}
 	}
 
-	// compact voxel array
+	// compact voxel array 
 	__global__ void compactVoxelsKernel(unsigned int *compactedVoxelArray,
 		unsigned int *voxelOccupied, unsigned int *voxelOccupiedScan, unsigned int numVoxels)
 	{
