@@ -32,11 +32,7 @@ namespace dfusion
 		ldp::Mat4f Omat = ldp::Mat4f().eye();
 		Omat.setTranslationPart(ori);
 
-		// -y, -z
-		ldp::Mat4f nynz = ldp::Mat4f().eye();
-		nynz(1, 1) = nynz(2, 2) = -1;
-
-		ldp::Mat4f volume2world = nynz * cam.getModelViewMatrix() * Omat;
+		ldp::Mat4f volume2world = cam.getModelViewMatrix() * Omat;
 		ldp::Mat4f camera2volume = volume2world.inv();
 
 		// camera intrinsic

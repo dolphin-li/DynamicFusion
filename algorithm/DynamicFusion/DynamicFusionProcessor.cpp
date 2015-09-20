@@ -52,9 +52,15 @@ namespace dfusion
 
 		// volume
 		m_volume = new TsdfVolume();
-		m_volume->init(make_int3(m_param.volume_resolution[0], 
-			m_param.volume_resolution[1], m_param.volume_resolution[2]),
-			1.f/m_param.voxels_per_meter, make_float3(0.f, 0.f, KINECT_NEAREST_METER));
+		m_volume->init(make_int3(
+			m_param.volume_resolution[0], 
+			m_param.volume_resolution[1], 
+			m_param.volume_resolution[2]),
+			1.f/m_param.voxels_per_meter, 
+			make_float3(-m_param.volume_resolution[0]*0.5f/m_param.voxels_per_meter, 
+			-m_param.volume_resolution[1] * 0.5f / m_param.voxels_per_meter, 
+			-KINECT_NEAREST_METER)
+			);
 
 		// mesh
 		m_canoMesh = new GpuMesh();
@@ -122,6 +128,7 @@ namespace dfusion
 
 	void DynamicFusionProcessor::processFrame(const DepthMap& depth)
 	{
+		return;
 		m_depth_input = depth;
 		estimateWarpField();
 		nonRigidTsdfFusion();
@@ -135,10 +142,7 @@ namespace dfusion
 	void DynamicFusionProcessor::shading(const Camera& userCam, LightSource light, 
 		ColorMap& img, bool use_ray_casting)
 	{
-		//debug
-		generateImage(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], img, light);
 		return;
-
 		Camera cam = *m_camera;
 		cam.setModelViewMatrix(userCam.getModelViewMatrix()*m_camera->getModelViewMatrix());
 

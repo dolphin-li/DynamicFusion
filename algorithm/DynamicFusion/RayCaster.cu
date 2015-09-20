@@ -52,11 +52,7 @@ namespace dfusion
 
 		__device__ __forceinline__ float3 get_point_in_camera_coord(int x, int y, float d) const 
 		{
-			float3 point;
-			point.x = d * (x - intr.cx) / intr.fx;
-			point.y = d * (y - intr.cy) / intr.fy;
-			point.z = d;
-			return point;
+			return intr.uvd2xyz(x, y, d);
 		}
 
 		__device__ __forceinline__ int sgn(float val) const 
@@ -66,11 +62,7 @@ namespace dfusion
 
 		__device__ __forceinline__ float3 get_ray_next(int x, int y) const
 		{
-			float3 ray_next;
-			ray_next.x = (x - intr.cx) / intr.fx;
-			ray_next.y = (y - intr.cy) / intr.fy;
-			ray_next.z = 1;
-			return ray_next;
+			return intr.uvd2xyz(x, y, 1);
 		}
 
 		__device__ __forceinline__ bool checkInds(const int3& g) const
