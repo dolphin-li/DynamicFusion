@@ -26,11 +26,15 @@ void GlobalDataHolder::saveDepth(const std::vector<dfusion::depthtype>& depth_h,
 	if (stm.fail())
 		throw std::exception(("save failed: "+ filename).c_str());
 
+	std::vector<unsigned short> tmp(depth_h.size());
+	for (size_t i = 0; i < tmp.size(); i++)
+		tmp[i] = depth_h[i];
+
 	int w = dfusion::KINECT_WIDTH;
 	int h = dfusion::KINECT_HEIGHT;
 	stm.write((const char*)&w, sizeof(int));
 	stm.write((const char*)&h, sizeof(int));
-	stm.write((const char*)depth_h.data(), depth_h.size()*sizeof(dfusion::depthtype));
+	stm.write((const char*)tmp.data(), tmp.size()*sizeof(unsigned short));
 
 	stm.close();
 }
@@ -42,13 +46,17 @@ void GlobalDataHolder::loadDepth(std::vector<dfusion::depthtype>& depth_h, std::
 		throw std::exception(("load failed: " + filename).c_str());
 
 	depth_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
-	std::fill(depth_h.begin(), depth_h.end(), 0);
+	std::vector<unsigned short> tmp(depth_h.size());
+
 	int w = 0, h = 0;
 	stm.read((char*)&w, sizeof(int));
 	stm.read((char*)&h, sizeof(int));
 	if (w != dfusion::KINECT_WIDTH || h != dfusion::KINECT_HEIGHT)
 		throw std::exception("loadDepth: size not matched!");
-	stm.read((char*)depth_h.data(), depth_h.size()*sizeof(dfusion::depthtype));
+	stm.read((char*)tmp.data(), tmp.size()*sizeof(unsigned short));
+
+	for (size_t i = 0; i < tmp.size(); i++)
+		depth_h[i] = tmp[i];
 
 	stm.close();
 }

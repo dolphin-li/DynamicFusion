@@ -38,26 +38,26 @@ struct Vec3 {
     /// @name Constructors
     // -------------------------------------------------------------------------
 
-    Vec3() { x = 0.f; y = 0.f; z = 0.f; }
+	__device__ __host__ Vec3() { x = 0.f; y = 0.f; z = 0.f; }
 
-    Vec3(float x_, float y_, float z_) { x = x_; y = y_; z = z_; }
+    __device__ __host__ Vec3(float x_, float y_, float z_) { x = x_; y = y_; z = z_; }
 
-    Vec3(float v) { x = v; y = v; z = v; }
+	__device__ __host__ Vec3(float v) { x = v; y = v; z = v; }
 
     /// @note implemented in point3.hpp because of cross definitions
     /// @note explicit constructor to avoid unwanted automatic conversions
-    inline explicit Vec3(const Point3& p3);
+	__device__ __host__ inline explicit Vec3(const Point3& p3);
 
-    static inline Vec3 unit_x()    { return Vec3(1.f, 0.f, 0.f); }
-    static inline Vec3 unit_y()    { return Vec3(0.f, 1.f, 0.f); }
-    static inline Vec3 unit_z()    { return Vec3(0.f, 0.f, 1.f); }
-    static inline Vec3 zero()      { return Vec3(0.f, 0.f, 0.f); }
-    static inline Vec3 unit_scale(){ return Vec3(1.f, 1.f, 1.f); }
+	__device__ __host__ static inline Vec3 unit_x()    { return Vec3(1.f, 0.f, 0.f); }
+	__device__ __host__ static inline Vec3 unit_y()    { return Vec3(0.f, 1.f, 0.f); }
+	__device__ __host__ static inline Vec3 unit_z()    { return Vec3(0.f, 0.f, 1.f); }
+	__device__ __host__ static inline Vec3 zero()      { return Vec3(0.f, 0.f, 0.f); }
+	__device__ __host__ static inline Vec3 unit_scale(){ return Vec3(1.f, 1.f, 1.f); }
 
 
-    inline void set(float x_, float y_, float z_) { x = x_; y = y_; z = z_; }
+	__device__ __host__ inline void set(float x_, float y_, float z_) { x = x_; y = y_; z = z_; }
 
-    static Vec3 random(float r){
+	__device__ __host__  static Vec3 random(float r){
         float r2 = 2.f * r;
         float x_ = rand() * 1.f /RAND_MAX;
         float y_ = rand() * 1.f /RAND_MAX;
@@ -73,22 +73,22 @@ struct Vec3 {
     // Additions
     // ----------
 
-    Vec3 operator+(const Vec3 &v_) const { return Vec3(x+v_.x, y+v_.y, z+v_.z); }
+	__device__ __host__ Vec3 operator+(const Vec3 &v_) const { return Vec3(x + v_.x, y + v_.y, z + v_.z); }
 
-    Vec3& operator+= (const Vec3 &v_) {
+	__device__ __host__ Vec3& operator+= (const Vec3 &v_) {
         x += v_.x;
         y += v_.y;
         z += v_.z;
         return *this;
     }
 
-    Vec3 operator+(float f_) const { return Vec3(x+f_, y+f_, z+f_); }
+	__device__ __host__ Vec3 operator+(float f_) const { return Vec3(x + f_, y + f_, z + f_); }
 
     /// lhs scalar cwise addition
-    inline friend
+	__device__ __host__ inline friend
     Vec3 operator+(const float d_, const Vec3& vec) { return Vec3(d_+vec.x, d_+vec.y, d_+vec.z); }
 
-    Vec3& operator+= (float f_) {
+	__device__ __host__ Vec3& operator+= (float f_) {
         x += f_;
         y += f_;
         z += f_;
@@ -99,11 +99,11 @@ struct Vec3 {
     // Substractions
     // -------------
 
-    Vec3 operator-(const Vec3 &v_) const {
+	__device__ __host__ Vec3 operator-(const Vec3 &v_) const {
         return Vec3(x-v_.x, y-v_.y, z-v_.z);
     }
 
-    Vec3& operator-= (const Vec3& v_) {
+	__device__ __host__ Vec3& operator-= (const Vec3& v_) {
         x -= v_.x;
         y -= v_.y;
         z -= v_.z;
@@ -111,17 +111,17 @@ struct Vec3 {
     }
 
     /// opposite vector
-    Vec3 operator-() const {
+	__device__ __host__ Vec3 operator-() const {
         return Vec3(-x, -y, -z);
     }
 
-    Vec3 operator-(float f_) const { return Vec3(x-f_, y-f_, z-f_); }
+	__device__ __host__ Vec3 operator-(float f_) const { return Vec3(x - f_, y - f_, z - f_); }
 
     /// lhs scalar cwise substraction
-    inline friend
+	__device__ __host__ inline friend
     Vec3 operator-(const float d_, const Vec3& vec) { return Vec3(d_-vec.x, d_-vec.y, d_-vec.z); }
 
-    Vec3& operator-= (float f_) {
+	__device__ __host__ Vec3& operator-= (float f_) {
         x -= f_;
         y -= f_;
         z -= f_;
@@ -132,11 +132,11 @@ struct Vec3 {
     // Comparisons
     // -------------
 
-    bool operator!= (const Vec3 &v_) const {
+	__device__ __host__ bool operator!= (const Vec3 &v_) const {
         return (x != v_.x) |  (y != v_.y) | (z != v_.z);
     }
 
-    bool operator==(const Vec3& d_) const {
+	__device__ __host__ bool operator==(const Vec3& d_) const {
         return (x == d_.x) && (y == d_.y) && (z == d_.z);
     }
 
@@ -146,23 +146,23 @@ struct Vec3 {
     // Divisions
     // -------------
 
-    Vec3 operator/(const float d_) const {
+	__device__ __host__ Vec3 operator/(const float d_) const {
         return Vec3(x/d_, y/d_, z/d_);
     }
 
-    Vec3& operator/=(const float d_) {
+	__device__ __host__ Vec3& operator/=(const float d_) {
         x /= d_;
         y /= d_;
         z /= d_;
         return *this;
     }
 
-    Vec3 operator/(const Vec3 &v_) const {
+	__device__ __host__ Vec3 operator/(const Vec3 &v_) const {
         return Vec3(x/v_.x, y/v_.y, z/v_.z);
     }
 
     // Should not be defined
-    Vec3& operator/=(const Vec3& d_) {
+	__device__ __host__ Vec3& operator/=(const Vec3& d_) {
         x /= d_.x;
         y /= d_.y;
         z /= d_.z;
@@ -174,25 +174,25 @@ struct Vec3 {
     // ----------------
 
     /// rhs scalar multiplication
-    Vec3 operator*(const float d_) const { return Vec3(x*d_, y*d_, z*d_); }
+	__device__ __host__ Vec3 operator*(const float d_) const { return Vec3(x*d_, y*d_, z*d_); }
 
     /// lhs scalar multiplication
-    inline friend
+	__device__ __host__ inline friend
     Vec3 operator*(const float d_, const Vec3& vec) { return Vec3(d_*vec.x, d_*vec.y, d_*vec.z); }
 
-    Vec3& operator*=(const float d_) {
+	__device__ __host__  Vec3& operator*=(const float d_) {
         x *= d_;
         y *= d_;
         z *= d_;
         return *this;
     }
 
-    Vec3 operator*(const Vec3 &v_) const {
+	__device__ __host__ Vec3 operator*(const Vec3 &v_) const {
         return Vec3(x*v_.x, y*v_.y, z*v_.z);
     }
 
     // Should not be defined
-    Vec3& operator*=(const Vec3& d_) {
+	__device__ __host__ Vec3& operator*=(const Vec3& d_) {
         x *= d_.x;
         y *= d_.y;
         z *= d_.z;
@@ -204,36 +204,36 @@ struct Vec3 {
     // -------------------------------------------------------------------------
 
     /// product of all components
-    float product() const { return x*y*z; }
+	__device__ __host__ float product() const { return x*y*z; }
 
     /// sum of all components
-    float sum() const { return x+y+z; }
+	__device__ __host__ float sum() const { return x + y + z; }
 
     /// Average all components
-    float average() const { return (x+y+z)/3.f; }
+	__device__ __host__ float average() const { return (x + y + z) / 3.f; }
 
     /// semi dot product (component wise multiplication)
-    Vec3 mult(const Vec3& v) const {
+	__device__ __host__ Vec3 mult(const Vec3& v) const {
         return Vec3(x*v.x, y*v.y, z*v.z);
     }
 
     /// component wise division
-    Vec3 div(const Vec3& v) const {
+	__device__ __host__ Vec3 div(const Vec3& v) const {
         return Vec3(x/v.x, y/v.y, z/v.z);
     }
 
     /// cross product
-    Vec3 cross(const Vec3& v_) const {
+	__device__ __host__ Vec3 cross(const Vec3& v_) const {
         return Vec3(y*v_.z-z*v_.y, z*v_.x-x*v_.z, x*v_.y-y*v_.x);
     }
 
     /// dot product
-    float dot(const Vec3& v_) const {
+	__device__ __host__ float dot(const Vec3& v_) const {
         return x*v_.x+y*v_.y+z*v_.z;
     }
 
     /// Compute the cotangente (i.e. 1./tan) between 'this' and v_
-    float cotan(const Vec3& v_) const {
+	__device__ __host__ float cotan(const Vec3& v_) const {
         // cot(alpha ) = dot(v1, v2) / ||cross(v1, v2)||
         // = ||v1||*||v2||*cos( angle(v1, v2) ) / ||v1||*||v2|| * sin( angle(v1, v2) )
         // = cos( angle(v1, v2) ) / sin( angle(v1, v2) )
@@ -249,27 +249,27 @@ struct Vec3 {
     /// is counter clock wise the angle is positive.
     /// Clockwise rotation is negative
     /// @return signed angle between [-PI; PI] starting from v1 to v2
-    float signed_angle(const Vec3& v1, const Vec3& v2) const {
+	__device__ __host__ float signed_angle(const Vec3& v1, const Vec3& v2) const {
         return atan2(  this->dot( v1.cross(v2) ), v1.dot(v2) );
     }
 
     /// absolute value of the dot product
-    float abs_dot(const Vec3& v_) const {
+	__device__ __host__ float abs_dot(const Vec3& v_) const {
         return fabsf(x * v_.x + y * v_.y + z * v_.z);
     }
 
     /// norm squared
-    float norm_squared() const {
+	__device__ __host__ float norm_squared() const {
         return dot(*this);
     }
 
     /// normalization
-    Vec3 normalized() const {
+	__device__ __host__  Vec3 normalized() const {
         return (*this) * (1.f/sqrtf(norm_squared()));
     }
 
     /// normalization
-    float normalize() {
+	__device__ __host__ float normalize() {
         float l = sqrtf(norm_squared());
         float f = 1.f / l;
         x *= f;
@@ -279,7 +279,7 @@ struct Vec3 {
     }
 
     /// normalization
-    float safe_normalize(const float eps = 1e-10f) {
+	__device__ __host__ float safe_normalize(const float eps = 1e-10f) {
         float l = sqrtf(norm_squared());
         if(l > eps){
             float f = 1.f / l;
@@ -296,12 +296,12 @@ struct Vec3 {
     }
 
     /// norm
-    float norm() const {
+	__device__ __host__ float norm() const {
         return sqrtf(norm_squared());
     }
 
     /// value of the min coordinate
-    float get_min() const {
+	__device__ __host__ float get_min() const {
         return fminf(fminf(x,y),z);
     }
 
@@ -311,42 +311,42 @@ struct Vec3 {
     }
 
     /// clamp each vector values
-    Vec3 clamp(float min_v, float max_v) const {
+	__device__ __host__ Vec3 clamp(float min_v, float max_v) const {
         return Vec3( fminf( fmaxf(x, min_v), max_v),
                      fminf( fmaxf(y, min_v), max_v),
                      fminf( fmaxf(z, min_v), max_v));
     }
 
     /// clamp each vector values
-    Vec3 clamp(const Vec3& min_v, const Vec3& max_v) const {
+	__device__ __host__ Vec3 clamp(const Vec3& min_v, const Vec3& max_v) const {
         return Vec3( fminf( fmaxf(x, min_v.x), max_v.x),
                      fminf( fmaxf(y, min_v.y), max_v.y),
                      fminf( fmaxf(z, min_v.z), max_v.z));
     }
 
     /// floorf every components
-    Vec3 floor() const {
+	__device__ __host__ Vec3 floor() const {
         return Vec3( floorf(x), floorf(y), floorf(z) );
     }
 
     /// rotate of 0 step to the left (present for symmetry)
-    Vec3 perm_x() const {
+	__device__ __host__ Vec3 perm_x() const {
         return Vec3(x, y, z);
     }
 
     /// rotate of 1 step to the left (so that y is the first coordinate)
-    Vec3 perm_y() const {
+	__device__ __host__ Vec3 perm_y() const {
         return Vec3(y, z, x);
     }
 
     /// rotate of 2 steps to the left (so that z is the first coordinate)
-    Vec3 perm_z() const {
+	__device__ __host__ Vec3 perm_z() const {
         return Vec3(z, x, y);
     }
 
     /// Given the vector '*this' generate a 3d frame where vectors y_axis and
     /// z_axis are orthogonal to '*this'.
-    void coordinate_system (Vec3& y_axis_, Vec3& z_axis) const {
+	__device__ __host__ void coordinate_system(Vec3& y_axis_, Vec3& z_axis) const {
         //for numerical stability, and seen that z will
         //always be present, take the greatest component between
         //x and y.
@@ -363,7 +363,7 @@ struct Vec3 {
     }
 
     /// Get a random orthogonal vector
-    Vec3 get_ortho() const
+	__device__ __host__ Vec3 get_ortho() const
     {
         Vec3 ortho = this->cross(Vec3(1.f, 0.f, 0.f));
 
@@ -377,7 +377,7 @@ struct Vec3 {
     /// normal '*this'
     /// @warning don't forget to normalize the vector before calling
     /// proj_on_plane() !
-    Vec3 proj_on_plane(const Vec3& to_project) const
+	__device__ __host__ Vec3 proj_on_plane(const Vec3& to_project) const
     {
         return ( (*this).cross(to_project) ).cross( (*this) );
     }
@@ -387,7 +387,7 @@ struct Vec3 {
     /// @warning don't forget to normalize the vector before calling
     /// proj_on_plane() !
     /// @note implemented in Point3.h because of cross definitions
-    inline Point3 proj_on_plane(const Point3& pos_plane,
+	__device__ __host__ inline Point3 proj_on_plane(const Point3& pos_plane,
                                 const Point3& to_project) const;
 
     // -------------------------------------------------------------------------
@@ -395,14 +395,14 @@ struct Vec3 {
     // -------------------------------------------------------------------------
 
     /// @note implemented in Point3.hpp because of cross definitions
-    inline Point3 to_point3() const;
+	__device__ __host__ inline Point3 to_point3() const;
 
-    inline const float& operator[](int i) const{
+	__device__ __host__ inline const float& operator[](int i) const{
         assert( i < 3);
         return ((float*)this)[i];
     }
 
-    inline float& operator[](int i){
+	__device__ __host__ inline float& operator[](int i){
         assert( i < 3);
         return ((float*)this)[i];
     }
@@ -414,16 +414,16 @@ struct Vec3 {
     /// glNormal3fv(normal);
     /// glVertex3fv(pos);
     /// @endcode
-    operator const float*() const { return &x; }
+	__device__ __host__ operator const float*() const { return &x; }
 
     /// Conversion returns the memory address of the vector. (Non const version)
-    operator float*() { return &x; }
+	__device__ __host__  operator float*() { return &x; }
 
     // -------------------------------------------------------------------------
     /// @name Print vector
     // -------------------------------------------------------------------------
 
-    void print() const {
+	__device__ __host__ void print() const {
         printf("%f, %f, %f\n", x, y, z);
     }
 

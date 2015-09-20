@@ -40,10 +40,7 @@ namespace dfusion
 		ldp::Mat4f camera2volume = volume2world.inv();
 
 		// camera intrinsic
-		m_intr.cx = (r + l)*0.5f - 0.5f;
-		m_intr.cy = (b + t)*0.5f - 0.5f;
-		m_intr.fx = f;
-		m_intr.fy = f;
+		m_intr = Intr(f, f, (r + l)*0.5f, (b + t)*0.5f);
 
 		// volume to world
 		// NOTE: in mat33, each vec is a row-vec

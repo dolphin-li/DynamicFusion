@@ -28,4 +28,16 @@ namespace dfusion
 
 	// /2 scale
 	void pyrDown(const DepthMap& src, DepthMap& dst);
+
+	//
+	void rigidTransform(MapArr& vmap, MapArr& nmap, Tbx::Transfo T);
+
+	// estimate rigid transform Ax=b
+	void estimateCombined(const Mat33& Rcurr, const float3& tcurr,
+		const MapArr& vmap_curr, const MapArr& nmap_curr,
+		const Mat33& Rprev_inv, const float3& tprev, const Intr& intr,
+		const MapArr& vmap_g_prev, const MapArr& nmap_g_prev,
+		float distThres, float angleThres,
+		DeviceArray2D<double>& gbuf, DeviceArray<double>& mbuf,
+		double* matrixA_host, double* vectorB_host);
 }

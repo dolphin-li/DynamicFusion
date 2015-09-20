@@ -17,6 +17,7 @@
 #include <windows.h>
 #include <math.h>
 #include <vector>
+#include "definations.h"
 
 #ifdef ENABLE_KINECT_10
 #	include <NuiApi.h>
@@ -58,7 +59,7 @@ public:
 
 	// the size of buffer must be 640*480 and continues.
 	// if depth/pBGRA==nullptr, then ignored.
-	int GetDepthColorIntoBuffer(unsigned short* depth, unsigned char* pBGRA, bool map2depth = true);
+	int GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, bool map2depth = true);
 
 	//	get data
 	int GetDepthMap();

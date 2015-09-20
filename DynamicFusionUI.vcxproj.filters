@@ -380,6 +380,9 @@
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_config.h">
       <Filter>algorithm\DynamicFusion\cudpp</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\device_utils.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">

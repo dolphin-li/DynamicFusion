@@ -75,21 +75,53 @@ namespace dfusion
 
 	/** \brief Camera intrinsics structure
 	*/
-	struct Intr
+	class Intr
 	{
-		float fx, fy, cx, cy;
+	public:
+		float fx, fy, cx, cy, fx_inv, fy_inv;
+	public:
 		Intr() {}
-		Intr(float fx_, float fy_, float cx_, float cy_) : fx(fx_), fy(fy_), cx(cx_), cy(cy_) {}
+		Intr(float fx_, float fy_, float cx_, float cy_) : fx(fx_), fy(fy_), cx(cx_), cy(cy_) 
+		{
+			fx_inv = 1.f / fx;
+			fy_inv = 1.f / fy;
+		}
 
 		Intr operator()(int level_index) const
 		{
 			int div = 1 << level_index;
 			return (Intr(fx / div, fy / div, cx / div, cy / div));
 		}
+
+		__device__ __host__ __forceinline__ float3 uvd2xyz(float u, float v, float d)const
+		{
+			float x = d * (u - cx) * fx_inv;
+			float y = -d * (v - cy) * fy_inv;
+			float z = -d;
+			return make_float3(x, y, z);
+		}
+
+		__device__ __host__ __forceinline__ float3 uvd2xyz(float3 uvd)const
+		{
+			return uvd2xyz(uvd.x, uvd.y, uvd.z);
+		}
+
+		__device__ __host__ __forceinline__ float3 xyz2uvd(float x, float y, float z)const
+		{
+			float d = -z;
+			float u = x * fx / d + cx;
+			float v = -y * fy / d + cy;
+			return make_float3(u, v, d);
+		}
+
+		__device__ __host__ __forceinline__ float3 xyz2uvd(float3 xyz)const
+		{
+			return xyz2uvd(xyz.x, xyz.y, xyz.z);
+		}
 	};
 
 	typedef unsigned short ushort;
-	typedef ushort depthtype;
+	typedef float depthtype;
 	typedef DeviceArray2D<float> MapArr;
 	typedef DeviceArray2D<depthtype> DepthMap;
 	typedef DeviceArray2D<PixelRGBA> ColorMap;
@@ -226,4 +258,30 @@ namespace dfusion
 #define KINECT_IMAGE_H_FOV 62.0
 #define KINECT_IMAGE_V_FOV 48.6
 #define KINECT_NEAREST_METER 0.3
+
+	__device__ __host__ __forceinline__  Tbx::Vec3 convert(float3 a)
+	{
+		return Tbx::Vec3(a.x, a.y, a.z);
+	}
+
+	__device__ __host__ __forceinline__  float3 convert(Tbx::Vec3 a)
+	{
+		return make_float3(a.x, a.y, a.z);
+	}
+
+	__device__ __host__ __forceinline__  Tbx::Mat3 convert(Mat33 a)
+	{
+		return Tbx::Mat3(a.data[0].x, a.data[0].y, a.data[0].z,
+						a.data[1].x, a.data[1].y, a.data[1].z,
+						a.data[2].x, a.data[2].y, a.data[2].z);
+	}
+
+	__device__ __host__ __forceinline__  Mat33 convert(Tbx::Mat3 a)
+	{
+		Mat33 b;
+		b.data[0] = make_float3(a.a, a.b, a.c);
+		b.data[1] = make_float3(a.d, a.e, a.f);
+		b.data[2] = make_float3(a.g, a.h, a.i);
+		return b;
+	}
 }

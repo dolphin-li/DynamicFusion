@@ -54,7 +54,7 @@ void Microsoft_Kinect::FreeSpace(){
 		FreeSpace20();
 }
 
-int Microsoft_Kinect::GetDepthColorIntoBuffer(unsigned short* depth, unsigned char* pBGRA, bool map2depth)
+int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, bool map2depth)
 {
 	GetDepthMap();
 	GetColorMap();

@@ -267,6 +267,7 @@
     <ClInclude Include="algorithm\DynamicFusion\device_array.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_memory.h" />
     <ClInclude Include="algorithm\DynamicFusion\definations.h" />
+    <ClInclude Include="algorithm\DynamicFusion\device_utils.h" />
     <ClInclude Include="algorithm\DynamicFusion\dualquaternion\dual_quat_cu.hpp" />
     <ClInclude Include="algorithm\DynamicFusion\dualquaternion\mat3.hpp" />
     <ClInclude Include="algorithm\DynamicFusion\dualquaternion\point3.hpp" />
