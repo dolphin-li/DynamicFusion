@@ -8,11 +8,32 @@
 #include "fmath.h"
 #include <eigen\Dense>
 #include <eigen\Geometry>
+#include "ObjMesh.h"
+#include "VolumeData.h"
 
 namespace dfusion
 {
 #define DFUSION_SAFE_DELETE(buffer)\
 	if (buffer){ delete buffer; buffer = nullptr; }
+
+	Tbx::Mat3 convert(Eigen::Matrix3f A)
+	{
+		return Tbx::Mat3(A(0, 0), A(0, 1), A(0, 2),
+			A(1, 0), A(1, 1), A(1, 2),
+			A(2, 0), A(2, 1), A(2, 2));
+	}
+	Tbx::Vec3 convert(Eigen::Vector3f A)
+	{
+		return Tbx::Vec3(A[0], A[1], A[2]);
+	}
+	ldp::Mat4f convert(Tbx::Transfo T)
+	{
+		ldp::Mat4f A;
+		for (int y = 0; y < 4; y++)
+		for (int x = 0; x < 4; x++)
+			A(y, x) = T[y*4+x];
+		return A;
+	}
 
 	DynamicFusionProcessor::DynamicFusionProcessor()
 	{
@@ -59,7 +80,7 @@ namespace dfusion
 			1.f/m_param.voxels_per_meter, 
 			make_float3(-m_param.volume_resolution[0]*0.5f/m_param.voxels_per_meter, 
 			-m_param.volume_resolution[1] * 0.5f / m_param.voxels_per_meter, 
-			-KINECT_NEAREST_METER)
+			-KINECT_NEAREST_METER - m_param.volume_resolution[2] / m_param.voxels_per_meter)
 			);
 
 		// mesh
@@ -128,8 +149,7 @@ namespace dfusion
 
 	void DynamicFusionProcessor::processFrame(const DepthMap& depth)
 	{
-		return;
-		m_depth_input = depth;
+		depth.copyTo(m_depth_input);
 		estimateWarpField();
 		nonRigidTsdfFusion();
 		surfaceExtractionMC();
@@ -142,11 +162,10 @@ namespace dfusion
 	void DynamicFusionProcessor::shading(const Camera& userCam, LightSource light, 
 		ColorMap& img, bool use_ray_casting)
 	{
-		return;
 		Camera cam = *m_camera;
 		cam.setModelViewMatrix(userCam.getModelViewMatrix()*m_camera->getModelViewMatrix());
 
-		if (use_ray_casting)
+		if (1)//use_ray_casting)
 		{
 			m_rayCaster->setCamera(cam);
 			m_rayCaster->shading(light, img);
@@ -167,13 +186,27 @@ namespace dfusion
 
 	void DynamicFusionProcessor::nonRigidTsdfFusion()
 	{
-
+		fusion();
 	}
 
 	void DynamicFusionProcessor::surfaceExtractionMC()
 	{
-		m_marchCube->run(*m_canoMesh);
-		m_warpedMesh->copyFrom(*m_canoMesh);
+		//m_marchCube->run(*m_canoMesh);
+		//m_warpedMesh->copyFrom(*m_canoMesh);
+
+		LightSource light;
+		static ColorMap tmp;
+		m_camera->setModelViewMatrix(convert(m_framesWarpFields.back()->get_rigidTransform()));
+		m_rayCaster->setCamera(*m_camera);
+		m_rayCaster->shading(light, tmp);
+
+		m_rayCaster->get_vmap()->copyTo(m_vmap_prev_pyd[0]);
+		m_rayCaster->get_nmap()->copyTo(m_nmap_prev_pyd[0]);
+
+		for (int i = 1; i < RIGID_ALIGN_PYD_LEVELS; ++i){
+			resizeVMap(m_vmap_prev_pyd[i - 1], m_vmap_prev_pyd[i]);
+			resizeNMap(m_nmap_prev_pyd[i - 1], m_nmap_prev_pyd[i]);
+		}
 	}
 
 	void DynamicFusionProcessor::insertNewDeformNodes()
@@ -191,19 +224,16 @@ namespace dfusion
 
 	}
 
-	Tbx::Mat3 convert(Eigen::Matrix3f A)
-	{
-		return Tbx::Mat3(A(0,0), A(0,1), A(0,2),
-						A(1,0), A(1,1), A(1,2),
-						A(2,0), A(2,1), A(2,2));
-	}
-	Tbx::Vec3 convert(Eigen::Vector3f A)
-	{
-		return Tbx::Vec3(A[0], A[1], A[2]);
-	}
-
 	Tbx::Transfo DynamicFusionProcessor::rigid_align()
 	{
+#if 0
+		Tbx::Transfo test_T = Tbx::Transfo::identity();
+		Tbx::Quat_cu test_q = Tbx::Quat_cu(Tbx::Vec3(0, 0, 1), -0*3.1415926f / 180.f);
+		test_T.set_mat3(test_q.to_matrix3());
+		test_T.set_translation(Tbx::Vec3(-0.0, 0, 0.0));
+		return test_T;
+#endif
+
 		bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
 		createVMap(m_kinect_intr(0), m_depth_curr_pyd[0], m_vmap_curr_pyd[0]);
 		createNMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
@@ -219,6 +249,21 @@ namespace dfusion
 			createVMap(m_kinect_intr(i), m_depth_curr_pyd[i], m_vmap_curr_pyd[i]);	
 			createNMap(m_vmap_curr_pyd[i], m_nmap_curr_pyd[i]);
 		}
+#if 0
+		static int a = 0;
+		if (a++ == 3)
+		{
+			ObjMesh mesh;
+			mapsToObj(mesh, m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
+			mesh.saveObj("D:/curr.obj");
+			mapsToObj(mesh, m_vmap_prev_pyd[0], m_nmap_prev_pyd[0]);
+			mesh.saveObj("D:/prev.obj");
+
+			mpu::VolumeData vd;
+			m_volume->download(&vd);
+			vd.save("D:/vol.dvol");
+		}
+#endif
 
 #if 0
 		// debug
@@ -227,9 +272,9 @@ namespace dfusion
 			pyrDown(m_depth_prev_pyd[i - 1], m_depth_prev_pyd[i]);
 
 		Tbx::Transfo test_T = Tbx::Transfo::identity();
-		Tbx::Quat_cu test_q = Tbx::Quat_cu(Tbx::Vec3(1,0,0), 3.8*3.1415926f/180.f);
+		Tbx::Quat_cu test_q = Tbx::Quat_cu(Tbx::Vec3(1,0,0), 0.8*3.1415926f/180.f);
 		test_T.set_mat3(test_q.to_matrix3());
-		test_T.set_translation(Tbx::Vec3(0.003f, 0.005f, 0.002f));
+		test_T.set_translation(Tbx::Vec3(0.00f, 0.00f, 0.00f));
 
 		//printf("test_input---------------------------------------------------:\n");
 		//test_T.print();
@@ -239,7 +284,7 @@ namespace dfusion
 		{
 			m_vmap_curr_pyd[i].copyTo(m_vmap_prev_pyd[i]);
 			m_nmap_curr_pyd[i].copyTo(m_nmap_prev_pyd[i]);
-			rigidTransform(m_vmap_curr_pyd[i], m_nmap_curr_pyd[i], test_T.fast_invert());
+			rigidTransform(m_vmap_prev_pyd[i], m_nmap_prev_pyd[i], test_T);
 		}
 		if (m_frame_id)
 			m_framesWarpFields.back()->set_rigidTransform(Tbx::Transfo::identity());
@@ -250,22 +295,20 @@ namespace dfusion
 			return Tbx::Transfo().identity();
 
 		// now estimate rigid transform
-		Tbx::Transfo w2c = m_framesWarpFields.back()->get_rigidTransform();
-		Tbx::Transfo c2w = w2c.fast_invert();
-		Tbx::Mat3	Rprev = c2w.get_mat3();
-		Tbx::Vec3	tprev = c2w.get_translation();
-		Tbx::Mat3	Rprev_inv = Rprev.inverse();			//Rprev.t();
+		Tbx::Transfo c2v = m_framesWarpFields.back()->get_rigidTransform().fast_invert();
+		Tbx::Mat3	c2v_Rprev = c2v.get_mat3();
+		Tbx::Vec3	c2v_tprev = c2v.get_translation();
 
-		Tbx::Mat3	Rcurr = Rprev;
-		Tbx::Vec3	tcurr = tprev;
+		Tbx::Mat3	c2v_Rcurr = c2v_Rprev;
+		Tbx::Vec3	c2v_tcurr = c2v_tprev;
 
-		const int icp_iterations[] = { 4, 5, 10 };
+		const int icp_iterations[] = { 10, 5, 10 };
 		for (int level_index = RIGID_ALIGN_PYD_LEVELS - 1; level_index >= 0; --level_index)
 		{
 			MapArr& vmap_curr = m_vmap_curr_pyd[level_index];
 			MapArr& nmap_curr = m_nmap_curr_pyd[level_index];
-			MapArr& vmap_g_prev = m_vmap_prev_pyd[level_index];
-			MapArr& nmap_g_prev = m_nmap_prev_pyd[level_index];
+			MapArr& vmap_prev = m_vmap_prev_pyd[level_index];
+			MapArr& nmap_prev = m_nmap_prev_pyd[level_index];
 
 			int iter_num = icp_iterations[level_index];
 			for (int iter = 0; iter < iter_num; ++iter)
@@ -273,9 +316,9 @@ namespace dfusion
 				Eigen::Matrix<double, 6, 6, Eigen::RowMajor> A;
 				Eigen::Matrix<double, 6, 1> b;
 
-				estimateCombined(convert(Rcurr), convert(tcurr), vmap_curr, nmap_curr, 
-					convert(Rprev_inv), convert(tprev), m_kinect_intr(level_index),
-					vmap_g_prev, nmap_g_prev, m_rigid_distThre, m_rigid_angleThre_sin, 
+				estimateCombined(convert(c2v_Rcurr), convert(c2v_tcurr), vmap_curr, nmap_curr,
+					convert(c2v_Rprev), convert(c2v_tprev), m_kinect_intr(level_index),
+					vmap_prev, nmap_prev, m_rigid_distThre, m_rigid_angleThre_sin, 
 					m_rigid_gbuf, m_rigid_sumbuf, A.data(), b.data());
 
 				//checking nullspace
@@ -286,7 +329,7 @@ namespace dfusion
 						std::cout << "qnan" << std::endl;
 					else
 						std::cout << det << std::endl;
-					return w2c;
+					return c2v.fast_invert();
 				}
 
 				Eigen::Matrix<float, 6, 1> result = A.llt().solve(b).cast<float>();
@@ -301,8 +344,8 @@ namespace dfusion
 				Eigen::Vector3f tinc = result.tail<3>();
 
 				//compose
-				tcurr = convert(Rinc) * tcurr + convert(tinc);
-				Rcurr = convert(Rinc) * Rcurr;
+				c2v_tcurr = convert(Rinc) * c2v_tcurr + convert(tinc);
+				c2v_Rcurr = convert(Rinc) * c2v_Rcurr;
 
 #if 0
 				// debug
@@ -317,6 +360,6 @@ namespace dfusion
 			}
 		}
 
-		return Tbx::Transfo(Rcurr, tcurr);
+		return Tbx::Transfo(c2v_Rcurr, c2v_tcurr).fast_invert();
 	}
 }

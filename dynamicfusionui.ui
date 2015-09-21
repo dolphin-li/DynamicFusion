@@ -261,6 +261,19 @@
       <number>9999</number>
      </property>
     </widget>
+    <widget class="QPushButton" name="pbReset">
+     <property name="geometry">
+      <rect>
+       <x>370</x>
+       <y>10</y>
+       <width>75</width>
+       <height>23</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Reset</string>
+     </property>
+    </widget>
    </widget>
   </widget>
   <action name="actionLoad_frames">

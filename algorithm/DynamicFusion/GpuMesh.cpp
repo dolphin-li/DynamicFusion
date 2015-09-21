@@ -272,8 +272,10 @@ namespace dfusion
 				throw std::exception("wglMakeCurrent error");
 
 			// create buffer object
-			glGenBuffers(1, &m_vbo_id);
-			CHECK_NOT_EQUAL(m_vbo_id, 0);
+			do{
+				glGenBuffers(1, &m_vbo_id);
+				CHECK_NOT_EQUAL(m_vbo_id, 0);
+			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id));
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
 			glBufferData(GL_ARRAY_BUFFER, 2*n*sizeof(float3), 0, GL_DYNAMIC_DRAW);
 			if (n)// when n==0, it may crash.

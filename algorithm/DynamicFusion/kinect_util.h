@@ -1,12 +1,15 @@
 #pragma once
 
 #include "definations.h"
+class ObjMesh;
 namespace dfusion
 {
 
 	/** **********************************************************************
 	* function utils
 	* ***********************************************************************/
+	void mapsToObj(ObjMesh& mesh, const dfusion::MapArr& vmap, const dfusion::MapArr& nmap);
+
 	// jet_Rgb_d = jet((depth_d-shift)/div)
 	void calc_temperature_jet(PtrStepSz<depthtype> depth_d, PtrStepSz<uchar4> jetRgb_d, float shift, float div);
 
@@ -29,14 +32,17 @@ namespace dfusion
 	// /2 scale
 	void pyrDown(const DepthMap& src, DepthMap& dst);
 
+	void resizeVMap(const MapArr& input, MapArr& output);
+	void resizeNMap(const MapArr& input, MapArr& output);
+
 	//
 	void rigidTransform(MapArr& vmap, MapArr& nmap, Tbx::Transfo T);
 
 	// estimate rigid transform Ax=b
 	void estimateCombined(const Mat33& Rcurr, const float3& tcurr,
 		const MapArr& vmap_curr, const MapArr& nmap_curr,
-		const Mat33& Rprev_inv, const float3& tprev, const Intr& intr,
-		const MapArr& vmap_g_prev, const MapArr& nmap_g_prev,
+		const Mat33& Rprev, const float3& tprev, const Intr& intr,
+		const MapArr& vmap_prev, const MapArr& nmap_prev,
 		float distThres, float angleThres,
 		DeviceArray2D<double>& gbuf, DeviceArray<double>& mbuf,
 		double* matrixA_host, double* vectorB_host);

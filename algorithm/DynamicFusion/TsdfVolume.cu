@@ -1,4 +1,5 @@
 #include "TsdfVolume.h"
+#include "device_utils.h"
 namespace dfusion
 {
 	__global__ void initializeVolume(int3 res, cudaSurfaceObject_t surf)
@@ -98,7 +99,10 @@ namespace dfusion
 			{
 				int pos = (z*res.y + y)*res.x + x;
 				TsdfData val = read_tsdf_surface(surf, x, y, z);
-				data[pos] = unpack_tsdf(val).x;
+				if (unpack_tsdf(val).y == 0.f)
+					data[pos] = numeric_limits<float>::quiet_NaN();
+				else
+					data[pos] = unpack_tsdf(val).x;
 			}
 		}
 	}

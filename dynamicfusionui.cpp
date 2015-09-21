@@ -212,6 +212,11 @@ void DynamicFusionUI::updateDynamicFusion()
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
 }
 
+void DynamicFusionUI::on_pbReset_clicked()
+{
+	g_dataholder.m_processor.reset();
+}
+
 void DynamicFusionUI::on_actionSave_triggered()
 {
 

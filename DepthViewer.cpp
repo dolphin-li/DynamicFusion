@@ -7,7 +7,10 @@
 #define CHECK_GL_ERROR(str) {\
 GLenum err = glGetError();\
 if (err != GL_NO_ERROR)\
-printf("[%s]GL Error: %s\n", str, gluErrorString(err)); }
+printf("[%s]GL Error: %d=%s\n", str, err, gluErrorString(err)); }
+#define CHECK_NOT_EQUAL(a, b) {\
+if (a == b){\
+printf("CHECK FAILED: %s == %s\n", #a, #b); throw std::exception();}}
 
 DepthViewer::DepthViewer(QWidget *parent)
 : QGLWidget(parent)
@@ -81,8 +84,12 @@ void DepthViewer::initializeGL()
 	glBindTexture(GL_TEXTURE_2D, 0);
 	m_depthColors_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
 
-	// gen buffer and map to cuda	
-	m_gl_func->glGenBuffers(1, &m_pbo_id);
+	// gen buffer and map to cuda
+	do{
+		m_gl_func->glGenBuffers(1, &m_pbo_id);
+		CHECK_NOT_EQUAL(m_pbo_id, 0);
+	} while (dfusion::is_cuda_pbo_vbo_id_used_push_new(m_pbo_id));
+
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);	m_gl_func->glBufferData(GL_PIXEL_UNPACK_BUFFER,
 		dfusion::KINECT_WIDTH * dfusion::KINECT_HEIGHT * 4,
 		NULL, GL_DYNAMIC_COPY);

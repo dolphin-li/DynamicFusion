@@ -33,6 +33,7 @@ namespace dfusion
 		void updateKNNField();
 
 		Tbx::Transfo rigid_align();
+		void fusion();
 	private:
 		Param m_param;
 		Camera* m_camera;
@@ -48,7 +49,7 @@ namespace dfusion
 
 		// for rigid align
 		enum{
-			RIGID_ALIGN_PYD_LEVELS = 3
+			RIGID_ALIGN_PYD_LEVELS = 1
 		};
 		DepthMap m_depth_input;
 		std::vector<DepthMap> m_depth_curr_pyd;

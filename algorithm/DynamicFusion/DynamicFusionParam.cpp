@@ -10,5 +10,7 @@ namespace dfusion
 		voxels_per_meter = 256;
 		marching_cube_level = 0;
 		marching_cube_tile_size = 256;
+
+		fusion_max_weight = 128;
 	}
 }

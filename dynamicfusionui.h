@@ -25,6 +25,7 @@ public:
 	void on_actionSave_current_mesh_triggered();
 	void on_rbRayCasting_clicked();
 	void on_rbMarchCube_clicked();
+	void on_pbReset_clicked();
 
 	void on_rbResX128_clicked();
 	void on_rbResX256_clicked();

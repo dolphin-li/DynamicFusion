@@ -34,8 +34,8 @@ namespace dfusion
 		Mat33	Rc2v;		//	camera to volume
 		float3	tc2v;
 
-		Mat33	Rv2w;		//	volume to world
-		float3	tv2w;
+		Mat33	Rv2c;		//	volume to camera
+		float3	tv2c;
 
 		int3	volume_resolution;		//	resolution of the volume
 		float	voxel_size;
@@ -73,7 +73,8 @@ namespace dfusion
 
 		__device__ __forceinline__ float readTsdf(float x, float y, float z) const
 		{
-			return unpack_tsdf(read_tsdf_texture(volumeData_tex,x,y,z)).x;
+			// since empty voxels = 0, adding 1e-5 can prevent nemeric errors bewteen +-0
+			return unpack_tsdf(read_tsdf_texture(volumeData_tex,x,y,z)).x + 1e-5f;
 		}
 
 		__device__ __forceinline__ int3 getVoxel(float3 point) const
@@ -91,9 +92,10 @@ namespace dfusion
 
 		__device__ __forceinline__ float interpolateTrilineary(const float3& point) const
 		{
+			// since empty voxels = 0, adding 1e-5 can prevent nemeric errors bewteen +-0
 			return read_tsdf_texture_value_trilinear(volumeData_tex, 
 				point.x  * voxel_size_inv, point.y  * voxel_size_inv,
-				point.z  * voxel_size_inv);
+				point.z  * voxel_size_inv) + 1e-5f;
 		}
 
 		__device__ __forceinline__ void operator () () const
@@ -161,7 +163,7 @@ namespace dfusion
 					float coef = (Ftdt == Ft) ? 0.f : Ft / (Ftdt - Ft);
 					float Ts = time_curr - time_step * coef;
 					float3 vetex_found = ray_start + ray_dir * Ts;			//	volume coordinate
-					float3 vertex_found_w = Rv2w * vetex_found + tv2w;		//	world coordinate
+					float3 vertex_found_w = Rv2c * vetex_found + tv2c;		//	world coordinate
 
 					vmap.ptr(y)[x] = vertex_found_w.x;
 					vmap.ptr(y + rows)[x] = vertex_found_w.y;
@@ -198,7 +200,7 @@ namespace dfusion
 						float Fz2 = interpolateTrilineary(t);
 						n.z = (Fz1 - Fz2);
 
-						n = normalized(Rv2w * n);
+						n = normalized(Rv2c * n);
 
 						nmap.ptr(y)[x] = n.x;
 						nmap.ptr(y + rows)[x] = n.y;
@@ -223,8 +225,8 @@ namespace dfusion
 		RayCasterG rc;
 		rc.Rc2v = m_Rc2v;
 		rc.tc2v = m_tc2v;
-		rc.Rv2w = m_Rv2w;
-		rc.tv2w = m_tv2w;
+		rc.Rv2c = m_Rv2c;
+		rc.tv2c = m_tv2c;
 		rc.volume_resolution.x = m_volume->getResolution().x;
 		rc.volume_resolution.y = m_volume->getResolution().y;
 		rc.volume_resolution.z = m_volume->getResolution().z;

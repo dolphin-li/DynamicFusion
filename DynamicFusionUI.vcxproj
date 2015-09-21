@@ -156,6 +156,7 @@
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionParam.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\kinect_util.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MarchingCubes.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MicrosoftKinect.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\RayCaster.cpp" />

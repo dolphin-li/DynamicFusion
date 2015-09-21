@@ -10,6 +10,9 @@
 	GLenum err = glGetError(); \
 if (err != GL_NO_ERROR)\
 	printf("[%s], GL Error: %s\n", str, gluErrorString(err)); }
+#define CHECK_NOT_EQUAL(a, b) {\
+if (a == b){\
+	printf("CHECK FAILED: %s == %s\n", #a, #b); throw std::exception();}}
 
 RayCastViewer::RayCastViewer(QWidget *parent)
 : QGLWidget(QGLFormat(QGL::SampleBuffers), parent)
@@ -19,7 +22,7 @@ RayCastViewer::RayCastViewer(QWidget *parent)
 	m_dataScale = 1;
 	m_id = 0;
 
-	m_defaultCameraLocation = ldp::Float3(0, 0, 2);
+	m_defaultCameraLocation = ldp::Float3(0, 0, 0);
 	m_defaultCameraDirection = ldp::Float3(0, 0, -1);
 	m_defaultCameraUp = ldp::Float3(0, 1, 0);
 
@@ -63,7 +66,10 @@ void RayCastViewer::initializeGL()
 	glBindTexture(GL_TEXTURE_2D, 0);
 
 	// gen buffer and map to cuda
-	m_gl_func->glGenBuffers(1, &m_pbo_id);
+	do{
+		m_gl_func->glGenBuffers(1, &m_pbo_id);
+		CHECK_NOT_EQUAL(m_pbo_id, 0);
+	} while (dfusion::is_cuda_pbo_vbo_id_used_push_new(m_pbo_id));
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);	m_gl_func->glBufferData(GL_PIXEL_UNPACK_BUFFER,
 		dfusion::KINECT_WIDTH * dfusion::KINECT_HEIGHT * 4,
 		NULL, GL_DYNAMIC_COPY);

@@ -32,8 +32,8 @@ namespace dfusion
 		ldp::Mat4f Omat = ldp::Mat4f().eye();
 		Omat.setTranslationPart(ori);
 
-		ldp::Mat4f volume2world = cam.getModelViewMatrix() * Omat;
-		ldp::Mat4f camera2volume = volume2world.inv();
+		ldp::Mat4f volume2camera = cam.getModelViewMatrix() * Omat;
+		ldp::Mat4f camera2volume = volume2camera.inv();
 
 		// camera intrinsic
 		m_intr = Intr(f, f, (r + l)*0.5f, (b + t)*0.5f);
@@ -42,13 +42,13 @@ namespace dfusion
 		// NOTE: in mat33, each vec is a row-vec
 		for (int x = 0; x < 3; x++)
 		{
-			m_Rv2w.data[x].x = volume2world(x, 0);
-			m_Rv2w.data[x].y = volume2world(x, 1);
-			m_Rv2w.data[x].z = volume2world(x, 2);
+			m_Rv2c.data[x].x = volume2camera(x, 0);
+			m_Rv2c.data[x].y = volume2camera(x, 1);
+			m_Rv2c.data[x].z = volume2camera(x, 2);
 		}
-		m_tv2w.x = volume2world(0, 3);
-		m_tv2w.y = volume2world(1, 3);
-		m_tv2w.z = volume2world(2, 3);
+		m_tv2c.x = volume2camera(0, 3);
+		m_tv2c.y = volume2camera(1, 3);
+		m_tv2c.z = volume2camera(2, 3);
 
 		// camera to volume
 		for (int x = 0; x < 3; x++)

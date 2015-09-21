@@ -15,12 +15,12 @@ namespace dfusion
 {
 	//// use float2 or short2 or half2 as TsdfData
 	//// NOTE:
-	////	short2 will be converted to float[-1,1] and then calculate, 
-	////		thus any weightings/values larger than 1 is not accepted
+	////	short2.x will be converted to float[-1,1] and then calculate, 
+	////		thus any values larger than 1 is not accepted
 	////	half2 and float2 are not limited to this.
-//#define USE_FLOAT_TSDF_VOLUME 
+#define USE_FLOAT_TSDF_VOLUME 
 //#define USE_SHORT_TSDF_VOLUME
-#define USE_HALF_TSDF_VOLUME
+//#define USE_HALF_TSDF_VOLUME
 	/** **********************************************************************
 	* types
 	* ***********************************************************************/
@@ -140,21 +140,20 @@ namespace dfusion
 	typedef short2 TsdfData; // value(low)-weight(high) stored in a voxel
 #define TSDF_DIVISOR 0x7fff
 #define TSDF_INV_DIVISOR 3.051850947599719e-05f
-	// NOTE: v, w must in [-1,1]
+	// NOTE: vmust in [-1,1]
 	__device__ __host__ __forceinline__ TsdfData pack_tsdf(float v, float w)
 	{
-		return make_short2(v*TSDF_DIVISOR, w*TSDF_DIVISOR);
+		return make_short2(v*TSDF_DIVISOR, w);
 	}
 	__device__ __host__ __forceinline__ float2 unpack_tsdf(TsdfData td)
 	{
-		return make_float2(float(td.x) * TSDF_INV_DIVISOR, float(td.y) * TSDF_INV_DIVISOR);
+		return make_float2(float(td.x) * TSDF_INV_DIVISOR, float(td.y));
 	}
 #endif
 #ifdef USE_HALF_TSDF_VOLUME
 	typedef int TsdfData; // value(low)-weight(high) stored in a voxel
 #define TSDF_DIVISOR 1.f
 #if defined(__CUDACC__)
-	// NOTE: v, w must in [-1,1]
 	__device__ __forceinline__ TsdfData pack_tsdf(float v, float w)
 	{
 		half2 val = __floats2half2_rn(v, w);
@@ -284,4 +283,10 @@ namespace dfusion
 		b.data[2] = make_float3(a.g, a.h, a.i);
 		return b;
 	}
+
+	// it seems cudaResGLRegister may conflict for 
+	// the same id in different context (especially QT&wGL context)
+	// thus we use this function to explicitly make each id different 
+	// once called, the id will be marked as used
+	bool is_cuda_pbo_vbo_id_used_push_new(unsigned int id);
 }
