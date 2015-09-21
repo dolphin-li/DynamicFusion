@@ -264,7 +264,7 @@ namespace dfusion
 		Tbx::Mat3	c2v_Rcurr = c2v_Rprev;
 		Tbx::Vec3	c2v_tcurr = c2v_tprev;
 
-		const int icp_iterations[] = { 4, 5, 10 };
+		const int icp_iterations[] = { 2, 4, 10 };
 		for (int level_index = RIGID_ALIGN_PYD_LEVELS - 1; level_index >= 0; --level_index)
 		{
 			MapArr& vmap_curr = m_vmap_curr_pyd[level_index];

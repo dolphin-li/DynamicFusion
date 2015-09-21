@@ -17,7 +17,7 @@ namespace dfusion
 	class GpuMesh
 	{
 	public:
-		typedef float3 PointType;	
+		typedef float4 PointType;	
 		__device__ __host__ __forceinline__ static float3 from_point(GpuMesh::PointType p)
 		{
 			return make_float3(p.x, p.y, p.z);
@@ -65,6 +65,7 @@ namespace dfusion
 		int m_num;
 		int m_width;
 		int m_height;
+		int m_current_buffer_size;
 
 		unsigned int m_vbo_id;
 		cudaGraphicsResource* m_cuda_res;

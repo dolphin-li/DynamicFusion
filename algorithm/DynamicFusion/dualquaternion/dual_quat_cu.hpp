@@ -51,7 +51,7 @@ class Dual_quat_cu {
 
     /// Default constructor generates a dual quaternion with no translation
     /// and no rotation either
-    Dual_quat_cu()
+	__device__ __host__ Dual_quat_cu()
     {
         Dual_quat_cu res = dual_quat_from(Quat_cu(), Vec3(0.f, 0.f, 0.f));
         *this = res;
@@ -60,7 +60,7 @@ class Dual_quat_cu {
 
     /// Fill directly the dual quaternion with two quaternion for the non-dual
     /// and dual part
-    Dual_quat_cu(const Quat_cu& q0, const Quat_cu& qe)
+	__device__ __host__ Dual_quat_cu(const Quat_cu& q0, const Quat_cu& qe)
     {
         _quat_0 = q0;
         _quat_e = qe;
@@ -68,14 +68,14 @@ class Dual_quat_cu {
 
     /// Construct a dual quaternion with a quaternion 'q' which express the
     /// rotation and a translation vector
-    Dual_quat_cu(const Quat_cu& q, const Vec3& t)
+	__device__ __host__ Dual_quat_cu(const Quat_cu& q, const Vec3& t)
     {
         Dual_quat_cu res = dual_quat_from(q, t);
         *this = res;
     }
 
     /// Construct from rigid transformation 't'
-    Dual_quat_cu(const Transfo& t)
+	__device__ __host__  Dual_quat_cu(const Transfo& t)
     {
         Quat_cu q(t);
         Vec3 translation(t.m[3], t.m[7], t.m[11]);
@@ -88,7 +88,7 @@ class Dual_quat_cu {
     /// @name Methods
     // -------------------------------------------------------------------------
 
-    void normalize()
+	__device__ __host__ void normalize()
     {
         float norm = _quat_0.norm();
         _quat_0 = _quat_0 / norm;
@@ -96,7 +96,7 @@ class Dual_quat_cu {
     }
 
     /// Transformation of point p with the dual quaternion
-    Point3 transform(const Point3& p ) const
+	__device__ __host__ Point3 transform(const Point3& p) const
     {
         // As the dual quaternions may be the results from a
         // linear blending we have to normalize it :
@@ -115,14 +115,14 @@ class Dual_quat_cu {
     }
 
     /// Rotate a vector with the dual quaternion
-    Vec3 rotate(const Vec3& v) const
+	__device__ __host__ Vec3 rotate(const Vec3& v) const
     {
         Quat_cu tmp = _quat_0;
         tmp.normalize();
         return tmp.rotate(v);
     }
 
-    Dual_quat_cu dual_quat_from(const Quat_cu& q, const Vec3& t) const
+	__device__ __host__ Dual_quat_cu dual_quat_from(const Quat_cu& q, const Vec3& t) const
     {
         float w = -0.5f*( t.x * q.i() + t.y * q.j() + t.z * q.k());
         float i =  0.5f*( t.x * q.w() + t.y * q.k() - t.z * q.j());
@@ -134,7 +134,7 @@ class Dual_quat_cu {
 
     /// Convert the dual quaternion to a homogenous matrix
     /// N.B: Dual quaternion is normalized before conversion
-    Transfo to_transformation()
+	__device__ __host__ Transfo to_transformation()
     {
         Vec3 t;
         float norm = _quat_0.norm();
@@ -154,18 +154,18 @@ class Dual_quat_cu {
     /// @name Operators
     // -------------------------------------------------------------------------
 
-    Dual_quat_cu operator+(const Dual_quat_cu& dq) const
+	__device__ __host__ Dual_quat_cu operator+(const Dual_quat_cu& dq) const
     {
         return Dual_quat_cu(_quat_0 + dq._quat_0, _quat_e + dq._quat_e);
     }
 
-    Dual_quat_cu operator*(float scalar) const
+	__device__ __host__ Dual_quat_cu operator*(float scalar) const
     {
         return Dual_quat_cu(_quat_0 * scalar, _quat_e * scalar);
     }
 
     /// Return a dual quaternion with no translation and no rotation
-    static Dual_quat_cu identity()
+	__device__ __host__ static Dual_quat_cu identity()
     {
         return Dual_quat_cu(Quat_cu(1.f, 0.f, 0.f, 0.f),
                             Vec3(0.f, 0.f, 0.f) );
@@ -175,15 +175,15 @@ class Dual_quat_cu {
     /// @name Getters
     // -------------------------------------------------------------------------
 
-    Quat_cu get_dual_part() const { return _quat_e; }
+	__device__ __host__ Quat_cu get_dual_part() const { return _quat_e; }
 
     Quat_cu get_non_dual_part() const { return _quat_0; }
 
-    Quat_cu translation() const { return _quat_e; }
+	__device__ __host__ Quat_cu translation() const { return _quat_e; }
 
-    Quat_cu rotation() const { return _quat_0; }
+	__device__ __host__ Quat_cu rotation() const { return _quat_0; }
 
-    void set_rotation( const Quat_cu& q ){ _quat_0 = q; }
+	__device__ __host__ void set_rotation(const Quat_cu& q){ _quat_0 = q; }
 
     // -------------------------------------------------------------------------
     /// @name Attributes

@@ -2,8 +2,11 @@
 #include "TsdfVolume.h"
 #include <algorithm>
 #include "GpuMesh.h"
+#include "ldp_basic_mat.h"
 namespace dfusion
 {
+#undef min
+#undef max
 	MarchingCubes::MarchingCubes()
 	{
 		m_volume = nullptr;
@@ -42,13 +45,12 @@ namespace dfusion
 		// count for each tile the number of vertices
 		// if only one tile, we directly write the results
 		// else, we write to some temp buffers and then gather
-		std::vector<GpuMesh> tiledResults(m_tiles.size());
 		for (size_t tid = 0; tid < m_tiles.size(); tid++)
 		{
 			if (m_tiles.size() == 1)
 				process_a_tile(m_tiles[tid], mesh);
 			else
-				process_a_tile(m_tiles[tid], tiledResults[tid]);
+				process_a_tile(m_tiles[tid], m_tiledMeshes[tid]);
 		}// end for tid
 
 		if (m_tiles.size() > 1)
@@ -64,14 +66,14 @@ namespace dfusion
 			mesh.lockVertsNormals();
 			for (size_t tid = 0; tid < m_tiles.size(); tid++)
 			{
-				tiledResults[tid].lockVertsNormals();
+				m_tiledMeshes[tid].lockVertsNormals();
 				cudaMemcpy(mesh.verts() + m_tiles[tid].vert_start_id, 
-					tiledResults[tid].verts(), tiledResults[tid].num()*sizeof(float3), 
+					m_tiledMeshes[tid].verts(), m_tiledMeshes[tid].num()*sizeof(GpuMesh::PointType),
 					cudaMemcpyDeviceToDevice);
 				cudaMemcpy(mesh.normals() + m_tiles[tid].vert_start_id,
-					tiledResults[tid].normals(), tiledResults[tid].num()*sizeof(float3),
+					m_tiledMeshes[tid].normals(), m_tiledMeshes[tid].num()*sizeof(GpuMesh::PointType),
 					cudaMemcpyDeviceToDevice);
-				tiledResults[tid].unlockVertsNormals();
+				m_tiledMeshes[tid].unlockVertsNormals();
 			}
 			mesh.unlockVertsNormals();
 		}// end if m_tiles.size() > 1
@@ -110,6 +112,7 @@ namespace dfusion
 				}
 			}// y
 		}// z
+		m_tiledMeshes.resize(m_tiles.size());
 	}
 
 	void MarchingCubes::process_a_tile(Tile& tile, GpuMesh& result)

@@ -42,6 +42,7 @@ namespace dfusion
 		int m_level;
 		float m_isoValue;
 		std::vector<Tile> m_tiles;
+		std::vector<GpuMesh> m_tiledMeshes;
 
 		// buffered for each tile
 		DeviceArray<unsigned int> m_voxelVerts;

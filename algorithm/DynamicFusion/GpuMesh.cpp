@@ -275,6 +275,7 @@ namespace dfusion
 		m_num = 0;
 		m_width = 0;
 		m_height = 0;
+		m_current_buffer_size = 0;
 
 		m_render_fbo_id = 0;
 		m_render_texture_id = 0;
@@ -296,7 +297,8 @@ namespace dfusion
 
 	void GpuMesh::create(size_t n)
 	{
-		if (m_num != n)
+		// here we only release if memory not enough
+		if (m_current_buffer_size < n*2*sizeof(PointType))
 			release();
 
 		if (n == 0)
@@ -316,16 +318,18 @@ namespace dfusion
 				CHECK_NOT_EQUAL(m_vbo_id, 0);
 			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id));
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
-			glBufferData(GL_ARRAY_BUFFER, 2 * n*sizeof(PointType), 0, GL_DYNAMIC_DRAW);
+			// allocate slightly larger to avoid too dynamic updating.
+			// cudaGraphicsGLRegisterBuffer is slow for large buffers.
+			m_current_buffer_size = 2 * n * sizeof(PointType) * 1.5;
+			glBufferData(GL_ARRAY_BUFFER, m_current_buffer_size, 0, GL_DYNAMIC_DRAW);
 			if (n)// when n==0, it may crash.
 			{
 				cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res, m_vbo_id,
 					cudaGraphicsMapFlagsNone));
 			}
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-			m_num = n;
 		}
+		m_num = n;
 	}
 
 	void GpuMesh::release()
@@ -339,6 +343,7 @@ namespace dfusion
 		m_cuda_res = nullptr;
 		m_vbo_id = 0;
 		m_num = 0;
+		m_current_buffer_size = 0;
 	}
 
 	void GpuMesh::copyFrom(GpuMesh& rhs)

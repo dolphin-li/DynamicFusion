@@ -87,10 +87,10 @@ struct Transfo {
     // -------------------------------------------------------------------------
 
 
-    inline Transfo() {}
+	__device__ __host__ inline Transfo() {}
 
 
-    inline Transfo(float a00, float a01, float a02, float a03,
+	__device__ __host__ inline Transfo(float a00, float a01, float a02, float a03,
                    float a10, float a11, float a12, float a13,
                    float a20, float a21, float a22, float a23,
                    float a30, float a31, float a32, float a33)
@@ -102,7 +102,7 @@ struct Transfo {
     }
 
 
-    inline Transfo(const Mat3& x){
+	__device__ __host__ inline Transfo(const Mat3& x){
         m[ 0] = x.a; m[ 1] = x.b; m[ 2] = x.c; m[ 3] = 0.f;
         m[ 4] = x.d; m[ 5] = x.e; m[ 6] = x.f; m[ 7] = 0.f;
         m[ 8] = x.g; m[ 9] = x.h; m[10] = x.i; m[11] = 0.f;
@@ -110,7 +110,7 @@ struct Transfo {
     }
 
 
-    inline Transfo(const Mat3& x, const Vec3& v){
+	__device__ __host__ inline Transfo(const Mat3& x, const Vec3& v){
         m[ 0] = x.a; m[ 1] = x.b; m[ 2] = x.c; m[ 3] = v.x;
         m[ 4] = x.d; m[ 5] = x.e; m[ 6] = x.f; m[ 7] = v.y;
         m[ 8] = x.g; m[ 9] = x.h; m[10] = x.i; m[11] = v.z;
@@ -118,7 +118,7 @@ struct Transfo {
     }
 
 
-    inline Transfo(const Vec3& v){
+	__device__ __host__ inline Transfo(const Vec3& v){
         m[ 0] = 1.f; m[ 1] = 0.f; m[ 2] = 0.f; m[ 3] = v.x;
         m[ 4] = 0.f; m[ 5] = 1.f; m[ 6] = 0.f; m[ 7] = v.y;
         m[ 8] = 0.f; m[ 9] = 0.f; m[10] = 1.f; m[11] = v.z;
@@ -129,12 +129,12 @@ struct Transfo {
     /// @name Accessors
     // -------------------------------------------------------------------------
 
-    inline Vec3 x() const{ return Vec3( m[0], m[4], m[ 8] ); }
-    inline Vec3 y() const{ return Vec3( m[1], m[5], m[ 9] ); }
-    inline Vec3 z() const{ return Vec3( m[2], m[6], m[10] ); }
+	__device__ __host__ inline Vec3 x() const{ return Vec3(m[0], m[4], m[8]); }
+	__device__ __host__ inline Vec3 y() const{ return Vec3(m[1], m[5], m[9]); }
+	__device__ __host__ inline Vec3 z() const{ return Vec3(m[2], m[6], m[10]); }
 
 
-    inline Mat3 get_mat3() const {
+	__device__ __host__ inline Mat3 get_mat3() const {
         return Mat3(m[0], m[1], m[2],
                     m[4], m[5], m[6],
                     m[8], m[9], m[10]);
@@ -142,27 +142,27 @@ struct Transfo {
 
     /// get translation part of the matrix
     /// @note same as get_org()
-    inline Vec3 get_translation() const { return Vec3(m[3], m[7], m[11]); }
+	__device__ __host__ inline Vec3 get_translation() const { return Vec3(m[3], m[7], m[11]); }
 
     /// get origine of the frame represented by the matrix
     /// @note same as get_translation()
-    inline Vec3 get_org() const { return Vec3(m[3], m[7], m[11]); }
+	__device__ __host__ inline Vec3 get_org() const { return Vec3(m[3], m[7], m[11]); }
 
-    inline void set_x(const Vec3& x){ m[0] = x.x; m[4] = x.y; m[ 8] = x.z; }
-    inline void set_y(const Vec3& y){ m[1] = y.x; m[5] = y.y; m[ 9] = y.z; }
-    inline void set_z(const Vec3& z){ m[2] = z.x; m[6] = z.y; m[10] = z.z; }
+	__device__ __host__ inline void set_x(const Vec3& x){ m[0] = x.x; m[4] = x.y; m[8] = x.z; }
+	__device__ __host__ inline void set_y(const Vec3& y){ m[1] = y.x; m[5] = y.y; m[9] = y.z; }
+	__device__ __host__ inline void set_z(const Vec3& z){ m[2] = z.x; m[6] = z.y; m[10] = z.z; }
 
-    inline void set_translation(const Vec3& tr){ m[3] = tr.x; m[7] = tr.y; m[11] = tr.z; }
-    inline void set_org        (const Vec3& tr){ m[3] = tr.x; m[7] = tr.y; m[11] = tr.z; }
+	__device__ __host__ inline void set_translation(const Vec3& tr){ m[3] = tr.x; m[7] = tr.y; m[11] = tr.z; }
+	__device__ __host__ inline void set_org(const Vec3& tr){ m[3] = tr.x; m[7] = tr.y; m[11] = tr.z; }
 
 
-    inline void set_translation(const Transfo& tr){
+	__device__ __host__ inline void set_translation(const Transfo& tr){
         const Vec3 trans = tr.get_translation();
         m[3] = trans.x; m[7] = trans.y; m[11] = trans.z;
     }
 
 
-    inline void set_mat3(const Mat3& x){
+	__device__ __host__ inline void set_mat3(const Mat3& x){
         m[ 0] = x.a; m[ 1] = x.b; m[ 2] = x.c;
         m[ 4] = x.d; m[ 5] = x.e; m[ 6] = x.f;
         m[ 8] = x.g; m[ 9] = x.h; m[10] = x.i;
@@ -182,7 +182,7 @@ struct Transfo {
     /// The translation part of the transformation is ignored (as expected
     /// for a vector) you may use #Vec4 for a full multiplication.
     /// @warning undefined behavior if 'this' is not an affine transformation
-    inline Vec3 operator*(const Vec3& v) const {
+	__device__ __host__ inline Vec3 operator*(const Vec3& v) const {
         return Vec3(
                     m[0] * v.x + m[1] * v.y + m[ 2] * v.z,
                     m[4] * v.x + m[5] * v.y + m[ 6] * v.z,
@@ -203,7 +203,7 @@ struct Transfo {
     /// use project() to virtually consider the fourth component
     /// and do the perspective division for projection matrices
     /// @warning undefined behavior if 'this' is not an affine transformation
-    inline Point3 operator*(const Point3& v) const {
+	__device__ __host__ inline Point3 operator*(const Point3& v) const {
         return Point3(
                     m[0] * v.x + m[1] * v.y + m[ 2] * v.z + m[ 3],
                     m[4] * v.x + m[5] * v.y + m[ 6] * v.z + m[ 7],
@@ -211,7 +211,7 @@ struct Transfo {
     }
 
     /// Multiply 'v' by the matrix and do the perspective division
-    inline Point3 project(const Point3& v) const {
+	__device__ __host__ inline Point3 project(const Point3& v) const {
         Point3 tmp =  Point3(
                     m[0] * v.x + m[1] * v.y + m[ 2] * v.z + m[ 3],
                     m[4] * v.x + m[5] * v.y + m[ 6] * v.z + m[ 7],
@@ -220,7 +220,7 @@ struct Transfo {
         return tmp / (m[12] * v.x + m[13] * v.y + m[14] * v.z + m[15]);
     }
 
-    inline Transfo operator*(const Transfo& t) const {
+	__device__ __host__ inline Transfo operator*(const Transfo& t) const {
         Transfo res;
         for(int i = 0; i < 4; i++){
             int j = i*4;
@@ -233,7 +233,7 @@ struct Transfo {
     }
 
 
-    inline Transfo& operator*=(const Transfo& t){
+	__device__ __host__ inline Transfo& operator*=(const Transfo& t){
         (*this) = (*this) * t;
         return (*this);
     }
@@ -241,7 +241,7 @@ struct Transfo {
     /// The translation part of the transformation is ignored (as expected
     /// for a vector) you may use #Vec4 for a full multiplication.
     /// @warning undefined behavior if 'this' is not an affine transformation
-    inline Vec3 vec_prod(const Vec3& v) const {
+	__device__ __host__ inline Vec3 vec_prod(const Vec3& v) const {
         return Vec3(
                     m[0] * v.x + m[1] * v.y + m[ 2] * v.z,
                     m[4] * v.x + m[5] * v.y + m[ 6] * v.z,
@@ -249,7 +249,7 @@ struct Transfo {
     }
 
 
-    inline Transfo operator*(float x) const {
+	__device__ __host__ inline Transfo operator*(float x) const {
         Transfo res;
         for(int i = 0; i < 16; i++){
             res[i] = m[i] * x;
@@ -258,7 +258,7 @@ struct Transfo {
     }
 
 
-    inline Transfo operator+(const Transfo& t) const{
+	__device__ __host__ inline Transfo operator+(const Transfo& t) const{
         Transfo res;
         for(int i = 0; i < 16; i++){
             res[i] = m[i] + t.m[i];
@@ -267,13 +267,13 @@ struct Transfo {
     }
 
 
-    inline Transfo& operator+=(const Transfo& t){
+	__device__ __host__ inline Transfo& operator+=(const Transfo& t){
         (*this) = (*this) + t;
         return (*this);
     }
 
 
-    inline Transfo operator-(const Transfo& t) const{
+	__device__ __host__ inline Transfo operator-(const Transfo& t) const{
         Transfo res;
         for(int i = 0; i < 16; i++){
             res[i] = m[i] - t.m[i];
@@ -282,18 +282,18 @@ struct Transfo {
     }
 
 
-    inline Transfo& operator-=(const Transfo& t){
+	__device__ __host__ inline Transfo& operator-=(const Transfo& t){
         (*this) = (*this) - t;
         return (*this);
     }
 
 
-    inline float& operator[](int i) {
+	__device__ __host__ inline float& operator[](int i) {
         return m[i];
     }
 
 
-    inline const float& operator[](int i) const {
+	__device__ __host__ inline const float& operator[](int i) const {
         return m[i];
     }
 
@@ -301,7 +301,7 @@ struct Transfo {
     /// @name Getters
     // -------------------------------------------------------------------------
 
-    inline Transfo transpose() const {
+	__device__ __host__ inline Transfo transpose() const {
         return Transfo(m[0], m[4], m[ 8], m[12],
                        m[1], m[5], m[ 9], m[13],
                        m[2], m[6], m[10], m[14],
@@ -316,7 +316,7 @@ struct Transfo {
     /// don't use this procedure to invert a projection matrix or
     /// anything that is not an affine transformation. Use #full_invert() instead.
     /// @see full_invert()
-    inline Transfo fast_invert() const {
+	__device__ __host__ inline Transfo fast_invert() const {
         Mat3 a(m[0], m[1], m[ 2],
                m[4], m[5], m[ 6],
                m[8], m[9], m[10]);
@@ -330,14 +330,14 @@ struct Transfo {
                        0.f, 0.f, 0.f,  1.f);
     }
 
-    static inline
+	__device__ __host__ static inline
     float MINOR(const Transfo& m, const int r0, const int r1, const int r2, const int c0, const int c1, const int c2) {
         return m[4*r0+c0] * (m[4*r1+c1] * m[4*r2+c2] - m[4*r2+c1] * m[4*r1+c2]) -
                m[4*r0+c1] * (m[4*r1+c0] * m[4*r2+c2] - m[4*r2+c0] * m[4*r1+c2]) +
                m[4*r0+c2] * (m[4*r1+c0] * m[4*r2+c1] - m[4*r2+c0] * m[4*r1+c1]);
     }
 
-    inline
+	__device__ __host__ inline
     Transfo adjoint() const {
         return Transfo( MINOR(*this,1,2,3,1,2,3), -MINOR(*this,0,2,3,1,2,3),  MINOR(*this,0,1,3,1,2,3), -MINOR(*this,0,1,2,1,2,3),
                        -MINOR(*this,1,2,3,0,2,3),  MINOR(*this,0,2,3,0,2,3), -MINOR(*this,0,1,3,0,2,3),  MINOR(*this,0,1,2,0,2,3),
@@ -346,7 +346,7 @@ struct Transfo {
     }
 
 
-    inline float det() const {
+	__device__ __host__ inline float det() const {
         return m[0] * MINOR(*this, 1, 2, 3, 1, 2, 3) -
                m[1] * MINOR(*this, 1, 2, 3, 0, 2, 3) +
                m[2] * MINOR(*this, 1, 2, 3, 0, 1, 3) -
@@ -358,24 +358,24 @@ struct Transfo {
     /// not affine you MUST use this procedure to invert the matrix. For
     /// instance perspective projection can't use the fast_invert() procedure
     /// @see fast_invert()
-    inline Transfo full_invert() const {
+	__device__ __host__ inline Transfo full_invert() const {
         return adjoint() * (1.0f / det());
     }
 
     /// @return the Transformation with normalized x, y, z column vectors
-    inline Transfo normalized() const {
+	__device__ __host__ inline Transfo normalized() const {
         return Transfo(get_mat3().normalized(), get_translation());
     }
 
     /// Check if the vectors representing the frame are orthogonals.
     /// @warning Don't mix up this with orthogonal matrices.
-    inline bool is_frame_ortho(float eps = 0.0001f) const {
+	__device__ __host__ inline bool is_frame_ortho(float eps = 0.0001f) const {
         return fabsf( x().dot( y() ) ) < eps &&
                fabsf( x().dot( z() ) ) < eps &&
                fabsf( y().dot( z() ) ) < eps;
     }
 
-    inline
+	__device__ __host__ inline
     void print() const
     {
         printf("%f %f %f %f\n", m[0 ], m[1 ], m[2 ], m[3 ] );
@@ -399,7 +399,7 @@ struct Transfo {
     // -------------------------------------------------------------------------
 
 
-    static inline Transfo translate(float dx, float dy, float dz){
+	__device__ __host__ static inline Transfo translate(float dx, float dy, float dz){
         return Transfo(1.f, 0.f, 0.f, dx,
                        0.f, 1.f, 0.f, dy,
                        0.f, 0.f, 1.f, dz,
@@ -407,12 +407,12 @@ struct Transfo {
     }
 
 
-    static inline Transfo translate(const Vec3& v){
+	__device__ __host__ static inline Transfo translate(const Vec3& v){
         return Transfo::translate(v.x, v.y, v.z);
     }
 
 
-    static inline Transfo scale(float sx, float sy, float sz){
+	__device__ __host__ static inline Transfo scale(float sx, float sy, float sz){
         return Transfo( sx,  0.f, 0.f, 0.f,
                         0.f,  sy, 0.f, 0.f,
                         0.f, 0.f,  sz, 0.f,
@@ -420,18 +420,18 @@ struct Transfo {
     }
 
 
-    static inline Transfo scale(const Vec3& v){
+	__device__ __host__ static inline Transfo scale(const Vec3& v){
         return Transfo::scale(v.x, v.y, v.z);
     }
 
     /// Build a uniform scaling matrix on x,y,z.
-    static inline Transfo scale(float s){
+	__device__ __host__ static inline Transfo scale(float s){
         return Transfo::scale(s, s, s);
     }
 
     /// @return the scale matrix given scale factors in 'v' and
     /// scale origin 'center'
-    static inline Transfo scale(const Vec3& center, const Vec3& v)
+	__device__ __host__ static inline Transfo scale(const Vec3& center, const Vec3& v)
     {
         Transfo sc = Transfo::scale( v );
         return Transfo::translate(center) * sc * Transfo::translate(-center);
@@ -439,14 +439,14 @@ struct Transfo {
 
     /// @return the uniform scale matrix given a scale factor 's' and
     /// scale origin 'center'
-    static inline Transfo scale(const Vec3& center, float s)
+	__device__ __host__  static inline Transfo scale(const Vec3& center, float s)
     {
         Transfo sc = Transfo::scale(s);
         return Transfo::translate(center) * sc * Transfo::translate(-center);
     }
 
 
-    static inline Transfo rotate(const Vec3& center,
+	__device__ __host__ static inline Transfo rotate(const Vec3& center,
                                  const Vec3& axis,
                                  float angle,
                                  const Mat3& frame)
@@ -457,7 +457,7 @@ struct Transfo {
 
     /// @return the rotation matrix given an 'axis' rotation 'center' and
     /// 'angle' in radian
-    static inline Transfo rotate(const Vec3& center,
+	__device__ __host__ static inline Transfo rotate(const Vec3& center,
                                  const Vec3& axis,
                                  float angle)
     {
@@ -468,13 +468,13 @@ struct Transfo {
     /// build a rotation matrix around the origin.
     /// @param axis : the <b> normalized </b> axis of rotation
     /// @param angle : rotation's angle in radian
-    static inline Transfo rotate(const Vec3& axis, float angle)
+	__device__ __host__ static inline Transfo rotate(const Vec3& axis, float angle)
     {
         return Transfo(Mat3::rotate(axis, angle));
     }
 
 
-    static inline Transfo identity(){
+	__device__ __host__ static inline Transfo identity(){
         return Transfo(1.f, 0.f, 0.f, 0.f,
                        0.f, 1.f, 0.f, 0.f,
                        0.f, 0.f, 1.f, 0.f,
@@ -482,7 +482,7 @@ struct Transfo {
     }
 
 
-    static inline Transfo empty(){
+	__device__ __host__ static inline Transfo empty(){
         return Transfo(0.f, 0.f, 0.f, 0.f,
                        0.f, 0.f, 0.f, 0.f,
                        0.f, 0.f, 0.f, 0.f,
@@ -492,7 +492,7 @@ struct Transfo {
     /// Given a origin 'org' and a axis 'x_axis' generate the corresponding
     /// 3D frame. Meaning the columns for z and y axis will be
     /// computed to be orthogonal to 'x_axis'.
-    static inline Transfo coordinate_system(const Vec3& org, const Vec3& x_axis){
+	__device__ __host__ static inline Transfo coordinate_system(const Vec3& org, const Vec3& x_axis){
         return Transfo(Mat3::coordinate_system( x_axis), org);
     }
 

@@ -573,32 +573,41 @@ namespace dfusion
 	{
 		const int tx = threadIdx.x + blockIdx.x * blockDim.x;
 		const int ty = threadIdx.y + blockIdx.y * blockDim.y;
-		const int tz = threadIdx.z + blockIdx.z * blockDim.z;
-		const int x = (tx<<tile.level) + tile.begin.x;
-		const int y = (ty<<tile.level) + tile.begin.y;
-		const int z = (tz<<tile.level) + tile.begin.z;
-		const int rx = ((tile.end.x - tile.begin.x)>>tile.level);
-		const int ry = ((tile.end.y - tile.begin.y)>>tile.level);
+		int tz = threadIdx.z + blockIdx.z * (blockDim.z << 3);
+		const int x = (tx << tile.level) + tile.begin.x;
+		const int y = (ty << tile.level) + tile.begin.y;
+		const int rx = ((tile.end.x - tile.begin.x) >> tile.level);
+		const int ry = ((tile.end.y - tile.begin.y) >> tile.level);
 		const int s = (1 << tile.level);
-		if (x < tile.end.x && y < tile.end.y && z < tile.end.z)
-		{
-			// calculate flag indicating if each vertex is inside or outside isosurface
-			int cubeindex = 0;
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0)).x < isoValue) << 0);
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0)).x < isoValue) << 1);//  * 2;
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0)).x < isoValue) << 2);//  * 4;
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0)).x < isoValue) << 3);//  * 8;
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s)).x < isoValue) << 4);//  * 16;
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s)).x < isoValue) << 5);//  * 32;
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s)).x < isoValue) << 6);//  * 64;
-			cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s)).x < isoValue) << 7);//  * 128;
+		const int ryrx = ry*rx;
+		const int tyrx_tx = ty*rx + tx;
 
-			// read number of vertices from texture
-			int numVerts = g_numVertsTable[cubeindex];
-			int pos = (tz*ry + ty)*rx + tx;
-			voxelVerts[pos] = numVerts;
-			voxelOccupied[pos] = (numVerts > 0);
-		}
+		if (x >= tile.end.x && y >= tile.end.y)
+			return;
+
+		for (int block_iter = 0; block_iter < 8; block_iter++, tz += blockDim.z)
+		{
+			const int z = (tz << tile.level) + tile.begin.z;
+			if (z < tile.end.z)
+			{
+				// calculate flag indicating if each vertex is inside or outside isosurface
+				int cubeindex = 0;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0)).x < isoValue) << 0);
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0)).x < isoValue) << 1);//  * 2;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0)).x < isoValue) << 2);//  * 4;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0)).x < isoValue) << 3);//  * 8;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s)).x < isoValue) << 4);//  * 16;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s)).x < isoValue) << 5);//  * 32;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s)).x < isoValue) << 6);//  * 64;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s)).x < isoValue) << 7);//  * 128;
+
+				// read number of vertices from texture
+				int numVerts = g_numVertsTable[cubeindex];
+				int pos = tz*ryrx + tyrx_tx;
+				voxelVerts[pos] = numVerts;
+				voxelOccupied[pos] = (numVerts > 0);
+			}
+		}// end for block_iter
 	}
 
 	// compact voxel array 
@@ -634,7 +643,7 @@ namespace dfusion
 		dim3 block(32, 8, 2);
 		dim3 grid(divUp((tile.end.x - tile.begin.x)>>tile.level, block.x), 
 			divUp((tile.end.y - tile.begin.y)>>tile.level, block.y),
-			divUp((tile.end.z - tile.begin.z)>>tile.level, block.z));
+			divUp((tile.end.z - tile.begin.z)>>tile.level, block.z<<3));
 
 		// compute number of vertices of each voxel
 		classifyVoxelKernel << <grid, block >> >(m_volTex, tile, m_voxelVerts.ptr(),
@@ -693,113 +702,118 @@ namespace dfusion
 		unsigned int *compactedVoxelArray, unsigned int *numVertsScanned, float isoValue)
 	{
 		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
-		unsigned int tid = __mul24(blockId, blockDim.x) + threadIdx.x;
+		unsigned int tid = __mul24(blockId, blockDim.x<<3) + threadIdx.x;
 
-		// cannot return due to __syncthreads()
-		if (tid < tile.num_activeVoxels)
+		const int rx = ((tile.end.x - tile.begin.x) >> tile.level);
+		const int ry = ((tile.end.y - tile.begin.y) >> tile.level);
+		const int s = (1 << tile.level);
+		const float svsz = tile.voxelSize*s;
+		const int rxry = rx*ry;
+
+		for (int block_iter = 0; block_iter < 8; block_iter++, tid += blockDim.x)
 		{
-			unsigned int voxelId = compactedVoxelArray[tid];
-			const int rx = ((tile.end.x - tile.begin.x) >> tile.level);
-			const int ry = ((tile.end.y - tile.begin.y) >> tile.level);
-			const int s = (1 << tile.level);
-			const float svsz = tile.voxelSize*s;
-
-			// compute position in 3d grid
-			uint3 gridPos;
-			gridPos.z = voxelId / (rx*ry);
-			gridPos.y = (voxelId - gridPos.z*rx*ry) / rx;
-			gridPos.x = voxelId % rx;
-			gridPos.x = tile.begin.x + (gridPos.x << tile.level);
-			gridPos.y = tile.begin.y + (gridPos.y << tile.level);
-			gridPos.z = tile.begin.z + (gridPos.z << tile.level);
-
-			// calculate cell vertex positions
-			float3 v[8];
-			v[0] = make_float3(tile.origion.x + gridPos.x * tile.voxelSize,
-				tile.origion.y + gridPos.y * tile.voxelSize,
-				tile.origion.z + gridPos.z * tile.voxelSize);
-			v[1] = make_float3(v[0].x + svsz, v[0].y, v[0].z);
-			v[2] = make_float3(v[0].x + svsz, v[0].y + svsz, v[0].z);
-			v[3] = make_float3(v[0].x, v[0].y + svsz, v[0].z);
-			v[4] = make_float3(v[0].x, v[0].y, v[0].z + svsz);
-			v[5] = make_float3(v[0].x + svsz, v[0].y, v[0].z + svsz);
-			v[6] = make_float3(v[0].x + svsz, v[0].y + svsz, v[0].z + svsz);
-			v[7] = make_float3(v[0].x, v[0].y + svsz, v[0].z + svsz);
-
-
-			float field[8];
-			field[0] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + 0)).x;
-			field[1] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + 0)).x;
-			field[2] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + 0)).x;
-			field[3] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + 0)).x;
-			field[4] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + s)).x;
-			field[5] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + s)).x;
-			field[6] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + s)).x;
-			field[7] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + s)).x;
-
-			// recalculate flag, faster than store in global memory
-			int cubeindex = 0;
-			cubeindex |= (int(field[0] < isoValue) << 0);
-			cubeindex |= (int(field[1] < isoValue) << 1);//  * 2;
-			cubeindex |= (int(field[2] < isoValue) << 2);//  * 4;
-			cubeindex |= (int(field[3] < isoValue) << 3);//  * 8;
-			cubeindex |= (int(field[4] < isoValue) << 4);//  * 16;
-			cubeindex |= (int(field[5] < isoValue) << 5);//  * 32;
-			cubeindex |= (int(field[6] < isoValue) << 6);//  * 64;
-			cubeindex |= (int(field[7] < isoValue) << 7);//  * 128;
-
-			// find the vertices where the surface intersects the cube
-			// use shared memory to avoid using local
-			__shared__ float3 vertlist[12 * GEN_TRI_N_THREADS];
-
-			vertlist[threadIdx.x] = vertexInterp(isoValue, v[0], v[1], field[0], field[1]);
-			vertlist[GEN_TRI_N_THREADS + threadIdx.x] = vertexInterp(isoValue, v[1], v[2], field[1], field[2]);
-			vertlist[(GEN_TRI_N_THREADS * 2) + threadIdx.x] = vertexInterp(isoValue, v[2], v[3], field[2], field[3]);
-			vertlist[(GEN_TRI_N_THREADS * 3) + threadIdx.x] = vertexInterp(isoValue, v[3], v[0], field[3], field[0]);
-			vertlist[(GEN_TRI_N_THREADS * 4) + threadIdx.x] = vertexInterp(isoValue, v[4], v[5], field[4], field[5]);
-			vertlist[(GEN_TRI_N_THREADS * 5) + threadIdx.x] = vertexInterp(isoValue, v[5], v[6], field[5], field[6]);
-			vertlist[(GEN_TRI_N_THREADS * 6) + threadIdx.x] = vertexInterp(isoValue, v[6], v[7], field[6], field[7]);
-			vertlist[(GEN_TRI_N_THREADS * 7) + threadIdx.x] = vertexInterp(isoValue, v[7], v[4], field[7], field[4]);
-			vertlist[(GEN_TRI_N_THREADS * 8) + threadIdx.x] = vertexInterp(isoValue, v[0], v[4], field[0], field[4]);
-			vertlist[(GEN_TRI_N_THREADS * 9) + threadIdx.x] = vertexInterp(isoValue, v[1], v[5], field[1], field[5]);
-			vertlist[(GEN_TRI_N_THREADS * 10) + threadIdx.x] = vertexInterp(isoValue, v[2], v[6], field[2], field[6]);
-			vertlist[(GEN_TRI_N_THREADS * 11) + threadIdx.x] = vertexInterp(isoValue, v[3], v[7], field[3], field[7]);
-			__syncthreads();
-
-			// output triangle vertices
-			uint numVerts = g_numVertsTable[cubeindex];
-
-			for (int i = 0; i < numVerts; i += 3)
+			// cannot return due to __syncthreads()
+			if (tid < tile.num_activeVoxels)
 			{
-				uint index = numVertsScanned[voxelId] + i;
+				unsigned int voxelId = compactedVoxelArray[tid];
 
-				float3 *v[3];
-				uint edge;
-				edge = g_triTable[cubeindex][i];
-				v[2] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
+				// compute position in 3d grid
+				uint3 gridPos;
+				gridPos.z = voxelId / rxry;
+				gridPos.y = (voxelId - gridPos.z*rxry) / rx;
+				gridPos.x = voxelId % rx;
+				gridPos.x = tile.begin.x + (gridPos.x << tile.level);
+				gridPos.y = tile.begin.y + (gridPos.y << tile.level);
+				gridPos.z = tile.begin.z + (gridPos.z << tile.level);
 
-				edge = g_triTable[cubeindex][i + 1];
-				v[1] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
+				// calculate cell vertex positions
+				float3 v[8];
+				v[0] = make_float3(tile.origion.x + gridPos.x * tile.voxelSize,
+					tile.origion.y + gridPos.y * tile.voxelSize,
+					tile.origion.z + gridPos.z * tile.voxelSize);
+				v[1] = make_float3(v[0].x + svsz, v[0].y, v[0].z);
+				v[2] = make_float3(v[0].x + svsz, v[0].y + svsz, v[0].z);
+				v[3] = make_float3(v[0].x, v[0].y + svsz, v[0].z);
+				v[4] = make_float3(v[0].x, v[0].y, v[0].z + svsz);
+				v[5] = make_float3(v[0].x + svsz, v[0].y, v[0].z + svsz);
+				v[6] = make_float3(v[0].x + svsz, v[0].y + svsz, v[0].z + svsz);
+				v[7] = make_float3(v[0].x, v[0].y + svsz, v[0].z + svsz);
 
-				edge = g_triTable[cubeindex][i + 2];
-				v[0] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
 
-				// calculate triangle surface normal
-				float3 n = calcNormal(v[0], v[1], v[2]);
+				float field[8];
+				field[0] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + 0)).x;
+				field[1] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + 0)).x;
+				field[2] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + 0)).x;
+				field[3] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + 0)).x;
+				field[4] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + s)).x;
+				field[5] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + s)).x;
+				field[6] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + s)).x;
+				field[7] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + s)).x;
 
-				if (index < tile.nverts - 2)
+				// recalculate flag, faster than store in global memory
+				int cubeindex = 0;
+				cubeindex |= (int(field[0] < isoValue) << 0);
+				cubeindex |= (int(field[1] < isoValue) << 1);//  * 2;
+				cubeindex |= (int(field[2] < isoValue) << 2);//  * 4;
+				cubeindex |= (int(field[3] < isoValue) << 3);//  * 8;
+				cubeindex |= (int(field[4] < isoValue) << 4);//  * 16;
+				cubeindex |= (int(field[5] < isoValue) << 5);//  * 32;
+				cubeindex |= (int(field[6] < isoValue) << 6);//  * 64;
+				cubeindex |= (int(field[7] < isoValue) << 7);//  * 128;
+
+				// find the vertices where the surface intersects the cube
+				// use shared memory to avoid using local
+				__shared__ float3 vertlist[12 * GEN_TRI_N_THREADS];
+
+				vertlist[threadIdx.x] = vertexInterp(isoValue, v[0], v[1], field[0], field[1]);
+				vertlist[GEN_TRI_N_THREADS + threadIdx.x] = vertexInterp(isoValue, v[1], v[2], field[1], field[2]);
+				vertlist[(GEN_TRI_N_THREADS * 2) + threadIdx.x] = vertexInterp(isoValue, v[2], v[3], field[2], field[3]);
+				vertlist[(GEN_TRI_N_THREADS * 3) + threadIdx.x] = vertexInterp(isoValue, v[3], v[0], field[3], field[0]);
+				vertlist[(GEN_TRI_N_THREADS * 4) + threadIdx.x] = vertexInterp(isoValue, v[4], v[5], field[4], field[5]);
+				vertlist[(GEN_TRI_N_THREADS * 5) + threadIdx.x] = vertexInterp(isoValue, v[5], v[6], field[5], field[6]);
+				vertlist[(GEN_TRI_N_THREADS * 6) + threadIdx.x] = vertexInterp(isoValue, v[6], v[7], field[6], field[7]);
+				vertlist[(GEN_TRI_N_THREADS * 7) + threadIdx.x] = vertexInterp(isoValue, v[7], v[4], field[7], field[4]);
+				vertlist[(GEN_TRI_N_THREADS * 8) + threadIdx.x] = vertexInterp(isoValue, v[0], v[4], field[0], field[4]);
+				vertlist[(GEN_TRI_N_THREADS * 9) + threadIdx.x] = vertexInterp(isoValue, v[1], v[5], field[1], field[5]);
+				vertlist[(GEN_TRI_N_THREADS * 10) + threadIdx.x] = vertexInterp(isoValue, v[2], v[6], field[2], field[6]);
+				vertlist[(GEN_TRI_N_THREADS * 11) + threadIdx.x] = vertexInterp(isoValue, v[3], v[7], field[3], field[7]);
+				__syncthreads();
+
+				// output triangle vertices
+				uint numVerts = g_numVertsTable[cubeindex];
+
+				for (int i = 0; i < numVerts; i += 3)
 				{
-					pos[index] = GpuMesh::to_point(*v[0]);
-					norm[index] = GpuMesh::to_point(n);
+					uint index = numVertsScanned[voxelId] + i;
 
-					pos[index + 1] = GpuMesh::to_point(*v[1]);
-					norm[index + 1] = GpuMesh::to_point(n);
+					float3 *v[3];
+					uint edge;
+					edge = g_triTable[cubeindex][i];
+					v[2] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
 
-					pos[index + 2] = GpuMesh::to_point(*v[2]);
-					norm[index + 2] = GpuMesh::to_point(n);
-				}
-			}// end for i
-		}// end if tid < activeVoxels
+					edge = g_triTable[cubeindex][i + 1];
+					v[1] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
+
+					edge = g_triTable[cubeindex][i + 2];
+					v[0] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
+
+					// calculate triangle surface normal
+					float3 n = calcNormal(v[0], v[1], v[2]);
+
+					if (index < tile.nverts - 2)
+					{
+						pos[index] = GpuMesh::to_point(*v[0]);
+						norm[index] = GpuMesh::to_point(n);
+
+						pos[index + 1] = GpuMesh::to_point(*v[1]);
+						norm[index + 1] = GpuMesh::to_point(n);
+
+						pos[index + 2] = GpuMesh::to_point(*v[2]);
+						norm[index + 2] = GpuMesh::to_point(n);
+					}
+				}// end for i
+			}// end if tid < activeVoxels
+		}// end for block_iter
 	}
 
 	void MarchingCubes::generateTriangles(const Tile& tile, GpuMesh& result)
@@ -809,7 +823,7 @@ namespace dfusion
 			return;
 
 		dim3 block(GEN_TRI_N_THREADS);
-		dim3 grid(divUp(tile.num_voxels, block.x));
+		dim3 grid(divUp(tile.num_voxels, block.x<<3));
 
 		result.lockVertsNormals();
 		generateTrianglesKernel << <grid, block >> >(

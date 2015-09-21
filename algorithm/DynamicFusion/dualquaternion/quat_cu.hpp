@@ -517,33 +517,33 @@ class Quat_cu{
     // -------------------------------------------------------------------------
 
     /// Default constructor : build a zero rotation.
-    Quat_cu()
+	__device__ __host__ Quat_cu()
     {
-        coeff[0] = 1.f;
-        coeff[1] = 0.f; coeff[2] = 0.f; coeff[3] = 0.f;
+        coeff0 = 1.f;
+        coeff1 = 0.f; coeff2 = 0.f; coeff3 = 0.f;
     }
 
     /// Copy constructor
-    Quat_cu(const Quat_cu& q){
-        coeff[0] = q.w();
-        coeff[1] = q.i(); coeff[2] = q.j(); coeff[3] = q.k();
+	__device__ __host__ Quat_cu(const Quat_cu& q){
+        coeff0 = q.w();
+        coeff1 = q.i(); coeff2 = q.j(); coeff3 = q.k();
     }
 
     /// directly fill the quaternion
-    Quat_cu(float w, float i, float j, float k){
-        coeff[0] = w;
-        coeff[1] = i; coeff[2] = j; coeff[3] = k;
+	__device__ __host__ Quat_cu(float w, float i, float j, float k){
+        coeff0 = w;
+        coeff1 = i; coeff2 = j; coeff3 = k;
     }
 
     /// directly fill the quaternion vector and scalar part
-    Quat_cu(float w, const Vec3& v){
-        coeff[0] = w;
-        coeff[1] = v.x; coeff[2] = v.y; coeff[3] = v.z;
+	__device__ __host__ Quat_cu(float w, const Vec3& v){
+        coeff0 = w;
+        coeff1 = v.x; coeff2 = v.y; coeff3 = v.z;
     }
 
     /// Construct the quaternion from the transformation matrix 't'
     /// Translation of 't' is ignored as quaternions can't represent it
-    Quat_cu(const Transfo& t)
+	__device__ __host__ Quat_cu(const Transfo& t)
     {
         // Compute trace of matrix 't'
         float T = 1 + t.m[0] + t.m[5] + t.m[10];
@@ -588,21 +588,21 @@ class Quat_cu{
             }
         }
 
-        coeff[0] = W; coeff[1] = -X; coeff[2] = -Y; coeff[3] = -Z;
+        coeff0 = W; coeff1 = -X; coeff2 = -Y; coeff3 = -Z;
     }
 
 
     /// Construct the quaternion from the a rotation axis 'axis' and the angle
     /// 'angle' in radians
-    Quat_cu(const Vec3& axis, float angle)
+	__device__ __host__ Quat_cu(const Vec3& axis, float angle)
     {
         Vec3 vec_axis = axis.normalized();
         float sin_a = sin( angle * 0.5f );
         float cos_a = cos( angle * 0.5f );
-        coeff[0]    = cos_a;
-        coeff[1]    = vec_axis.x * sin_a;
-        coeff[2]    = vec_axis.y * sin_a;
-        coeff[3]    = vec_axis.z * sin_a;
+        coeff0    = cos_a;
+        coeff1    = vec_axis.x * sin_a;
+        coeff2    = vec_axis.y * sin_a;
+        coeff3    = vec_axis.z * sin_a;
         // It is necessary to normalize the quaternion in case any values are
         // very close to zero.
         normalize();
@@ -614,10 +614,10 @@ class Quat_cu{
 
     /// The conjugate of a quaternion is the inverse rotation
     /// (when the quaternion is normalized
-    Quat_cu conjugate() const
+	__device__ __host__ Quat_cu conjugate() const
     {
-        return Quat_cu( coeff[0], -coeff[1],
-                       -coeff[2], -coeff[3]);
+        return Quat_cu( coeff0, -coeff1,
+                       -coeff2, -coeff3);
     }
 
     // TODO: Construct the quaternion from the rotation axis 'vec' and the
@@ -625,7 +625,7 @@ class Quat_cu{
     // Quat_cu(const Vec3& vec, float angle)
 
     /// Do the rotation of vector 'v' with the quaternion
-    Vec3 rotate(const Vec3& v) const
+	__device__ __host__ Vec3 rotate(const Vec3& v) const
     {
 
         // The conventionnal way to rotate a vector
@@ -641,11 +641,11 @@ class Quat_cu{
 
         // An optimized way to compute rotation
         Vec3 q_vec = get_vec_part();
-        return v + (q_vec*2.f).cross( q_vec.cross(v) + v*coeff[0] );
+        return v + (q_vec*2.f).cross( q_vec.cross(v) + v*coeff0 );
     }
 
     /// Do the rotation of point 'p' with the quaternion
-    Point3 rotate(const Point3& p) const
+	__device__ __host__ Point3 rotate(const Point3& p) const
     {
         Vec3 v = rotate((Vec3)p);
         return Point3(v.x, v.y, v.z);
@@ -653,9 +653,9 @@ class Quat_cu{
 
     /// Convert the quaternion to a rotation matrix
     /// @warning don't forget to normalize it before conversion
-    Mat3 to_matrix3()
+	__device__ __host__ Mat3 to_matrix3()
     {
-        float W = coeff[0], X = -coeff[1], Y = -coeff[2], Z = -coeff[3];
+        float W = coeff0, X = -coeff1, Y = -coeff2, Z = -coeff3;
         float xx = X * X, xy = X * Y, xz = X * Z, xw = X * W;
         float yy = Y * Y, yz = Y * Z, yw = Y * W, zz = Z * Z;
         float zw = Z * W;
@@ -668,7 +668,7 @@ class Quat_cu{
         return mat;
     }
 
-	void to_angleAxis(Vec3& axis, float& angle)const
+	__device__ __host__ void to_angleAxis(Vec3& axis, float& angle)const
 	{
 		const float scale = get_vec_part().norm();
 
@@ -686,93 +686,93 @@ class Quat_cu{
 		}
 	}
 
-    Vec3 get_vec_part() const
+	__device__ __host__ Vec3 get_vec_part() const
     {
-        return Vec3(coeff[1], coeff[2], coeff[3]);
+        return Vec3(coeff1, coeff2, coeff3);
     }
 
-    float norm() const
+	__device__ __host__ float norm() const
     {
-        return sqrt(coeff[0]*coeff[0] +
-                    coeff[1]*coeff[1] +
-                    coeff[2]*coeff[2] +
-                    coeff[3]*coeff[3]);
+        return sqrt(coeff0*coeff0 +
+                    coeff1*coeff1 +
+                    coeff2*coeff2 +
+                    coeff3*coeff3);
     }
 
-    float normalize()
+	__device__ __host__ float normalize()
     {
         float n = norm();
-        coeff[0] /= n;
-        coeff[1] /= n;
-        coeff[2] /= n;
-        coeff[3] /= n;
+        coeff0 /= n;
+        coeff1 /= n;
+        coeff2 /= n;
+        coeff3 /= n;
         return n;
     }
 
-    float dot(const Quat_cu& q){
+	__device__ __host__ float dot(const Quat_cu& q){
         return w() * q.w() + i() * q.i() + j() * q.j() + k() * q.k();
     }
 
-    float w() const { return coeff[0]; }
-    float i() const { return coeff[1]; }
-    float j() const { return coeff[2]; }
-    float k() const { return coeff[3]; }
+	__device__ __host__ float w() const { return coeff0; }
+	__device__ __host__ float i() const { return coeff1; }
+	__device__ __host__ float j() const { return coeff2; }
+	__device__ __host__ float k() const { return coeff3; }
 
     // -------------------------------------------------------------------------
     /// @name Operators
     // -------------------------------------------------------------------------
 
-    Quat_cu operator/ (float scalar) const
+	__device__ __host__ Quat_cu operator/ (float scalar) const
     {
         Quat_cu q = *this;
-        q.coeff[0] /= scalar;
-        q.coeff[1] /= scalar;
-        q.coeff[2] /= scalar;
-        q.coeff[3] /= scalar;
+        q.coeff0 /= scalar;
+        q.coeff1 /= scalar;
+        q.coeff2 /= scalar;
+        q.coeff3 /= scalar;
         return q;
     }
 
-    Quat_cu operator/= (float scalar){
-        coeff[0] /= scalar;
-        coeff[1] /= scalar;
-        coeff[2] /= scalar;
-        coeff[3] /= scalar;
+	__device__ __host__ Quat_cu operator/= (float scalar){
+        coeff0 /= scalar;
+        coeff1 /= scalar;
+        coeff2 /= scalar;
+        coeff3 /= scalar;
         return *this;
     }
 
-    Quat_cu operator* (const Quat_cu& q) const
+	__device__ __host__ Quat_cu operator* (const Quat_cu& q) const
     {
          return Quat_cu(
-         coeff[0]*q.coeff[0] - coeff[1]*q.coeff[1] - coeff[2]*q.coeff[2] - coeff[3]*q.coeff[3],
-         coeff[0]*q.coeff[1] + coeff[1]*q.coeff[0] + coeff[2]*q.coeff[3] - coeff[3]*q.coeff[2],
-         coeff[0]*q.coeff[2] + coeff[2]*q.coeff[0] + coeff[3]*q.coeff[1] - coeff[1]*q.coeff[3],
-         coeff[0]*q.coeff[3] + coeff[3]*q.coeff[0] + coeff[1]*q.coeff[2] - coeff[2]*q.coeff[1]);
+         coeff0*q.coeff0 - coeff1*q.coeff1 - coeff2*q.coeff2 - coeff3*q.coeff3,
+         coeff0*q.coeff1 + coeff1*q.coeff0 + coeff2*q.coeff3 - coeff3*q.coeff2,
+         coeff0*q.coeff2 + coeff2*q.coeff0 + coeff3*q.coeff1 - coeff1*q.coeff3,
+         coeff0*q.coeff3 + coeff3*q.coeff0 + coeff1*q.coeff2 - coeff2*q.coeff1);
     }
 
-    Quat_cu operator* (float scalar) const
+	__device__ __host__ Quat_cu operator* (float scalar) const
     {
-        return Quat_cu(coeff[0] * scalar,
-                       coeff[1] * scalar,
-                       coeff[2] * scalar,
-                       coeff[3] * scalar);
+        return Quat_cu(coeff0 * scalar,
+                       coeff1 * scalar,
+                       coeff2 * scalar,
+                       coeff3 * scalar);
     }
 
-    Quat_cu operator+ (const Quat_cu& q) const
+	__device__ __host__ Quat_cu operator+ (const Quat_cu& q) const
     {
-         return Quat_cu(coeff[0] + q.coeff[0],
-                        coeff[1] + q.coeff[1],
-                        coeff[2] + q.coeff[2],
-                        coeff[3] + q.coeff[3]);
+         return Quat_cu(coeff0 + q.coeff0,
+                        coeff1 + q.coeff1,
+                        coeff2 + q.coeff2,
+                        coeff3 + q.coeff3);
     }
 
     /// Get vector part
-    operator Vec3 () const{
-        return Vec3(coeff[1], coeff[2], coeff[3]);
+	__device__ __host__ operator Vec3 () const{
+        return Vec3(coeff1, coeff2, coeff3);
     }
 
     /// Get scalar part
-    operator float () const{
-        return coeff[0];
+	__device__ __host__ operator float() const{
+        return coeff0;
     }
 
     // -------------------------------------------------------------------------
@@ -781,7 +781,10 @@ class Quat_cu{
 
     /// coeff[0], coeff[1], coeff[2], coeff[3] respectively
     /// w, i, j, k coefficients or W, X, Y, Z as noted in the F.A.Q
-    float coeff[4];
+	float coeff0;
+	float coeff1;
+	float coeff2;
+	float coeff3;
 
 };
 
