@@ -162,17 +162,18 @@ namespace dfusion
 	void DynamicFusionProcessor::shading(const Camera& userCam, LightSource light, 
 		ColorMap& img, bool use_ray_casting)
 	{
-		Camera cam = *m_camera;
-		cam.setModelViewMatrix(userCam.getModelViewMatrix()*m_camera->getModelViewMatrix());
-
-		if (1)//use_ray_casting)
+		if (use_ray_casting)
 		{
+			Camera cam = *m_camera;
+			cam.setModelViewMatrix(userCam.getModelViewMatrix()*m_camera->getModelViewMatrix());
 			m_rayCaster->setCamera(cam);
 			m_rayCaster->shading(light, img);
 		}
 		else
 		{
-			m_warpedMesh->renderToImg(cam, light, img);
+			Camera cam = *m_camera;
+			cam.setModelViewMatrix(userCam.getModelViewMatrix());
+			generateImage(m_vmap_prev_pyd[0], m_nmap_prev_pyd[0], img, light);
 		}
 	}
 
@@ -191,9 +192,17 @@ namespace dfusion
 
 	void DynamicFusionProcessor::surfaceExtractionMC()
 	{
-		//m_marchCube->run(*m_canoMesh);
-		//m_warpedMesh->copyFrom(*m_canoMesh);
-
+#if 1
+		m_marchCube->run(*m_canoMesh);
+		m_framesWarpFields.back()->warp(*m_canoMesh, *m_warpedMesh);
+		m_warpedMesh->renderToDepth(*m_camera, m_depth_prev_pyd[0]);
+		createVMap(m_kinect_intr, m_depth_prev_pyd[0], m_vmap_prev_pyd[0]);
+		createNMap(m_vmap_prev_pyd[0], m_nmap_prev_pyd[0]);
+		for (int i = 1; i < RIGID_ALIGN_PYD_LEVELS; ++i){
+			resizeVMap(m_vmap_prev_pyd[i - 1], m_vmap_prev_pyd[i]);
+			resizeNMap(m_nmap_prev_pyd[i - 1], m_nmap_prev_pyd[i]);
+		}
+#else
 		LightSource light;
 		static ColorMap tmp;
 		m_camera->setModelViewMatrix(convert(m_framesWarpFields.back()->get_rigidTransform()));
@@ -207,6 +216,7 @@ namespace dfusion
 			resizeVMap(m_vmap_prev_pyd[i - 1], m_vmap_prev_pyd[i]);
 			resizeNMap(m_nmap_prev_pyd[i - 1], m_nmap_prev_pyd[i]);
 		}
+#endif
 	}
 
 	void DynamicFusionProcessor::insertNewDeformNodes()
@@ -226,14 +236,6 @@ namespace dfusion
 
 	Tbx::Transfo DynamicFusionProcessor::rigid_align()
 	{
-#if 0
-		Tbx::Transfo test_T = Tbx::Transfo::identity();
-		Tbx::Quat_cu test_q = Tbx::Quat_cu(Tbx::Vec3(0, 0, 1), -0*3.1415926f / 180.f);
-		test_T.set_mat3(test_q.to_matrix3());
-		test_T.set_translation(Tbx::Vec3(-0.0, 0, 0.0));
-		return test_T;
-#endif
-
 		bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
 		createVMap(m_kinect_intr(0), m_depth_curr_pyd[0], m_vmap_curr_pyd[0]);
 		createNMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
@@ -249,46 +251,6 @@ namespace dfusion
 			createVMap(m_kinect_intr(i), m_depth_curr_pyd[i], m_vmap_curr_pyd[i]);	
 			createNMap(m_vmap_curr_pyd[i], m_nmap_curr_pyd[i]);
 		}
-#if 0
-		static int a = 0;
-		if (a++ == 3)
-		{
-			ObjMesh mesh;
-			mapsToObj(mesh, m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
-			mesh.saveObj("D:/curr.obj");
-			mapsToObj(mesh, m_vmap_prev_pyd[0], m_nmap_prev_pyd[0]);
-			mesh.saveObj("D:/prev.obj");
-
-			mpu::VolumeData vd;
-			m_volume->download(&vd);
-			vd.save("D:/vol.dvol");
-		}
-#endif
-
-#if 0
-		// debug
-		m_depth_curr_pyd[0].copyTo(m_depth_prev_pyd[0]);
-		for (int i = 1; i < RIGID_ALIGN_PYD_LEVELS; ++i)
-			pyrDown(m_depth_prev_pyd[i - 1], m_depth_prev_pyd[i]);
-
-		Tbx::Transfo test_T = Tbx::Transfo::identity();
-		Tbx::Quat_cu test_q = Tbx::Quat_cu(Tbx::Vec3(1,0,0), 0.8*3.1415926f/180.f);
-		test_T.set_mat3(test_q.to_matrix3());
-		test_T.set_translation(Tbx::Vec3(0.00f, 0.00f, 0.00f));
-
-		//printf("test_input---------------------------------------------------:\n");
-		//test_T.print();
-
-		//	calculate point cloud and normal map
-		for (int i = 0; i < RIGID_ALIGN_PYD_LEVELS; ++i)
-		{
-			m_vmap_curr_pyd[i].copyTo(m_vmap_prev_pyd[i]);
-			m_nmap_curr_pyd[i].copyTo(m_nmap_prev_pyd[i]);
-			rigidTransform(m_vmap_prev_pyd[i], m_nmap_prev_pyd[i], test_T);
-		}
-		if (m_frame_id)
-			m_framesWarpFields.back()->set_rigidTransform(Tbx::Transfo::identity());
-#endif
 
 		//	if it is the first frame, no volume to align, so stop here
 		if (m_frame_id == 0)
@@ -302,7 +264,7 @@ namespace dfusion
 		Tbx::Mat3	c2v_Rcurr = c2v_Rprev;
 		Tbx::Vec3	c2v_tcurr = c2v_tprev;
 
-		const int icp_iterations[] = { 10, 5, 10 };
+		const int icp_iterations[] = { 4, 5, 10 };
 		for (int level_index = RIGID_ALIGN_PYD_LEVELS - 1; level_index >= 0; --level_index)
 		{
 			MapArr& vmap_curr = m_vmap_curr_pyd[level_index];
@@ -346,17 +308,6 @@ namespace dfusion
 				//compose
 				c2v_tcurr = convert(Rinc) * c2v_tcurr + convert(tinc);
 				c2v_Rcurr = convert(Rinc) * c2v_Rcurr;
-
-#if 0
-				// debug
-				Tbx::Quat_cu q(Rcurr);
-				Tbx::Vec3 axis;
-				float angle;
-				q.to_angleAxis(axis, angle);
-				printf("abc: %d %d %f %f %f\n", level_index, iter, alpha*fmath::RAD_TO_DEG, 
-					beta*fmath::RAD_TO_DEG, gamma*fmath::RAD_TO_DEG);
-				printf("combined: %f %f %f %f\n", angle*fmath::RAD_TO_DEG, axis.x, axis.y, axis.z);
-#endif
 			}
 		}
 

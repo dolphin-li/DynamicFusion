@@ -688,7 +688,7 @@ namespace dfusion
 	}
 
 	// version that calculates flat surface normal for each triangle
-	__global__ void generateTrianglesKernel(float3 *pos, float3 *norm,
+	__global__ void generateTrianglesKernel(GpuMesh::PointType *pos, GpuMesh::PointType *norm,
 		cudaTextureObject_t tex, MarchingCubes::Tile tile,
 		unsigned int *compactedVoxelArray, unsigned int *numVertsScanned, float isoValue)
 	{
@@ -789,14 +789,14 @@ namespace dfusion
 
 				if (index < tile.nverts - 2)
 				{
-					pos[index] = *v[0];
-					norm[index] = n;
+					pos[index] = GpuMesh::to_point(*v[0]);
+					norm[index] = GpuMesh::to_point(n);
 
-					pos[index + 1] = *v[1];
-					norm[index + 1] = n;
+					pos[index + 1] = GpuMesh::to_point(*v[1]);
+					norm[index + 1] = GpuMesh::to_point(n);
 
-					pos[index + 2] = *v[2];
-					norm[index + 2] = n;
+					pos[index + 2] = GpuMesh::to_point(*v[2]);
+					norm[index + 2] = GpuMesh::to_point(n);
 				}
 			}// end for i
 		}// end if tid < activeVoxels

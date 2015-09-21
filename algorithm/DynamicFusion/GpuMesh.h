@@ -17,6 +17,20 @@ namespace dfusion
 	class GpuMesh
 	{
 	public:
+		typedef float3 PointType;	
+		__device__ __host__ __forceinline__ static float3 from_point(GpuMesh::PointType p)
+		{
+			return make_float3(p.x, p.y, p.z);
+		}
+		__device__ __host__ __forceinline__ static GpuMesh::PointType to_point(float3 p)
+		{
+			GpuMesh::PointType o;
+			o.x = p.x;
+			o.y = p.y;
+			o.z = p.z;
+			return o;
+		}
+	public:
 		GpuMesh();
 		GpuMesh(GpuMesh& rhs);
 		~GpuMesh();
@@ -28,23 +42,26 @@ namespace dfusion
 
 		void lockVertsNormals();
 		void unlockVertsNormals();
-		float3* verts(){ return m_verts_d; }
-		const float3* verts()const{ return m_verts_d; }
-		float3* normals(){ return m_normals_d; }
-		const float3* normals()const { return m_normals_d; }
+		PointType* verts(){ return m_verts_d; }
+		const PointType* verts()const{ return m_verts_d; }
+		PointType* normals(){ return m_normals_d; }
+		const PointType* normals()const { return m_normals_d; }
 
 		int num()const{ return m_num; }
 		void toObjMesh(ObjMesh& omesh);
 
 		// unlockVertsNormals is performed insided
 		void renderToImg(const Camera& camera, LightSource light, ColorMap& img);
+		void renderToDepth(const Camera& camera, DepthMap& img);
 	protected:
 		void createRenderer(int w, int h);
 		void releaseRenderer();
 		void copy_invert_y(const uchar4* gldata, ColorMap& img);
+		void copy_gldepth_to_depthmap(const uchar4* gldata, DepthMap& depth, 
+			float s1, float s2, float camNear);
 	private:
-		float3* m_verts_d;
-		float3* m_normals_d;
+		PointType* m_verts_d;
+		PointType* m_normals_d;
 		int m_num;
 		int m_width;
 		int m_height;

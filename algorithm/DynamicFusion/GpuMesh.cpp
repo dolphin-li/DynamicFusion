@@ -1,11 +1,13 @@
-#include "GpuMesh.h"
 #include "glew.h"
 #include "glut.h"
+#include "GpuMesh.h"
 #include <cuda_gl_interop.h>
 #include <cudagl.h>
 #include "ObjMesh.h"
 #include "Camera.h"
 #include "CFreeImage.h"
+#include "glsl\glsl.h"
+#include "glsl\glslprogram.h"
 
 #define CHECK_GL_ERROR(str) {\
 	GLenum err = glGetError(); \
@@ -23,6 +25,30 @@ namespace dfusion
 //#define ENABLE_SHOW_DEBUG
 	HDC g_hdc;
 	HGLRC g_glrc;
+	cwc::glShader* g_shader_depth;
+	cwc::glShaderObject* g_depth_vshader;
+	cwc::glShaderObject* g_depth_fshader;
+	
+#pragma region --shaders
+	// for depth buffer rendering
+	const static char* g_vshader_depth_src =
+		"varying vec4 pos;\n\
+		void main()\n\
+		{\n\
+			gl_Position = gl_ModelViewProjectionMatrix  * gl_Vertex;\n\
+			pos = gl_Position;\n\
+		}\n";
+	const static char* g_fshader_depth_src =
+		"varying vec4 pos;\n\
+		void main()\n\
+		{\n\
+			float depth = (pos.z / pos.w + 1.0) * 0.5;\n\
+			gl_FragColor.r = float(int(depth*65525.0)&0xff)/255.0;\n\
+			gl_FragColor.g = float((int(depth*65525.0)&0xff00)>>8)/255.0;\n\
+			gl_FragColor.b = depth*65525.0 - float(int(depth*65525.0));\n\
+			gl_FragColor.a = 0.0;\n\
+		}\n";																											
+#pragma endregion
 
 #pragma region --create gl context
 	HWND g_hwnd;
@@ -224,6 +250,19 @@ namespace dfusion
 
 		if (g_glrc == nullptr)
 			throw std::exception("GpuMesh: create GLRC failed.");
+
+		// create shader
+		g_depth_fshader = new cwc::aFragmentShader();
+		g_depth_vshader = new cwc::aVertexShader();
+		g_shader_depth = new cwc::glShader();
+		g_depth_fshader->loadFromMemory(g_fshader_depth_src);
+		g_depth_vshader->loadFromMemory(g_vshader_depth_src);
+		g_depth_fshader->compile();
+		g_depth_vshader->compile();
+		g_shader_depth->addShader(g_depth_vshader);
+		g_shader_depth->addShader(g_depth_fshader);
+		g_shader_depth->link();
+		printf("%s\n", g_shader_depth->getLinkerLog());
 	}
 #pragma endregion
 
@@ -277,7 +316,7 @@ namespace dfusion
 				CHECK_NOT_EQUAL(m_vbo_id, 0);
 			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id));
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
-			glBufferData(GL_ARRAY_BUFFER, 2*n*sizeof(float3), 0, GL_DYNAMIC_DRAW);
+			glBufferData(GL_ARRAY_BUFFER, 2 * n*sizeof(PointType), 0, GL_DYNAMIC_DRAW);
 			if (n)// when n==0, it may crash.
 			{
 				cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res, m_vbo_id,
@@ -309,7 +348,7 @@ namespace dfusion
 		rhs.lockVertsNormals();
 		lockVertsNormals();
 
-		cudaMemcpy(verts(), rhs.verts(), num() * 2 * sizeof(float3), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(verts(), rhs.verts(), num() * 2 * sizeof(PointType), cudaMemcpyDeviceToDevice);
 
 		unlockVertsNormals();
 		rhs.unlockVertsNormals();
@@ -347,10 +386,19 @@ namespace dfusion
 
 		omesh.vertex_list.resize(num());
 		omesh.vertex_normal_list.resize(num());
-		cudaMemcpy(omesh.vertex_list.data(), verts(), num()*sizeof(float3), cudaMemcpyDeviceToHost);
-		cudaMemcpy(omesh.vertex_normal_list.data(), normals(), num()*sizeof(float3), cudaMemcpyDeviceToHost);
+		std::vector<PointType> tmpvert, tmpnorm;
+		tmpvert.resize(num());
+		tmpnorm.resize(num());
+		cudaMemcpy(tmpvert.data(), verts(), num()*sizeof(PointType), cudaMemcpyDeviceToHost);
+		cudaMemcpy(tmpnorm.data(), normals(), num()*sizeof(PointType), cudaMemcpyDeviceToHost);
 
 		unlockVertsNormals();
+
+		for (size_t i = 0; i < num(); i++)
+		{
+			omesh.vertex_list[i] = ldp::Float3(tmpvert[i].x, tmpvert[i].y, tmpvert[i].z);
+			omesh.vertex_normal_list[i] = ldp::Float3(tmpnorm[i].x, tmpnorm[i].y, tmpnorm[i].z);
+		}
 
 		omesh.face_list.resize(omesh.vertex_list.size() / 3);
 		for (size_t fid = 0; fid < omesh.face_list.size(); fid++)
@@ -415,7 +463,7 @@ namespace dfusion
 
 			// create pbo cuda
 			glGenBuffers(1, &m_render_fbo_pbo_id);
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_render_fbo_pbo_id);			glBufferData(GL_PIXEL_UNPACK_BUFFER, w * h * sizeof(float3)* 2,
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_render_fbo_pbo_id);			glBufferData(GL_PIXEL_UNPACK_BUFFER, w * h * sizeof(PointType)* 2,
 				NULL, GL_DYNAMIC_COPY);
 			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res_fbo, m_render_fbo_pbo_id,
 				cudaGraphicsRegisterFlagsReadOnly));
@@ -476,11 +524,11 @@ namespace dfusion
 		unlockVertsNormals();
 
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
-		glVertexPointer(3, GL_FLOAT, 0, 0);
+		glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
 		glEnableClientState(GL_VERTEX_ARRAY);
 
-		size_t shift = m_num*sizeof(float3);
-		glNormalPointer(GL_FLOAT, 0, (GLvoid*)shift);
+		size_t shift = m_num*sizeof(PointType);
+		glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
 		glEnableClientState(GL_NORMAL_ARRAY);
 
 		glColor3f(1.0, 1.0, 1.0);
@@ -508,5 +556,65 @@ namespace dfusion
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 #endif
 		CHECK_GL_ERROR("renderToImg");
+	}
+
+	void GpuMesh::renderToDepth(const Camera& camera, DepthMap& img)
+	{
+		if (!wglMakeCurrent(g_hdc, g_glrc))
+			throw std::exception("wglMakeCurrent error");
+
+		createRenderer(std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft())),
+			std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop())));
+
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glPushAttrib(GL_ALL_ATTRIB_BITS);
+		glEnable(GL_DEPTH_TEST);
+		glDisable(GL_LIGHTING);
+
+		camera.apply();
+
+		unlockVertsNormals();
+
+		g_shader_depth->begin();
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
+		glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
+		glEnableClientState(GL_VERTEX_ARRAY);
+
+		size_t shift = m_num*sizeof(PointType);
+		glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
+		glEnableClientState(GL_NORMAL_ARRAY);
+
+		glColor3f(1.0, 1.0, 1.0);
+		glDrawArrays(GL_TRIANGLES, 0, m_num);
+		glDisableClientState(GL_VERTEX_ARRAY);
+		glDisableClientState(GL_NORMAL_ARRAY);
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glPopAttrib();
+		SwapBuffers(g_hdc);
+
+		g_shader_depth->end();
+
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
+		glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+		uchar4* gldata = nullptr;
+		size_t num_bytes = 0;
+		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
+		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
+		const float s1 = 2.f*camera.getFrustumNear()*camera.getFrustumFar() /
+			(camera.getFrustumNear() - camera.getFrustumFar());
+		const float s2 = (camera.getFrustumNear() + camera.getFrustumFar()) /
+			(camera.getFrustumNear() - camera.getFrustumFar());
+		copy_gldepth_to_depthmap(gldata, img, s1, s2, camera.getFrustumNear());
+		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
+
+
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+		CHECK_GL_ERROR("renderToDepth");
 	}
 }

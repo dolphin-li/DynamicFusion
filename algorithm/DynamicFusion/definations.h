@@ -18,9 +18,9 @@ namespace dfusion
 	////	short2.x will be converted to float[-1,1] and then calculate, 
 	////		thus any values larger than 1 is not accepted
 	////	half2 and float2 are not limited to this.
-#define USE_FLOAT_TSDF_VOLUME 
+//#define USE_FLOAT_TSDF_VOLUME 
 //#define USE_SHORT_TSDF_VOLUME
-//#define USE_HALF_TSDF_VOLUME
+#define USE_HALF_TSDF_VOLUME
 	/** **********************************************************************
 	* types
 	* ***********************************************************************/

@@ -68,6 +68,9 @@
     <Filter Include="profile">
       <UniqueIdentifier>{f8272d94-6746-4bd6-9ce5-8e49d7c6c478}</UniqueIdentifier>
     </Filter>
+    <Filter Include="algorithm\DynamicFusion\glsl">
+      <UniqueIdentifier>{87fbec7b-74cd-4578-8170-e4a50047ac5d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -189,6 +192,12 @@
     </ClCompile>
     <ClCompile Include="algorithm\DynamicFusion\kinect_util.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\glsl\glsl.cpp">
+      <Filter>algorithm\DynamicFusion\glsl</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\glsl\glslprogram.cpp">
+      <Filter>algorithm\DynamicFusion\glsl</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -385,6 +394,12 @@
     </ClInclude>
     <ClInclude Include="algorithm\DynamicFusion\device_utils.h">
       <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\glsl\glsl.h">
+      <Filter>algorithm\DynamicFusion\glsl</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\glsl\glslprogram.h">
+      <Filter>algorithm\DynamicFusion\glsl</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

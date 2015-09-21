@@ -155,6 +155,8 @@
     <ClCompile Include="algorithm\DynamicFusion\device_memory.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionParam.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\glsl\glsl.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\glsl\glslprogram.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\kinect_util.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MarchingCubes.cpp" />
@@ -277,6 +279,8 @@
     <ClInclude Include="algorithm\DynamicFusion\dualquaternion\vec3.hpp" />
     <ClInclude Include="algorithm\DynamicFusion\DynamicFusionParam.h" />
     <ClInclude Include="algorithm\DynamicFusion\DynamicFusionProcessor.h" />
+    <ClInclude Include="algorithm\DynamicFusion\glsl\glsl.h" />
+    <ClInclude Include="algorithm\DynamicFusion\glsl\glslprogram.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuMesh.h" />
     <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h" />
     <ClInclude Include="algorithm\DynamicFusion\kinect_util.h" />
