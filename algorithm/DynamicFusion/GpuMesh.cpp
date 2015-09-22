@@ -30,24 +30,27 @@ namespace dfusion
 	cwc::glShaderObject* g_depth_fshader;
 	
 #pragma region --shaders
+#define STRCPY(x) #x
 	// for depth buffer rendering
-	const static char* g_vshader_depth_src =
-		"varying vec4 pos;\n\
-		void main()\n\
-		{\n\
+	const static char* g_vshader_depth_src = STRCPY(
+		varying vec4 pos;
+		void main()
+		{
 			gl_Position = gl_ModelViewProjectionMatrix  * gl_Vertex;\n\
-			pos = gl_Position;\n\
-		}\n";
-	const static char* g_fshader_depth_src =
-		"varying vec4 pos;\n\
-		void main()\n\
-		{\n\
-			float depth = (pos.z / pos.w + 1.0) * 0.5;\n\
-			gl_FragColor.r = float(int(depth*65525.0)&0xff)/255.0;\n\
-			gl_FragColor.g = float((int(depth*65525.0)&0xff00)>>8)/255.0;\n\
-			gl_FragColor.b = depth*65525.0 - float(int(depth*65525.0));\n\
-			gl_FragColor.a = 0.0;\n\
-		}\n";																											
+			pos = gl_Position;
+		}
+	);
+	const static char* g_fshader_depth_src = STRCPY(
+		varying vec4 pos;
+		void main()
+		{
+			float depth = (pos.z / pos.w + 1.0) * 0.5;
+			gl_FragColor.r = float(int(depth*65525.0)&0xff)/255.0;
+			gl_FragColor.g = float((int(depth*65525.0)&0xff00)>>8)/255.0;
+			gl_FragColor.b = depth*65525.0 - float(int(depth*65525.0));
+			gl_FragColor.a = 0.0;
+		}
+	);																											
 #pragma endregion
 
 #pragma region --create gl context
@@ -504,13 +507,10 @@ namespace dfusion
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
-
-		createRenderer(std::lroundf(abs(camera.getViewPortRight()-camera.getViewPortLeft())),
+		createRenderer(std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft())),
 			std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop())));
 
-#ifndef ENABLE_SHOW_DEBUG
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
-#endif
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPushAttrib(GL_ALL_ATTRIB_BITS);
 		glEnable(GL_LIGHTING);
@@ -544,9 +544,13 @@ namespace dfusion
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 		glPopAttrib();
-		SwapBuffers(g_hdc);
 
-#ifndef ENABLE_SHOW_DEBUG
+		// do not use it:
+		// it is only useful when draw to screen
+		// here we use FBO and CUDA
+		// swap buffers seems quite slow.
+		//SwapBuffers(g_hdc);
+
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
 		glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -559,7 +563,6 @@ namespace dfusion
 		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
-#endif
 		CHECK_GL_ERROR("renderToImg");
 	}
 
@@ -567,42 +570,28 @@ namespace dfusion
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
-
-		createRenderer(std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft())),
+		createRenderer(std::lroundf(abs(camera.getViewPortRight()-camera.getViewPortLeft())), 
 			std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop())));
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
+
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPushAttrib(GL_ALL_ATTRIB_BITS);
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_LIGHTING);
-
 		camera.apply();
-
 		unlockVertsNormals();
-
 		g_shader_depth->begin();
-
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
+
 		glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
 		glEnableClientState(GL_VERTEX_ARRAY);
-
-		size_t shift = m_num*sizeof(PointType);
-		glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
-		glEnableClientState(GL_NORMAL_ARRAY);
-
-		glColor3f(1.0, 1.0, 1.0);
 		glDrawArrays(GL_TRIANGLES, 0, m_num);
 		glDisableClientState(GL_VERTEX_ARRAY);
-		glDisableClientState(GL_NORMAL_ARRAY);
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
-
 		glPopAttrib();
-		SwapBuffers(g_hdc);
-
 		g_shader_depth->end();
-
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
 		glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -617,7 +606,6 @@ namespace dfusion
 			(camera.getFrustumNear() - camera.getFrustumFar());
 		copy_gldepth_to_depthmap(gldata, img, s1, s2, camera.getFrustumNear());
 		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
-
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 		CHECK_GL_ERROR("renderToDepth");

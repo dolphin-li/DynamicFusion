@@ -177,7 +177,7 @@ class Dual_quat_cu {
 
 	__device__ __host__ Quat_cu get_dual_part() const { return _quat_e; }
 
-    Quat_cu get_non_dual_part() const { return _quat_0; }
+	__device__ __host__ Quat_cu get_non_dual_part() const { return _quat_0; }
 
 	__device__ __host__ Quat_cu translation() const { return _quat_e; }
 

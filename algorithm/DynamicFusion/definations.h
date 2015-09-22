@@ -44,35 +44,6 @@ namespace dfusion
 		float3 data[3];
 	};
 
-	struct WarpNode
-	{
-		Tbx::Vec3 r; // rotation extracted from log(R)
-		Tbx::Vec3 t; // translation
-		Tbx::Dual_quat_cu to_dual_quat()const
-		{
-			Tbx::Vec3 a(r[0], r[1], r[2]);
-			float theta = a.norm();
-			if (theta == 0.f)
-			{
-				Tbx::Quat_cu q;
-				return Tbx::Dual_quat_cu(q, t);
-			}
-			else
-			{
-				a /= theta;
-				Tbx::Quat_cu q(a, theta);
-				return Tbx::Dual_quat_cu(q, t);
-			}
-		}
-		void from_dual_quat(Tbx::Dual_quat_cu dq)
-		{
-			float angle = 0;
-			dq.rotation().to_angleAxis(r, angle);
-			r *= angle;
-			t = dq.translation();
-		}
-	};
-
 	/** \brief Camera intrinsics structure
 	*/
 	class Intr

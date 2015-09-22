@@ -22,12 +22,13 @@ namespace dfusion
 		{
 			return make_float3(p.x, p.y, p.z);
 		}
-		__device__ __host__ __forceinline__ static GpuMesh::PointType to_point(float3 p)
+		__device__ __host__ __forceinline__ static GpuMesh::PointType to_point(float3 p, float w=1.f)
 		{
 			GpuMesh::PointType o;
 			o.x = p.x;
 			o.y = p.y;
 			o.z = p.z;
+			o.w = w;
 			return o;
 		}
 	public:

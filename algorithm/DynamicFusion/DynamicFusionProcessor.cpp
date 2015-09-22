@@ -173,7 +173,7 @@ namespace dfusion
 		{
 			Camera cam = *m_camera;
 			cam.setModelViewMatrix(userCam.getModelViewMatrix());
-			generateImage(m_vmap_prev_pyd[0], m_nmap_prev_pyd[0], img, light);
+			m_warpedMesh->renderToImg(cam, light, img);
 		}
 	}
 
@@ -192,7 +192,6 @@ namespace dfusion
 
 	void DynamicFusionProcessor::surfaceExtractionMC()
 	{
-#if 1
 		m_marchCube->run(*m_canoMesh);
 		m_framesWarpFields.back()->warp(*m_canoMesh, *m_warpedMesh);
 		m_warpedMesh->renderToDepth(*m_camera, m_depth_prev_pyd[0]);
@@ -202,21 +201,6 @@ namespace dfusion
 			resizeVMap(m_vmap_prev_pyd[i - 1], m_vmap_prev_pyd[i]);
 			resizeNMap(m_nmap_prev_pyd[i - 1], m_nmap_prev_pyd[i]);
 		}
-#else
-		LightSource light;
-		static ColorMap tmp;
-		m_camera->setModelViewMatrix(convert(m_framesWarpFields.back()->get_rigidTransform()));
-		m_rayCaster->setCamera(*m_camera);
-		m_rayCaster->shading(light, tmp);
-
-		m_rayCaster->get_vmap()->copyTo(m_vmap_prev_pyd[0]);
-		m_rayCaster->get_nmap()->copyTo(m_nmap_prev_pyd[0]);
-
-		for (int i = 1; i < RIGID_ALIGN_PYD_LEVELS; ++i){
-			resizeVMap(m_vmap_prev_pyd[i - 1], m_vmap_prev_pyd[i]);
-			resizeNMap(m_nmap_prev_pyd[i - 1], m_nmap_prev_pyd[i]);
-		}
-#endif
 	}
 
 	void DynamicFusionProcessor::insertNewDeformNodes()
