@@ -40,7 +40,7 @@
 #define YZ_KINFU_PCL_GPU_KINFU_CUDA_UTILS_HPP_
 
 #include "definations.h"
-
+#include "helper_math.h"
 #pragma push_macro("min")
 #pragma push_macro("max")
 
@@ -98,39 +98,9 @@ namespace dfusion
 			max() { return SHRT_MAX; };
 		};
 
-			__device__ __forceinline__ float dot(const float3& v1, const float3& v2)
-			{
-				return v1.x * v2.x + v1.y*v2.y + v1.z*v2.z;
-			}
-
 			__device__ __forceinline__ float3 operator* (const Mat33& m, const float3& vec)
 			{
 				return make_float3(dot(m.data[0], vec), dot(m.data[1], vec), dot(m.data[2], vec));
-			}
-
-			__device__ __forceinline__ float3& operator+=(float3& vec, const float& v)
-			{
-				vec.x += v;  vec.y += v;  vec.z += v; return vec;
-			}
-
-			__device__ __forceinline__ float3 operator+(const float3& v1, const float3& v2)
-			{
-				return make_float3(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z);
-			}
-
-			__device__ __forceinline__ float3& operator*=(float3& vec, const float& v)
-			{
-				vec.x *= v;  vec.y *= v;  vec.z *= v; return vec;
-			}
-
-			__device__ __forceinline__ float3 operator-(const float3& v1, const float3& v2)
-			{
-				return make_float3(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z);
-			}
-
-			__device__ __forceinline__ float3 operator*(const float3& v1, const float& v)
-			{
-				return make_float3(v1.x * v, v1.y * v, v1.z * v);
 			}
 
 			__device__ __forceinline__ float norm(const float3& v)
@@ -141,11 +111,6 @@ namespace dfusion
 			__device__ __forceinline__ float3 normalized(const float3& v)
 			{
 				return v * rsqrt(dot(v, v));
-			}
-
-			__device__ __host__ __forceinline__ float3 cross(const float3& v1, const float3& v2)
-			{
-				return make_float3(v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x);
 			}
 
 			__device__ __forceinline__ void computeRoots2(const float& b, const float& c, float3& roots)

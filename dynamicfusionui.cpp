@@ -277,8 +277,7 @@ void DynamicFusionUI::on_actionLoad_volume_triggered()
 
 				g_dataholder.m_rayCaster.init(g_dataholder.m_volume);
 				g_dataholder.m_marchCube.init(&g_dataholder.m_volume, 
-					g_dataholder.m_dparam.marching_cube_tile_size, 
-					g_dataholder.m_dparam.marching_cube_level);
+					g_dataholder.m_dparam);
 
 				g_dataholder.m_dparam.volume_resolution[0] = volume.getResolution()[0];
 				g_dataholder.m_dparam.volume_resolution[1] = volume.getResolution()[1];

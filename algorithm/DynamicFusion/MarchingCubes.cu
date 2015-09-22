@@ -1,8 +1,9 @@
 #include "MarchingCubes.h"
 #include "TsdfVolume.h"
 #include "cudpp\cudpp_wrapper.h"
-#include "helper_math.h"
 #include "GpuMesh.h"
+#include "device_utils.h"
+
 namespace dfusion
 {
 #pragma region --marching cubes table data
@@ -565,6 +566,111 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --classifyVoxel
+#ifdef USE_AUTOMATIC_INSTEADOF_SCAN
+	__device__ int global_count = 0;
+	__device__ int output_count;
+	__device__ unsigned int blocks_done = 0;
+
+	struct OccupiedVoxels
+	{
+		enum
+		{
+			CTA_SIZE_X = 32,
+			CTA_SIZE_Y = 8,
+			CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y,
+			WARPS_COUNT = CTA_SIZE / Warp::WARP_SIZE
+		};
+
+		mutable unsigned int* voxels_indeces;
+		mutable unsigned int* vetexes_number;
+
+		cudaTextureObject_t tex;
+		MarchingCubes::Tile tile;
+		float isoValue;
+
+		__device__ __forceinline__ void operator () () const
+		{
+			const int tx = threadIdx.x + blockIdx.x * CTA_SIZE_X;
+			const int ty = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
+			const int x = (tx << tile.level) + tile.begin.x;
+			const int y = (ty << tile.level) + tile.begin.y;
+			const int rx = ((tile.end.x - tile.begin.x) >> tile.level);
+			const int ry = ((tile.end.y - tile.begin.y) >> tile.level);
+			const int rz = ((tile.end.z - tile.begin.z) >> tile.level);
+			const int s = (1 << tile.level);
+			const int ryrx = ry*rx;
+			const int tyrx_tx = ty*rx + tx;
+
+			if (__all(x >= tile.end.x) || __all(y >= tile.end.y))
+				return;
+
+			int ftid = Block::flattenedThreadId();
+			int warp_id = Warp::id();
+			int lane_id = Warp::laneId();
+
+			volatile __shared__ int warps_buffer[WARPS_COUNT];
+
+			for (int tz = 0; tz < rz; tz ++)
+			{
+				int z = (tz << tile.level) + tile.begin.z;
+				if (z >= tile.end.z)
+					break;
+				int cubeindex = 0;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0)).x < isoValue) << 0);
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0)).x < isoValue) << 1);//  * 2;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0)).x < isoValue) << 2);//  * 4;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0)).x < isoValue) << 3);//  * 8;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s)).x < isoValue) << 4);//  * 16;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s)).x < isoValue) << 5);//  * 32;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s)).x < isoValue) << 6);//  * 64;
+				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s)).x < isoValue) << 7);//  * 128;
+
+				int numVerts = g_numVertsTable[cubeindex];
+				int total = __popc(__ballot(numVerts > 0));
+				if (total == 0)
+					continue;
+
+				if (lane_id == 0)
+				{
+					int old = atomicAdd(&global_count, total);
+					warps_buffer[warp_id] = old;
+				}
+
+				int old_global_voxels_count = warps_buffer[warp_id];
+				int offs = Warp::binaryExclScan(__ballot(numVerts > 0));
+				if (old_global_voxels_count + offs < tile.max_num_activeVoxels && numVerts > 0)
+				{
+					voxels_indeces[old_global_voxels_count + offs] = ryrx * tz + tyrx_tx;
+					vetexes_number[old_global_voxels_count + offs] = numVerts;
+				}
+
+				bool full = old_global_voxels_count + total >= tile.max_num_activeVoxels;
+
+				if (full)
+					break;
+
+			} /* for(int z = 0; z < VOLUME_Z - 1; z++) */
+
+
+			/////////////////////////
+			// prepare for future scans
+			if (ftid == 0)
+			{
+				unsigned int total_blocks = gridDim.x * gridDim.y * gridDim.z;
+				unsigned int value = atomicInc(&blocks_done, total_blocks);
+
+				//last block
+				if (value == total_blocks - 1)
+				{
+					output_count = min(tile.max_num_activeVoxels, global_count);
+					blocks_done = 0;
+					global_count = 0;
+				}
+			}
+		} /* operator () */
+	};
+	__global__ void getOccupiedVoxelsKernel(const OccupiedVoxels ov) { ov(); }
+#else
 	// classify voxel based on number of vertices it will generate
 	// one thread per voxel
 	__global__ void classifyVoxelKernel(cudaTextureObject_t tex, 
@@ -625,9 +731,11 @@ namespace dfusion
 			i += blockDim.x;
 		}
 	}
-
+#endif
 	static unsigned int get_scanned_sum(unsigned int* d_ary, unsigned int* d_scan, int n)
 	{
+		if (n == 0)
+			return 0;
 		unsigned int lastElement, lastScanElement;
 		cudaSafeCall(cudaMemcpy((void *)&lastElement,
 			(void *)(d_ary + n- 1),
@@ -640,6 +748,7 @@ namespace dfusion
 
 	void MarchingCubes::classifyVoxel(Tile& tile)
 	{
+#ifndef USE_AUTOMATIC_INSTEADOF_SCAN
 		dim3 block(32, 8, 2);
 		dim3 grid(divUp((tile.end.x - tile.begin.x)>>tile.level, block.x), 
 			divUp((tile.end.y - tile.begin.y)>>tile.level, block.y),
@@ -647,7 +756,7 @@ namespace dfusion
 
 		// compute number of vertices of each voxel
 		classifyVoxelKernel << <grid, block >> >(m_volTex, tile, m_voxelVerts.ptr(),
-			m_voxelOccupied.ptr(), m_isoValue);
+			m_voxelOccupied.ptr(), m_param.marching_cube_isoValue);
 		cudaSafeCall(cudaGetLastError(), "classifyVoxel");
 
 		// scan to get total number of vertices
@@ -666,6 +775,35 @@ namespace dfusion
 		compactVoxelsKernel << <grid1, block1 >> >(m_compVoxelArray.ptr(), 
 			m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
 		cudaSafeCall(cudaGetLastError(), "compact voxels");
+#else
+		OccupiedVoxels ov;
+
+		ov.voxels_indeces = m_compVoxelArray.ptr();
+		ov.vetexes_number = m_voxelVerts.ptr();
+		ov.tex = m_volTex;
+		ov.tile = tile;
+		ov.isoValue = m_param.marching_cube_isoValue;
+
+		dim3 block(OccupiedVoxels::CTA_SIZE_X, OccupiedVoxels::CTA_SIZE_Y);
+		dim3 grid(divUp((tile.end.x - tile.begin.x) >> tile.level, block.x), 
+			divUp((tile.end.y - tile.begin.y) >> tile.level, block.y));
+
+		getOccupiedVoxelsKernel << <grid, block >> >(ov);
+		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaDeviceSynchronize());
+
+		cudaSafeCall(cudaMemcpyFromSymbol(&tile.num_activeVoxels, output_count, sizeof(int)));
+
+		if (tile.num_activeVoxels == tile.max_num_activeVoxels)
+		{
+			printf("warning: memory limit achieved in marching cube, you may enlarge \
+				   marching_cube_max_activeVoxel_ratio in Param()\n");
+		}
+
+		// scan to get total number of vertices
+		cudpp_wrapper::exlusive_scan(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_activeVoxels);
+		tile.nverts = get_scanned_sum(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_activeVoxels);
+#endif
 	}
 #pragma endregion
 
@@ -780,14 +918,18 @@ namespace dfusion
 				__syncthreads();
 
 				// output triangle vertices
-				uint numVerts = g_numVertsTable[cubeindex];
+				unsigned int numVerts = g_numVertsTable[cubeindex];
 
 				for (int i = 0; i < numVerts; i += 3)
 				{
-					uint index = numVertsScanned[voxelId] + i;
+#ifndef USE_AUTOMATIC_INSTEADOF_SCAN
+					unsigned int index = numVertsScanned[voxelId] + i;
+#else
+					unsigned int index = numVertsScanned[tid] + i;
+#endif
 
 					float3 *v[3];
-					uint edge;
+					unsigned int edge;
 					edge = g_triTable[cubeindex][i];
 					v[2] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
 
@@ -823,13 +965,14 @@ namespace dfusion
 			return;
 
 		dim3 block(GEN_TRI_N_THREADS);
-		dim3 grid(divUp(tile.num_voxels, block.x<<3));
+		dim3 grid(divUp(tile.num_activeVoxels, block.x<<3));
 
 		result.lockVertsNormals();
 		generateTrianglesKernel << <grid, block >> >(
 			result.verts(), result.normals(),
 			m_volTex, tile,
-			m_compVoxelArray, m_voxelVertsScan, m_isoValue);
+			m_compVoxelArray, m_voxelVertsScan, 
+			m_param.marching_cube_isoValue);
 		cudaSafeCall(cudaGetLastError(), "generateTriangles");
 		result.unlockVertsNormals();
 	}

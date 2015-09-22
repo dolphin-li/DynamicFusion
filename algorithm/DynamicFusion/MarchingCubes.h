@@ -1,9 +1,10 @@
 #pragma once
 
 #include "definations.h"
-
+#include "DynamicFusionParam.h"
 namespace dfusion
 {
+#define USE_AUTOMATIC_INSTEADOF_SCAN
 	class GpuMesh;
 	class TsdfVolume;
 	class MarchingCubes
@@ -20,6 +21,7 @@ namespace dfusion
 			int vert_start_id;
 			int num_voxels;
 			int num_activeVoxels;
+			int max_num_activeVoxels;//to save memory, we will not allocate tempory buffers larger than this
 		};
 	public:
 		MarchingCubes();
@@ -27,7 +29,7 @@ namespace dfusion
 
 		// tile_size: the algorithm is tiled, each tile is processed and then another
 		// step: w.r.t. voxel, level=1 means calculated on a coarser levelx2
-		void init(const TsdfVolume* volume, int tile_size, int level);
+		void init(const TsdfVolume* volume, Param param);
 
 		void run(GpuMesh& mesh, float isoValue = 0.f);
 	protected:
@@ -38,9 +40,7 @@ namespace dfusion
 		void generateTriangles(const Tile& tile, GpuMesh& result);
 	private:
 		const TsdfVolume* m_volume;
-		int m_tile_size;
-		int m_level;
-		float m_isoValue;
+		Param m_param;
 		std::vector<Tile> m_tiles;
 		std::vector<GpuMesh> m_tiledMeshes;
 

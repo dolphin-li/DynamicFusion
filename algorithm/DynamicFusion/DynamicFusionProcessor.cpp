@@ -89,7 +89,7 @@ namespace dfusion
 
 		// marching cube
 		m_marchCube = new MarchingCubes();
-		m_marchCube->init(m_volume, m_param.marching_cube_tile_size, m_param.marching_cube_level);
+		m_marchCube->init(m_volume, m_param);
 
 		// ray casting
 		m_rayCaster = new RayCaster();

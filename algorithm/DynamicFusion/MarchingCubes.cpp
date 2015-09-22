@@ -3,6 +3,7 @@
 #include <algorithm>
 #include "GpuMesh.h"
 #include "ldp_basic_mat.h"
+
 namespace dfusion
 {
 #undef min
@@ -16,21 +17,22 @@ namespace dfusion
 	{
 	}
 
-	void MarchingCubes::init(const TsdfVolume* volume, int tile_size, int level)
+	void MarchingCubes::init(const TsdfVolume* volume, Param param)
 	{
 		m_volume = volume;
-		m_tile_size = tile_size;
-		m_level = level;
+		m_param = param;
 		generate_tiles();
 
 		// allocate memory
 		if (m_tiles.size())
 		{
-			m_voxelVerts.create(m_tiles[0].num_voxels);
-			m_voxelVertsScan.create(m_tiles[0].num_voxels);
-			m_voxelOccupied.create(m_tiles[0].num_voxels);
-			m_voxelOccupiedScan.create(m_tiles[0].num_voxels);
-			m_compVoxelArray.create(m_tiles[0].num_voxels);
+			m_voxelVerts.create(m_tiles[0].max_num_activeVoxels);
+			m_voxelVertsScan.create(m_tiles[0].max_num_activeVoxels);
+			m_compVoxelArray.create(m_tiles[0].max_num_activeVoxels);
+#ifndef USE_AUTOMATIC_INSTEADOF_SCAN
+			m_voxelOccupied.create(m_tiles[0].max_num_activeVoxels);
+			m_voxelOccupiedScan.create(m_tiles[0].max_num_activeVoxels);
+#endif
 		}
 	}
 
@@ -38,7 +40,7 @@ namespace dfusion
 	{
 		if (m_volume == nullptr)
 			throw std::exception("Before MarchingCubes::run(), call init() first!");
-		m_isoValue = isoValue;
+		m_param.marching_cube_isoValue = isoValue;
 
 		m_volTex = m_volume->bindTexture();
 
@@ -87,26 +89,32 @@ namespace dfusion
 		const float vsz = m_volume->getVoxelSize();
 		const int3 res = m_volume->getResolution();
 		const float3 ori = m_volume->getOrigion();
-		for (int z = 0; z < res.z; z += m_tile_size)
+		for (int z = 0; z < res.z; z += m_param.marching_cube_tile_size)
 		{
-			for (int y = 0; y < res.y; y += m_tile_size)
+			for (int y = 0; y < res.y; y += m_param.marching_cube_tile_size)
 			{
-				for (int x = 0; x < res.x; x += m_tile_size)
+				for (int x = 0; x < res.x; x += m_param.marching_cube_tile_size)
 				{
 					Tile tile;
 					tile.begin = make_int3(x, y, z);
-					tile.end = make_int3(std::min(res.x, x+m_tile_size),
-						std::min(res.y, y + m_tile_size),
-						std::min(res.z, z + m_tile_size));
+					tile.end = make_int3(std::min(res.x, x + m_param.marching_cube_tile_size),
+						std::min(res.y, y + m_param.marching_cube_tile_size),
+						std::min(res.z, z + m_param.marching_cube_tile_size));
 					tile.origion = ori;
 					tile.voxelSize = vsz;
-					tile.level = m_level;
+					tile.level = m_param.marching_cube_level;
 
 					tile.vert_start_id = 0;
 					tile.nverts = 0;
-					tile.num_voxels = ((tile.end.x - tile.begin.x) >> m_level)*
-						((tile.end.y - tile.begin.y) >> m_level) * ((tile.end.z - tile.begin.z) >> m_level);
+					tile.num_voxels = ((tile.end.x - tile.begin.x) >> m_param.marching_cube_level)*
+						((tile.end.y - tile.begin.y) >> m_param.marching_cube_level) * 
+						((tile.end.z - tile.begin.z) >> m_param.marching_cube_level);
 					tile.num_activeVoxels = 0;
+#ifdef USE_AUTOMATIC_INSTEADOF_SCAN
+					tile.max_num_activeVoxels = ceil(tile.num_voxels * m_param.marching_cube_max_activeVoxel_ratio);
+#else
+					tile.max_num_activeVoxels = tile.num_voxels;
+#endif
 
 					m_tiles.push_back(tile);
 				}
