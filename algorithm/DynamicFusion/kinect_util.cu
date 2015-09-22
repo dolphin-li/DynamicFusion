@@ -590,7 +590,7 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --rigid estimate
-	typedef double float_type;
+	typedef float float_type;
 
 	template<int CTA_SIZE_, typename T>
 	static __device__ __forceinline__ void reduce(volatile T* buffer)
@@ -664,6 +664,7 @@ namespace dfusion
 			float3 vcurr_g = Rcurr * vcurr + tcurr;
 			float3 ncurr_g = Rcurr * ncurr;
 			float3 vcurr_cp = Rprev_inv * (vcurr_g - tprev);	// prev camera coo space
+			float3 ncurr_cp = Rprev_inv * ncurr_g;				// prev camera coo space
 
 			float3 uvd = intr.xyz2uvd(vcurr_cp);
 			int2 ukr = make_int2(__float2int_rn(uvd.x), __float2int_rn(uvd.y));
@@ -672,32 +673,30 @@ namespace dfusion
 			if (ukr.x < 0 || ukr.y < 0 || ukr.x >= cols || ukr.y >= rows || vcurr_cp.z >= 0)
 				return (false);
 
-			float3 nprev_g;
-			nprev_g.x = nmap_prev.ptr(ukr.y)[ukr.x];
-			nprev_g.y = nmap_prev.ptr(ukr.y + rows)[ukr.x];
-			nprev_g.z = nmap_prev.ptr(ukr.y + 2 * rows)[ukr.x];
-			nprev_g = Rprev * nprev_g;
+			float3 nprev;
+			nprev.x = nmap_prev.ptr(ukr.y)[ukr.x];
+			nprev.y = nmap_prev.ptr(ukr.y + rows)[ukr.x];
+			nprev.z = nmap_prev.ptr(ukr.y + 2 * rows)[ukr.x];
 
-			if (isnan(nprev_g.x))
+			if (isnan(nprev.x))
 				return (false);
 
-			float3 vprev_g;
-			vprev_g.x = vmap_prev.ptr(ukr.y)[ukr.x];
-			vprev_g.y = vmap_prev.ptr(ukr.y + rows)[ukr.x];
-			vprev_g.z = vmap_prev.ptr(ukr.y + 2 * rows)[ukr.x];
-			vprev_g = Rprev * vprev_g + tprev;
+			float3 vprev;
+			vprev.x = vmap_prev.ptr(ukr.y)[ukr.x];
+			vprev.y = vmap_prev.ptr(ukr.y + rows)[ukr.x];
+			vprev.z = vmap_prev.ptr(ukr.y + 2 * rows)[ukr.x];
 
-			float dist = norm(vprev_g - vcurr_g);
+			float dist = norm(vprev - vcurr_cp);
 			if (dist > distThres)
 				return (false);
 
-			float sine = norm(cross(ncurr_g, nprev_g));
+			float sine = norm(cross(ncurr_cp, nprev));
 			if (sine >= angleThres)
 				return (false);
 
-			n = nprev_g;
-			d = vprev_g;
-			s = vcurr_g;
+			n = nprev;
+			d = vprev;
+			s = vcurr_cp;
 			return (true);
 		}
 

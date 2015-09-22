@@ -44,6 +44,6 @@ namespace dfusion
 		const Mat33& Rprev, const float3& tprev, const Intr& intr,
 		const MapArr& vmap_prev, const MapArr& nmap_prev,
 		float distThres, float angleThres,
-		DeviceArray2D<double>& gbuf, DeviceArray<double>& mbuf,
-		double* matrixA_host, double* vectorB_host);
+		DeviceArray2D<float>& gbuf, DeviceArray<float>& mbuf,
+		float* matrixA_host, float* vectorB_host);
 }

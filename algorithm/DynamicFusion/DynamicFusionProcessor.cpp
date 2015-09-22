@@ -275,8 +275,8 @@ namespace dfusion
 			int iter_num = icp_iterations[level_index];
 			for (int iter = 0; iter < iter_num; ++iter)
 			{
-				Eigen::Matrix<double, 6, 6, Eigen::RowMajor> A;
-				Eigen::Matrix<double, 6, 1> b;
+				Eigen::Matrix<float, 6, 6, Eigen::RowMajor> A;
+				Eigen::Matrix<float, 6, 1> b;
 
 				estimateCombined(convert(c2v_Rcurr), convert(c2v_tcurr), vmap_curr, nmap_curr,
 					convert(c2v_Rprev), convert(c2v_tprev), m_kinect_intr(level_index),
@@ -284,8 +284,8 @@ namespace dfusion
 					m_rigid_gbuf, m_rigid_sumbuf, A.data(), b.data());
 
 				//checking nullspace
-				double det = A.determinant();
-				if (fabs(det) < 1e-15 || _isnan(det))
+				float det = A.determinant();
+				if (fabs(det) < std::numeric_limits<float>::epsilon() || _isnan(det))
 				{
 					if (_isnan(det))
 						std::cout << "qnan" << std::endl;

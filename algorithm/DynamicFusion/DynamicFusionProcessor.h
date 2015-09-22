@@ -58,8 +58,8 @@ namespace dfusion
 		std::vector<DepthMap> m_depth_prev_pyd;
 		std::vector<MapArr> m_vmap_prev_pyd;
 		std::vector<MapArr> m_nmap_prev_pyd;
-		DeviceArray2D<double> m_rigid_gbuf;
-		DeviceArray<double> m_rigid_sumbuf;
+		DeviceArray2D<float> m_rigid_gbuf;
+		DeviceArray<float> m_rigid_sumbuf;
 		float m_rigid_distThre;
 		float m_rigid_angleThre_sin;
 	};
