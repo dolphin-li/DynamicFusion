@@ -1,5 +1,6 @@
 #include "dynamicfusionui.h"
 #include "global_data_holder.h"
+#include "WarpField.h"
 DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	: QMainWindow(parent)
 {
@@ -70,7 +71,8 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 	gtime_t time_e = gtime_now();
 	double sec = gtime_seconds(time_s, time_e);
 	double fps = 1.0 / sec;
-	setWindowTitle(QString().sprintf("FPS:%.1f", fps));
+	setWindowTitle(QString().sprintf("FPS:%.1f;  Nodes: %d", fps,
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0)));
 }
 
 void DynamicFusionUI::dragEnterEvent(QDragEnterEvent* ev)

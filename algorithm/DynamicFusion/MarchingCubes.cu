@@ -615,15 +615,29 @@ namespace dfusion
 				int z = (tz << tile.level) + tile.begin.z;
 				if (z >= tile.end.z)
 					break;
+				float field[8];
+				field[0] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0)).x;
+				field[1] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0)).x;
+				field[2] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0)).x;
+				field[3] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0)).x;
+				field[4] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s)).x;
+				field[5] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s)).x;
+				field[6] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s)).x;
+				field[7] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s)).x;
+
 				int cubeindex = 0;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0)).x < isoValue) << 0);
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0)).x < isoValue) << 1);//  * 2;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0)).x < isoValue) << 2);//  * 4;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0)).x < isoValue) << 3);//  * 8;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s)).x < isoValue) << 4);//  * 16;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s)).x < isoValue) << 5);//  * 32;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s)).x < isoValue) << 6);//  * 64;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s)).x < isoValue) << 7);//  * 128;
+				if (field[0] && field[1] && field[2] && field[3] && field[4]
+					&& field[5] && field[6] && field[7])// exactly 0 means no value, thus should be ignored
+				{
+					cubeindex |= (int(field[0] < isoValue) << 0);
+					cubeindex |= (int(field[1] < isoValue) << 1);//  * 2;
+					cubeindex |= (int(field[2] < isoValue) << 2);//  * 4;
+					cubeindex |= (int(field[3] < isoValue) << 3);//  * 8;
+					cubeindex |= (int(field[4] < isoValue) << 4);//  * 16;
+					cubeindex |= (int(field[5] < isoValue) << 5);//  * 32;
+					cubeindex |= (int(field[6] < isoValue) << 6);//  * 64;
+					cubeindex |= (int(field[7] < isoValue) << 7);//  * 128;
+				}
 
 				int numVerts = g_numVertsTable[cubeindex];
 				int total = __popc(__ballot(numVerts > 0));
@@ -890,14 +904,18 @@ namespace dfusion
 
 				// recalculate flag, faster than store in global memory
 				int cubeindex = 0;
-				cubeindex |= (int(field[0] < isoValue) << 0);
-				cubeindex |= (int(field[1] < isoValue) << 1);//  * 2;
-				cubeindex |= (int(field[2] < isoValue) << 2);//  * 4;
-				cubeindex |= (int(field[3] < isoValue) << 3);//  * 8;
-				cubeindex |= (int(field[4] < isoValue) << 4);//  * 16;
-				cubeindex |= (int(field[5] < isoValue) << 5);//  * 32;
-				cubeindex |= (int(field[6] < isoValue) << 6);//  * 64;
-				cubeindex |= (int(field[7] < isoValue) << 7);//  * 128;
+				if (field[0] && field[1] && field[2] && field[3] && field[4]
+					&& field[5] && field[6] && field[7])// exactly 0 means no value, thus should be ignored
+				{
+					cubeindex |= (int(field[0] < isoValue) << 0);
+					cubeindex |= (int(field[1] < isoValue) << 1);//  * 2;
+					cubeindex |= (int(field[2] < isoValue) << 2);//  * 4;
+					cubeindex |= (int(field[3] < isoValue) << 3);//  * 8;
+					cubeindex |= (int(field[4] < isoValue) << 4);//  * 16;
+					cubeindex |= (int(field[5] < isoValue) << 5);//  * 32;
+					cubeindex |= (int(field[6] < isoValue) << 6);//  * 64;
+					cubeindex |= (int(field[7] < isoValue) << 7);//  * 128;
+				}
 
 				// find the vertices where the surface intersects the cube
 				// use shared memory to avoid using local

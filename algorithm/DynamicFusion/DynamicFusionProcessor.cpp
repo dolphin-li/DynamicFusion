@@ -42,6 +42,7 @@ namespace dfusion
 		m_rayCaster = nullptr;
 		m_marchCube = nullptr;
 		m_canoMesh = nullptr;
+		m_warpField = nullptr;
 		m_frame_id = 0;
 	}
 
@@ -95,6 +96,10 @@ namespace dfusion
 		m_rayCaster = new RayCaster();
 		m_rayCaster->init(*m_volume);
 
+		// warp field
+		m_warpField = new WarpField();
+		m_warpField->init(m_volume, m_param);
+
 		// maps
 		m_depth_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
 		m_vmap_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
@@ -114,9 +119,7 @@ namespace dfusion
 		DFUSION_SAFE_DELETE(m_rayCaster);
 		DFUSION_SAFE_DELETE(m_marchCube);
 		DFUSION_SAFE_DELETE(m_canoMesh);
-		for (size_t i = 0; i < m_framesWarpFields.size(); i++)
-			delete m_framesWarpFields[i];
-		m_framesWarpFields.clear();
+		DFUSION_SAFE_DELETE(m_warpField);
 		m_frame_id = 0;
 		m_depth_curr_pyd.clear();
 		m_vmap_curr_pyd.clear();
@@ -139,10 +142,7 @@ namespace dfusion
 		m_warpedMesh->release();
 
 		// warp fields
-		for (size_t i = 0; i < m_framesWarpFields.size(); i++)
-			delete m_framesWarpFields[i];
-		m_framesWarpFields.clear();
-		m_framesWarpFields.reserve(30000);
+		m_warpField->init(m_volume, m_param);
 
 		m_frame_id = 0;
 	}
@@ -173,16 +173,20 @@ namespace dfusion
 		{
 			Camera cam = *m_camera;
 			cam.setModelViewMatrix(userCam.getModelViewMatrix());
-			m_warpedMesh->renderToImg(cam, light, img);
+			m_warpedMesh->renderToImg(cam, light, img, m_warpField);
 		}
+	}
+
+	const WarpField* DynamicFusionProcessor::getWarpField()const
+	{
+		return m_warpField;
 	}
 
 	void DynamicFusionProcessor::estimateWarpField()
 	{
 		Tbx::Transfo rigid = rigid_align();
 
-		m_framesWarpFields.push_back(new WarpField());
-		m_framesWarpFields.back()->set_rigidTransform(rigid);
+		m_warpField->set_rigidTransform(rigid);
 	}
 
 	void DynamicFusionProcessor::nonRigidTsdfFusion()
@@ -193,7 +197,7 @@ namespace dfusion
 	void DynamicFusionProcessor::surfaceExtractionMC()
 	{
 		m_marchCube->run(*m_canoMesh);
-		m_framesWarpFields.back()->warp(*m_canoMesh, *m_warpedMesh);
+		m_warpField->warp(*m_canoMesh, *m_warpedMesh);
 		m_warpedMesh->renderToDepth(*m_camera, m_depth_prev_pyd[0]);
 		createVMap(m_kinect_intr, m_depth_prev_pyd[0], m_vmap_prev_pyd[0]);
 		createNMap(m_vmap_prev_pyd[0], m_nmap_prev_pyd[0]);
@@ -205,7 +209,7 @@ namespace dfusion
 
 	void DynamicFusionProcessor::insertNewDeformNodes()
 	{
-
+		m_warpField->updateWarpNodes(*m_canoMesh);
 	}
 
 	void DynamicFusionProcessor::updateRegularizationGraph()
@@ -241,7 +245,7 @@ namespace dfusion
 			return Tbx::Transfo().identity();
 
 		// now estimate rigid transform
-		Tbx::Transfo c2v = m_framesWarpFields.back()->get_rigidTransform().fast_invert();
+		Tbx::Transfo c2v = m_warpField->get_rigidTransform().fast_invert();
 		Tbx::Mat3	c2v_Rprev = c2v.get_mat3();
 		Tbx::Vec3	c2v_tprev = c2v.get_translation();
 

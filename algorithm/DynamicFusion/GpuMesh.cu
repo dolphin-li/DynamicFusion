@@ -1,5 +1,5 @@
 #include "GpuMesh.h"
-
+#include "WarpField.h"
 namespace dfusion
 {
 	__device__ __forceinline__ PixelRGBA copy_uchar4_pixelRGBA(uchar4 a)
@@ -80,5 +80,37 @@ namespace dfusion
 		copy_gldepth_to_depthmap_kernel << <grid, block >> >(gldataptr, depth, s1, s2, camNear);
 		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_gldepth_to_depthmap");
 		cudaThreadSynchronize();
+	}
+
+
+	__global__ void copy_warp_node_to_gl_buffer_kernel(WarpNode* gldata, 
+		Tbx::Transfo trans, const WarpNode* nodes, int n)
+	{
+		int i = threadIdx.x + blockIdx.x * blockDim.x;
+
+		if (i < n)
+		{
+			WarpNode node = nodes[i];
+			Tbx::Vec3 t = trans * Tbx::Point3(node.v_w.x, node.v_w.y, node.v_w.z);
+			node.v_w.x = t.x;
+			node.v_w.y = t.y;
+			node.v_w.z = t.z;
+			gldata[i] = node;
+		}
+	}
+
+	void GpuMesh::copy_warp_node_to_gl_buffer(WarpNode* gldata, const WarpField* warpField)
+	{
+		int n = warpField->getNumNodesInLevel(0);
+		if (n == 0)
+			return;
+		const WarpNode* nodes = warpField->getNodesPtr(0);
+		Tbx::Transfo tr = warpField->get_rigidTransform();
+		dim3 block(256);
+		dim3 grid(1);
+		grid.x = divUp(n, block.x);
+
+		copy_warp_node_to_gl_buffer_kernel << <grid, block >> >(gldata, tr, nodes, n);
+		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_warp_node_to_gl_buffer");
 	}
 }

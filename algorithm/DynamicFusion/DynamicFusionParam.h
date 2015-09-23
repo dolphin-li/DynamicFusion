@@ -32,8 +32,23 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		float warp_radius_search_epsilon; // meters
+
+		// meters, for radius search
+		float warp_radius_search_epsilon; 
+
+		// param \dw in the paper for each node
+		float warp_param_dw;
+
+		// scalar of epsilon for different levels, as in the paper \beta
 		float warp_radius_search_beta;
+
+		// there may be not necessary to use the full resolution points.
+		// thus we may firstly subsample the points and then generate nodes
+		// this may be much faster
+		int warp_point_step_before_update_node; 
+
+		// to avoid noise, only node-grid contains enough points will be considered
+		float warp_valid_point_num_each_node;
 
 		/** *****************************************************
 		* dynamic fusion related

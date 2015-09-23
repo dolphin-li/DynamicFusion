@@ -14,6 +14,8 @@ namespace dfusion
 	*		to use buffers from cuda, call lockVertsNormals();
 	*		after that, call unlockVertsNormals();
 	* *************************************************************************/
+	class WarpField;
+	struct WarpNode;
 	class GpuMesh
 	{
 	public:
@@ -52,14 +54,18 @@ namespace dfusion
 		void toObjMesh(ObjMesh& omesh);
 
 		// unlockVertsNormals is performed insided
-		void renderToImg(const Camera& camera, LightSource light, ColorMap& img);
+		void renderToImg(const Camera& camera, LightSource light, ColorMap& img, 
+			const WarpField* warpField = nullptr);
 		void renderToDepth(const Camera& camera, DepthMap& img);
 	protected:
+		void createRendererForWarpField(const WarpField* warpField);
+		void releaseRendererForWarpField();
 		void createRenderer(int w, int h);
 		void releaseRenderer();
 		void copy_invert_y(const uchar4* gldata, ColorMap& img);
 		void copy_gldepth_to_depthmap(const uchar4* gldata, DepthMap& depth, 
 			float s1, float s2, float camNear);
+		void copy_warp_node_to_gl_buffer(WarpNode* gldata, const WarpField* warpField);
 	private:
 		PointType* m_verts_d;
 		PointType* m_normals_d;
@@ -76,5 +82,8 @@ namespace dfusion
 		unsigned int m_render_depth_id;
 		unsigned int m_render_fbo_pbo_id;
 		cudaGraphicsResource* m_cuda_res_fbo;
+
+		unsigned int m_vbo_id_warpnodes;
+		cudaGraphicsResource* m_cuda_res_warp;
 	};
 }

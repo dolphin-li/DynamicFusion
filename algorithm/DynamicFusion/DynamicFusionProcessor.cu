@@ -70,7 +70,7 @@ namespace dfusion
 		assert(offset == 0);
 		cudaSurfaceObject_t surf = m_volume->bindSurface();
 		
-		Tbx::Transfo tr = m_framesWarpFields.back()->get_rigidTransform();
+		Tbx::Transfo tr = m_warpField->get_rigidTransform();
 		Tbx::Mat3 Rv2c = tr.get_mat3();
 		Tbx::Vec3 tv2c = tr.get_translation() + Rv2c*convert(m_volume->getOrigion());
 

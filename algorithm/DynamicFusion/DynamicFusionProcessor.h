@@ -24,6 +24,8 @@ namespace dfusion
 
 		// if not use_ray_casting, then use marching_cube
 		void shading(const Camera& userCam, LightSource light, ColorMap& img, bool use_ray_casting);
+
+		const WarpField* getWarpField()const;
 	protected:
 		void estimateWarpField();
 		void nonRigidTsdfFusion();
@@ -42,7 +44,7 @@ namespace dfusion
 		MarchingCubes* m_marchCube;
 		GpuMesh* m_canoMesh;
 		GpuMesh* m_warpedMesh;
-		std::vector<WarpField*> m_framesWarpFields;
+		WarpField* m_warpField;
 		Intr m_kinect_intr;
 
 		int m_frame_id;

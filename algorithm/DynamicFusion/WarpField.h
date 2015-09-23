@@ -9,8 +9,8 @@ namespace dfusion
 
 	struct WarpNode
 	{
-		Tbx::Dual_quat_cu dq; // dg_se3 in the paper
 		float4 v_w; // dg_v, dg_w in the paper
+		Tbx::Dual_quat_cu dq; // dg_se3 in the paper
 		float4 dummy; // free for now, may be used later
 		__device__ __host__ void set(float4 a, float4 b, float4 c)
 		{
@@ -31,10 +31,10 @@ namespace dfusion
 	class WarpField
 	{
 	public:
-		typedef uchar4 KnnIdx;
+		typedef ushort4 KnnIdx;
 		enum{
 			GraphLevelNum = 4,
-			MaxNodeNum = 256,
+			MaxNodeNum = 4096,
 			KnnK = 4, // num of KnnIdx
 		};
 	public:
@@ -51,8 +51,15 @@ namespace dfusion
 
 		Tbx::Transfo get_rigidTransform()const{ return m_rigidTransform; }
 		void set_rigidTransform(Tbx::Transfo T){ m_rigidTransform = T; }
-	protected:
 
+		int getNumLevels()const{ return GraphLevelNum; }
+		int getNumNodesInLevel(int level)const{ return m_numNodes[level]; }
+		WarpNode* getNodesPtr(int level){ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
+		const WarpNode* getNodesPtr(int level)const{ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
+	protected:
+		void insertNewNodes(GpuMesh& src);
+		void updateAnnField();
+		void updateGraph(int level);
 	private:
 		Param m_param;
 		TsdfVolume* m_volume;
@@ -65,8 +72,10 @@ namespace dfusion
 		
 		// process the input GpuMesh
 		int3 m_nodesGridSize;
+		int m_current_point_buffer_size;
 		DeviceArray<float4> m_meshPointsSorted;
 		DeviceArray<int> m_meshPointsKey;
+		DeviceArray<int> m_meshPointsFlags;
 
 		// type: KnnIdx
 		cudaArray_t m_knnField;

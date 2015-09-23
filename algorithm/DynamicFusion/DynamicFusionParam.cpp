@@ -1,5 +1,5 @@
 #include "DynamicFusionParam.h"
-
+#include <math.h>
 namespace dfusion
 {
 	Param::Param()
@@ -23,8 +23,12 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.025;
+		warp_radius_search_epsilon = 0.05;
+		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
+		warp_point_step_before_update_node = 1;
+		warp_valid_point_num_each_node = 0.1 * (pow(warp_radius_search_epsilon*voxels_per_meter, 3) 
+			/ warp_point_step_before_update_node);
 
 		/** *****************************************************
 		* dynamic fusion related

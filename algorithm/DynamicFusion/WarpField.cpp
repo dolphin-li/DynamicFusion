@@ -7,6 +7,7 @@ namespace dfusion
 	{
 		m_volume = nullptr;
 		m_knnField = nullptr;
+		m_current_point_buffer_size = 0;
 	}
 
 	WarpField::~WarpField()
@@ -33,8 +34,18 @@ namespace dfusion
 		cudaSafeCall(cudaMalloc3DArray(&m_knnField, &desc, ext), "cudaMalloc3D");
 
 		// nodes grid
-		m_nodesGridSize = make_int3(divUp(res.x*vsz, m_param.warp_radius_search_epsilon),
-			divUp(res.y*vsz, m_param.warp_radius_search_epsilon),
-			divUp(res.z*vsz, m_param.warp_radius_search_epsilon));
+		m_nodesGridSize = make_int3(std::ceil(res.x*vsz/m_param.warp_radius_search_epsilon),
+			std::ceil(res.y*vsz/m_param.warp_radius_search_epsilon),
+			std::ceil(res.z*vsz/m_param.warp_radius_search_epsilon));
+	}
+
+	void WarpField::updateWarpNodes(GpuMesh& src)
+	{
+		insertNewNodes(src);
+
+		updateAnnField();
+
+		for (int lv = 1; lv < GraphLevelNum; lv++)
+			updateGraph(lv);
 	}
 }

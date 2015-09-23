@@ -8,6 +8,7 @@
 #include "CFreeImage.h"
 #include "glsl\glsl.h"
 #include "glsl\glslprogram.h"
+#include "WarpField.h"
 
 #define CHECK_GL_ERROR(str) {\
 	GLenum err = glGetError(); \
@@ -28,6 +29,9 @@ namespace dfusion
 	cwc::glShader* g_shader_depth;
 	cwc::glShaderObject* g_depth_vshader;
 	cwc::glShaderObject* g_depth_fshader;
+	cwc::glShader* g_shader_node;
+	cwc::glShaderObject* g_node_vshader;
+	cwc::glShaderObject* g_node_fshader;
 	
 #pragma region --shaders
 #define STRCPY(x) #x
@@ -50,7 +54,47 @@ namespace dfusion
 			gl_FragColor.b = depth*65525.0 - float(int(depth*65525.0));
 			gl_FragColor.a = 0.0;
 		}
-	);																											
+	);	
+
+	// vertex shader
+	const char *g_vshader_node_src = STRCPY(
+		uniform float pointRadius;  // point size in world space
+		uniform float pointScale;   // scale to calculate size in pixels
+		void main()
+		{
+			// calculate window-space point size
+			vec3 posEye = vec3(gl_ModelViewMatrix * vec4(gl_Vertex.xyz, 1.0));
+			float dist = length(posEye);
+			gl_PointSize = pointRadius * (pointScale / dist);
+
+			gl_TexCoord[0] = gl_MultiTexCoord0;
+			gl_Position = gl_ModelViewProjectionMatrix * vec4(gl_Vertex.xyz, 1.0);
+
+			gl_FrontColor = gl_Color;
+		}
+	);
+
+	// pixel shader for rendering points as shaded spheres
+	const char *g_fshader_node_src = STRCPY(
+		void main()
+		{
+			const vec3 lightDir = vec3(0.577, 0.577, 0.577);
+
+			// calculate normal from texture coordinates
+			vec3 N;
+			N.xy = gl_TexCoord[0].xy*vec2(2.0, -2.0) + vec2(-1.0, 1.0);
+			float mag = dot(N.xy, N.xy);
+
+			if (mag > 1.0) discard;   // kill pixels outside circle
+
+			N.z = sqrt(1.0 - mag);
+
+			// calculate lighting
+			float diffuse = max(0.0, dot(lightDir, N));
+
+			gl_FragColor = gl_Color *diffuse;
+		}
+	);
 #pragma endregion
 
 #pragma region --create gl context
@@ -254,7 +298,7 @@ namespace dfusion
 		if (g_glrc == nullptr)
 			throw std::exception("GpuMesh: create GLRC failed.");
 
-		// create shader
+		// create depth shader
 		g_depth_fshader = new cwc::aFragmentShader();
 		g_depth_vshader = new cwc::aVertexShader();
 		g_shader_depth = new cwc::glShader();
@@ -265,7 +309,20 @@ namespace dfusion
 		g_shader_depth->addShader(g_depth_vshader);
 		g_shader_depth->addShader(g_depth_fshader);
 		g_shader_depth->link();
-		printf("%s\n", g_shader_depth->getLinkerLog());
+		printf("[depth shader log]: %s\n", g_shader_depth->getLinkerLog());
+
+		// create node shader
+		g_node_fshader = new cwc::aFragmentShader();
+		g_node_vshader = new cwc::aVertexShader();
+		g_shader_node = new cwc::glShader();
+		g_node_fshader->loadFromMemory(g_fshader_node_src);
+		g_node_vshader->loadFromMemory(g_vshader_node_src);
+		g_node_fshader->compile();
+		g_node_vshader->compile();
+		g_shader_node->addShader(g_node_vshader);
+		g_shader_node->addShader(g_node_fshader);
+		g_shader_node->link();
+		printf("[node shader log]: %s\n", g_shader_node->getLinkerLog());
 	}
 #pragma endregion
 
@@ -285,6 +342,9 @@ namespace dfusion
 		m_render_depth_id = 0;
 		m_render_fbo_pbo_id = 0;
 		m_cuda_res_fbo = nullptr;
+
+		m_vbo_id_warpnodes = 0; 
+		m_cuda_res_warp = nullptr;
 	}
 
 	GpuMesh::GpuMesh(GpuMesh& rhs)
@@ -296,6 +356,7 @@ namespace dfusion
 	{
 		release();
 		releaseRenderer();
+		releaseRendererForWarpField();
 	}
 
 	void GpuMesh::create(size_t n)
@@ -484,6 +545,34 @@ namespace dfusion
 		}
 	}
 
+	void GpuMesh::createRendererForWarpField(const WarpField* warpField)
+	{
+		if (warpField == nullptr)
+			return;
+		if (m_vbo_id_warpnodes == 0)
+		{
+			if (g_hdc == nullptr)
+			{
+				create_context_gpumesh();
+				if (!wglMakeCurrent(g_hdc, g_glrc))
+					throw std::exception("wglMakeCurrent error");
+			}
+
+			// create buffer object
+			do{
+				glGenBuffers(1, &m_vbo_id_warpnodes);
+				CHECK_NOT_EQUAL(m_vbo_id_warpnodes, 0);
+			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id_warpnodes));
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
+
+			glBufferData(GL_ARRAY_BUFFER, WarpField::MaxNodeNum*WarpField::GraphLevelNum*sizeof(WarpNode), 
+				0, GL_DYNAMIC_DRAW);
+			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res_warp, m_vbo_id_warpnodes,
+					cudaGraphicsMapFlagsNone));
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
+	}
+
 	void GpuMesh::releaseRenderer()
 	{
 		if (m_render_fbo_id != 0)
@@ -503,12 +592,24 @@ namespace dfusion
 		m_cuda_res_fbo = nullptr;
 	}
 
-	void GpuMesh::renderToImg(const Camera& camera, LightSource light, ColorMap& img)
+	void GpuMesh::releaseRendererForWarpField()
+	{
+		if (m_vbo_id_warpnodes != 0)
+			glDeleteBuffers(1, &m_vbo_id_warpnodes);
+		if (m_cuda_res)
+			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res_warp));
+		m_cuda_res_warp = nullptr;
+		m_vbo_id_warpnodes = 0;
+	}
+
+	void GpuMesh::renderToImg(const Camera& camera, LightSource light, ColorMap& img, const WarpField* warpField)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
-		createRenderer(std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft())),
-			std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop())));
+		const int width = std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft()));
+		const int height = std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop()));
+		createRenderer(width, height);
+		createRendererForWarpField(warpField);
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -516,6 +617,12 @@ namespace dfusion
 		glEnable(GL_LIGHTING);
 		glEnable(GL_LIGHT0);
 		glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		glEnable(GL_POINT_SPRITE_ARB);
+		glTexEnvi(GL_POINT_SPRITE_ARB, GL_COORD_REPLACE_ARB, GL_TRUE);
+		glEnable(GL_VERTEX_PROGRAM_POINT_SIZE_NV);
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glPolygonOffset(1., 1.);
 
 		ldp::Float3 sv = ldp::Float3(light.diffuse.x,
 			light.diffuse.y, light.diffuse.z)*camera.getScalar();
@@ -526,8 +633,8 @@ namespace dfusion
 
 		camera.apply();
 
+		// draw mesh vertices
 		unlockVertsNormals();
-
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
 		glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
 		glEnableClientState(GL_VERTEX_ARRAY);
@@ -540,17 +647,41 @@ namespace dfusion
 		glDrawArrays(GL_TRIANGLES, 0, m_num);
 		glDisableClientState(GL_VERTEX_ARRAY);
 		glDisableClientState(GL_NORMAL_ARRAY);
-
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-		glPopAttrib();
+		// draw wrap field nodes
+		if (warpField)
+		{
+			WarpNode* gldata = nullptr;
+			size_t num_bytes = 0;
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0));
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
+			copy_warp_node_to_gl_buffer(gldata, warpField);
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0));
 
+
+			g_shader_node->begin();
+			g_shader_node->setUniform1f("pointScale", width / tanf(camera.getFov()*0.5f*(float)M_PI / 180.0f));
+			g_shader_node->setUniform1f("pointRadius", 0.01);
+
+			glDisable(GL_LIGHTING);
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
+			glVertexPointer(3, GL_FLOAT, sizeof(WarpNode), 0);
+			glEnableClientState(GL_VERTEX_ARRAY);
+
+			glColor3f(0.0, 1.0, 0.0);
+			glDrawArrays(GL_POINTS, 0, warpField->getNumNodesInLevel(0));
+			glDisableClientState(GL_VERTEX_ARRAY);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			g_shader_node->end();
+		}
+
+		glPopAttrib();
 		// do not use it:
 		// it is only useful when draw to screen
 		// here we use FBO and CUDA
 		// swap buffers seems quite slow.
 		//SwapBuffers(g_hdc);
-
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
 		glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
