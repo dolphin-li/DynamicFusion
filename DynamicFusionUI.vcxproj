@@ -157,6 +157,7 @@
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\glsl\glsl.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\glsl\glslprogram.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\GpuKdTree.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\GpuMesh.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\kinect_util.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\MarchingCubes.cpp" />
@@ -282,6 +283,7 @@
     <ClInclude Include="algorithm\DynamicFusion\DynamicFusionProcessor.h" />
     <ClInclude Include="algorithm\DynamicFusion\glsl\glsl.h" />
     <ClInclude Include="algorithm\DynamicFusion\glsl\glslprogram.h" />
+    <ClInclude Include="algorithm\DynamicFusion\GpuKdTree.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuMesh.h" />
     <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h" />
     <ClInclude Include="algorithm\DynamicFusion\kinect_util.h" />
@@ -380,6 +382,7 @@
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\thrust_wrapper.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\GpuKdTree.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\GpuMesh.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\MarchingCubes.cu" />

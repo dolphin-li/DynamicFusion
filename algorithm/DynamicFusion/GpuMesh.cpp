@@ -662,7 +662,7 @@ namespace dfusion
 
 			g_shader_node->begin();
 			g_shader_node->setUniform1f("pointScale", width / tanf(camera.getFov()*0.5f*(float)M_PI / 180.0f));
-			g_shader_node->setUniform1f("pointRadius", 0.01);
+			g_shader_node->setUniform1f("pointRadius", 0.005);
 
 			glDisable(GL_LIGHTING);
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);

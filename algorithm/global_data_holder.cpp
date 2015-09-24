@@ -5,6 +5,10 @@ using namespace ldp;
 
 void GlobalDataHolder::init()
 {
+	// debug
+	dfusion::GpuKdTree::test();
+	// end debug
+
 	m_kinect.InitKinect(1);
 	m_depth_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
 	m_depth_d.create(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
@@ -15,6 +19,8 @@ void GlobalDataHolder::init()
 	m_lights.spec = make_float3(0, 0, 0);
 
 	m_processor.init(m_dparam);
+
+
 }
 
 void GlobalDataHolder::saveDepth(const std::vector<dfusion::depthtype>& depth_h, std::string filename)

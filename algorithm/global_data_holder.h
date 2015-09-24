@@ -11,6 +11,7 @@
 #include "GpuMesh.h"
 #include "DynamicFusionParam.h"
 #include "DynamicFusionProcessor.h"
+#include "GpuKdTree.h"
 class GlobalDataHolder
 {
 public:
