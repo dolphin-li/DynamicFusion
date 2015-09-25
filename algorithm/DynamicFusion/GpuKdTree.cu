@@ -4,11 +4,8 @@
 namespace dfusion
 {
 	texture<int2, cudaTextureType1D, cudaReadModeElementType> g_splits;
-	texture<int, cudaTextureType1D, cudaReadModeElementType> g_child1;
-	texture<int, cudaTextureType1D, cudaReadModeElementType> g_parent;
-	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_aabbLow;
-	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_aabbHigh;
-	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_elements;
+	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_elements_aabbLow_aabbHigh;
+	texture<int, cudaTextureType1D, cudaReadModeElementType> g_child1_parent;
 
 	typedef GpuKdTree::SplitInfo SplitInfo;
 	//! used to update the left/right pointers and aabb infos after the node splits
@@ -285,30 +282,6 @@ namespace dfusion
 		}
 	}
 
-	__global__ void init_splitInfo_kernel(GpuKdTree::SplitInfo* splits, int n, int nPoints)
-	{
-		int tid = threadIdx.x + blockIdx.x*blockDim.x;
-		if (tid < n)
-		{
-			GpuKdTree::SplitInfo s;
-			s.left = 0;
-			s.right = 0;
-			if (tid == 0)
-				s.right = nPoints;
-			splits[tid] = s;
-		}
-	}
-
-	__global__ void copy_points_kernel(const void* points_in, int points_in_stride,
-		float4* points_out, int n)
-	{
-		int tid = threadIdx.x + blockIdx.x*blockDim.x;
-		if (tid < n)
-		{
-			points_out[tid] = *(const float4*)((const char*)points_in + points_in_stride*tid);
-		}
-	}
-
 	__global__ void set_addr3_kernel(set_addr3 sa, int* out, int n)
 	{
 		int tid = threadIdx.x + blockIdx.x*blockDim.x;
@@ -331,107 +304,109 @@ namespace dfusion
 		}
 	}
 
-	GpuKdTree::GpuKdTree(const void* points, int points_stride, int n, int max_leaf_size)
+	__global__ void init_data_kernel(
+		const void* points_in, int points_in_stride,
+		float4* points_out, float* point_x, float* point_y, float* point_z,
+		float* tmp_pt_x, float* tmp_pt_y, float* tmp_pt_z,
+		int* index_x, int* index_y, int* index_z, int nPoints,
+		int* child1, int* parent, SplitInfo* splits, int prealloc)
 	{
-		max_leaf_size_ = max_leaf_size;
-		delete_node_info_ = 0;
-
-		points_.create(n);
+		int tid = threadIdx.x + blockIdx.x*blockDim.x;
+		if (tid < nPoints)
 		{
-			dim3 block(256);
-			dim3 grid(divUp(points_.size(), block.x));
-			copy_points_kernel << <grid, block >> >(points, points_stride,
-				points_.ptr(), n);
+			float4 xyz = *(const float4*)((const char*)points_in + points_in_stride*tid);
+			points_out[tid] = xyz;
+			point_x[tid] = xyz.x;
+			point_y[tid] = xyz.y;
+			point_z[tid] = xyz.z;
+			tmp_pt_x[tid] = xyz.x;
+			tmp_pt_y[tid] = xyz.y;
+			tmp_pt_z[tid] = xyz.z;
+			index_x[tid] = tid;
+			index_y[tid] = tid;
+			index_z[tid] = tid;
 		}
-		int prealloc = divUp(points_.size() * 16, max_leaf_size_);
-		allocation_info_host_.resize(3);
-		allocation_info_.create(3);
-		allocation_info_host_[GpuKdTree::NodeCount] = 1;
-		allocation_info_host_[GpuKdTree::NodesAllocated] = prealloc;
-		allocation_info_host_[GpuKdTree::OutOfSpace] = 0;
-		cudaSafeCall(cudaMemcpy(allocation_info_.ptr(), allocation_info_host_.data(),
-			allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
-
-		child1_.create(prealloc);
-		thrust_wrapper::assign(child1_.ptr(), -1, child1_.size());
-		parent_.create(prealloc);
-		thrust_wrapper::assign(parent_.ptr(), -1, parent_.size());
-		splits_.create(prealloc);
+		if (tid < prealloc)
 		{
-			dim3 block(256);
-			dim3 grid(divUp(splits_.size(),block.x));
-			init_splitInfo_kernel << <grid, block >> >(splits_.ptr(),
-				splits_.size(), points_.size());
+			child1[tid] = -1;
+			parent[tid] = -1;
+
+			GpuKdTree::SplitInfo s;
+			s.left = 0;
+			s.right = 0;
+			if (tid == 0)
+				s.right = nPoints;
+			splits[tid] = s;
 		}
-
-		aabb_min_.create(prealloc);
-		thrust_wrapper::assign(aabb_min_.ptr(), make_float4(0.f, 0.f, 0.f, 0.f), aabb_min_.size());
-		aabb_max_.create(prealloc);
-		thrust_wrapper::assign(aabb_max_.ptr(), make_float4(0.f, 0.f, 0.f, 0.f), aabb_max_.size());
-
-		index_x_.create(points_.size());
-		thrust_wrapper::assign(index_x_.ptr(), 0, index_x_.size());
-		index_y_.create(points_.size());
-		thrust_wrapper::assign(index_y_.ptr(), 0, index_y_.size());
-		index_z_.create(points_.size());
-		thrust_wrapper::assign(index_z_.ptr(), 0, index_z_.size());
-
-		owners_x_.create(points_.size());
-		thrust_wrapper::assign(owners_x_.ptr(), 0, owners_x_.size());
-		owners_y_.create(points_.size());
-		thrust_wrapper::assign(owners_y_.ptr(), 0, owners_y_.size());
-		owners_z_.create(points_.size());
-		thrust_wrapper::assign(owners_z_.ptr(), 0, owners_z_.size());
-
-		leftright_x_.create(points_.size());
-		thrust_wrapper::assign(leftright_x_.ptr(), 0, leftright_x_.size());
-		leftright_y_.create(points_.size());
-		thrust_wrapper::assign(leftright_y_.ptr(), 0, leftright_y_.size());
-		leftright_z_.create(points_.size());
-		thrust_wrapper::assign(leftright_z_.ptr(), 0, leftright_z_.size());
-
-		tmp_index_.create(points_.size());
-		thrust_wrapper::assign(tmp_index_.ptr(), 0, tmp_index_.size());
-		tmp_owners_.create(points_.size());
-		thrust_wrapper::assign(tmp_owners_.ptr(), 0, tmp_owners_.size());
-		tmp_misc_.create(points_.size());
-		thrust_wrapper::assign(tmp_misc_.ptr(), 0, tmp_misc_.size());
-
-		points_x_.create(points_.size());
-		thrust_wrapper::assign(points_x_.ptr(), 0, points_x_.size());
-		points_y_.create(points_.size());
-		thrust_wrapper::assign(points_y_.ptr(), 0, points_y_.size());
-		points_z_.create(points_.size());
-		thrust_wrapper::assign(points_z_.ptr(), 0, points_z_.size());
-		delete_node_info_ = false;
 	}
 
-	void GpuKdTree::buildTree()
+	GpuKdTree::GpuKdTree()
 	{
-		thrust_wrapper::seperate_channels(points_.ptr(), points_x_.ptr(), 
-			points_y_.ptr(), points_z_.ptr(), points_.size());
+		nInputPoints_ = 0;
+		nAllocatedPoints_ = 0;
+		max_leaf_size_ = 0;
+		prealloc_ = 0;
 
-		thrust_wrapper::make_counting_array(index_x_.ptr(), points_.size(), 0);
-		thrust_wrapper::copy(index_y_.ptr(), index_x_.ptr(), index_x_.size());
-		thrust_wrapper::copy(index_z_.ptr(), index_x_.ptr(), index_x_.size());
+		// mempool_.ptr(), num = nInputPoints_
+		input_points_ptr_ = nullptr;
+		points_ptr_ = nullptr;
+		aabb_min_ptr_ = nullptr;
+		aabb_max_ptr_ = nullptr;
+		points_x_ptr_ = nullptr;
+		points_y_ptr_ = nullptr;
+		points_z_ptr_ = nullptr;
+		splits_ptr_ = nullptr;
+		child1_ptr_ = nullptr;
+		parent_ptr_ = nullptr;
+		index_x_ptr_ = nullptr;
+		index_y_ptr_ = nullptr;
+		index_z_ptr_ = nullptr;
+		owner_x_ptr_ = nullptr;
+		owner_y_ptr_ = nullptr;
+		owner_z_ptr_ = nullptr;
+		leftright_x_ptr_ = nullptr;
+		leftright_y_ptr_ = nullptr;
+		leftright_z_ptr_ = nullptr;
+		tmp_index_ptr_ = nullptr;
+		tmp_owners_ptr_ = nullptr;
+		tmp_misc_ptr_ = nullptr;
+		allocation_info_ptr_ = nullptr;
+	}
 
-		DeviceArray<float> tmpv(points_.size());
-
+	void GpuKdTree::buildTree(const void* points, int points_stride, int n, int max_leaf_size)
+	{
+		// memory allocation
+		allocateMemPool(n, max_leaf_size);
+		
+		// data initialization
+		// input_points
+		{
+			dim3 block(256);
+			int num = max(nInputPoints_, prealloc_);
+			dim3 grid(divUp(num, block.x));
+			init_data_kernel << <grid, block >> >(points, points_stride,
+				input_points_ptr_, points_x_ptr_, points_y_ptr_,points_z_ptr_,
+				tmp_pt_x_ptr_, tmp_pt_y_ptr_, tmp_pt_z_ptr_,
+				index_x_ptr_, index_y_ptr_, index_z_ptr_, nInputPoints_,
+				child1_ptr_, parent_ptr_, splits_ptr_, prealloc_);
+		}
+		// allocation info
+		cudaSafeCall(cudaMemcpy(allocation_info_ptr_, allocation_info_host_.data(),
+			allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
+		
 		// create sorted index list -> can be used to compute AABBs in O(1)
-		thrust_wrapper::copy(tmpv.ptr(), points_x_.ptr(), points_x_.size());
-		thrust_wrapper::sort_by_key(tmpv.ptr(), index_x_.ptr(), index_x_.size());
-		thrust_wrapper::copy(tmpv.ptr(), points_y_.ptr(), points_y_.size());
-		thrust_wrapper::sort_by_key(tmpv.ptr(), index_y_.ptr(), index_y_.size());
-		thrust_wrapper::copy(tmpv.ptr(), points_z_.ptr(), points_z_.size());
-		thrust_wrapper::sort_by_key(tmpv.ptr(), index_z_.ptr(), index_z_.size());
-
+		thrust_wrapper::sort_by_key(tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
+		thrust_wrapper::sort_by_key(tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
+		thrust_wrapper::sort_by_key(tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
+		
+		
 		// bounding box info
 		{
 			dim3 block(1);
 			dim3 grid(1);
-			collect_aabb_kernel << <grid, block >> >(aabb_min_.ptr(), aabb_max_.ptr(),
-				points_x_.ptr(), index_x_.ptr(), points_y_.ptr(), index_y_.ptr(),
-				points_z_.ptr(), index_z_.ptr(), points_.size());
+			collect_aabb_kernel << <grid, block >> >(aabb_min_ptr_, aabb_max_ptr_,
+				points_x_ptr_, index_x_ptr_, points_y_ptr_, index_y_ptr_,
+				points_z_ptr_, index_z_ptr_, nInputPoints_);
 		}
 		
 		int last_node_count = 0;
@@ -439,14 +414,14 @@ namespace dfusion
 		{
 			SplitNodes sn;
 			sn.maxPointsPerNode = max_leaf_size_;
-			sn.node_count = allocation_info_.ptr() + NodeCount;
-			sn.nodes_allocated = allocation_info_.ptr() + NodesAllocated;
-			sn.out_of_space = allocation_info_.ptr() + OutOfSpace;
-			sn.child1_ = child1_.ptr();
-			sn.parent_ = parent_.ptr();
-			sn.splits_ = splits_.ptr();
-			sn.aabbMin_ = aabb_min_.ptr();
-			sn.aabbMax_ = aabb_max_.ptr();
+			sn.node_count = allocation_info_ptr_ + NodeCount;
+			sn.nodes_allocated = allocation_info_ptr_ + NodesAllocated;
+			sn.out_of_space = allocation_info_ptr_ + OutOfSpace;
+			sn.child1_ = child1_ptr_;
+			sn.parent_ = parent_ptr_;
+			sn.splits_ = splits_ptr_;
+			sn.aabbMin_ = aabb_min_ptr_;
+			sn.aabbMax_ = aabb_max_ptr_;
 			if (last_node_count)
 			{
 				dim3 block(256);
@@ -455,7 +430,7 @@ namespace dfusion
 			}
 
 			// copy allocation info to host
-			cudaSafeCall(cudaMemcpy(allocation_info_host_.data(), allocation_info_.ptr(),
+			cudaSafeCall(cudaMemcpy(allocation_info_host_.data(), allocation_info_ptr_,
 				allocation_info_host_.size()*sizeof(int), cudaMemcpyDeviceToHost));
 
 			if (last_node_count == allocation_info_host_[NodeCount]) // no more nodes were split -> done
@@ -466,67 +441,118 @@ namespace dfusion
 			// a node was un-splittable due to a lack of space
 			if (allocation_info_host_[OutOfSpace] == 1) 
 			{
+				printf("GpuKdTree::buildTree(): warning: dynamic resize needed!\n");
 				resize_node_vectors(allocation_info_host_[NodesAllocated] * 2);
 				allocation_info_host_[OutOfSpace] = 0;
 				allocation_info_host_[NodesAllocated] *= 2;
-				cudaSafeCall(cudaMemcpy(allocation_info_.ptr(), allocation_info_host_.data(),
+				cudaSafeCall(cudaMemcpy(allocation_info_ptr_, allocation_info_host_.data(),
 					allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
 			}
 
 			// foreach point: point was in node that was split?move it to child (leaf) node : do nothing
-			MovePointsToChildNodes sno(child1_.ptr(), splits_.ptr(), points_x_.ptr(),
-				points_y_.ptr(), points_z_.ptr(), owners_x_.ptr(), owners_y_.ptr(),
-				owners_z_.ptr(), leftright_x_.ptr(), leftright_y_.ptr(), leftright_z_.ptr()
+			MovePointsToChildNodes sno(child1_ptr_, splits_ptr_, points_x_ptr_,
+				points_y_ptr_, points_z_ptr_, owner_x_ptr_, owner_y_ptr_,
+				owner_z_ptr_, leftright_x_ptr_, leftright_y_ptr_, leftright_z_ptr_
 				);
 			{
 				dim3 block(256);
-				dim3 grid(divUp(points_.size(), block.x));
+				dim3 grid(divUp(nInputPoints_, block.x));
 				movePointsToChildNodes_kernel << <grid, block >> >(sno, 
-					index_x_.ptr(), index_y_.ptr(), index_z_.ptr(),
-					points_.size());
+					index_x_ptr_, index_y_ptr_, index_z_ptr_, nInputPoints_);
 			}
 
 			// move points around so that each leaf node's points are continuous
-			separate_left_and_right_children(index_x_, owners_x_, tmp_index_, tmp_owners_, leftright_x_);
-			tmp_index_.copyTo(index_x_);
-			tmp_owners_.copyTo(owners_x_);
-			separate_left_and_right_children(index_y_, owners_y_, tmp_index_, tmp_owners_, leftright_y_, false);
-			tmp_index_.copyTo(index_y_);
-			separate_left_and_right_children(index_z_, owners_z_, tmp_index_, tmp_owners_, leftright_z_, false);
-			tmp_index_.copyTo(index_z_);
+			separate_left_and_right_children(index_x_ptr_, owner_x_ptr_, tmp_index_ptr_, 
+				tmp_owners_ptr_, leftright_x_ptr_);
+			cudaMemcpy(index_x_ptr_, tmp_index_ptr_, nInputPoints_*sizeof(int), cudaMemcpyDeviceToDevice);
+			cudaMemcpy(owner_x_ptr_, tmp_owners_ptr_, nInputPoints_*sizeof(int), cudaMemcpyDeviceToDevice);
+			separate_left_and_right_children(index_y_ptr_, owner_y_ptr_, tmp_index_ptr_, tmp_owners_ptr_,
+				leftright_y_ptr_, false);
+			cudaMemcpy(index_y_ptr_, tmp_index_ptr_, nInputPoints_*sizeof(int), cudaMemcpyDeviceToDevice);
+			separate_left_and_right_children(index_z_ptr_, owner_z_ptr_, tmp_index_ptr_, tmp_owners_ptr_, 
+				leftright_z_ptr_, false);
+			cudaMemcpy(index_z_ptr_, tmp_index_ptr_, nInputPoints_*sizeof(int), cudaMemcpyDeviceToDevice);
 
 			// calculate new AABB etc
-			update_leftright_and_aabb(points_x_, points_y_, points_z_, index_x_, 
-				index_y_, index_z_, owners_x_, splits_, aabb_min_, aabb_max_);
+			update_leftright_and_aabb(points_x_ptr_, points_y_ptr_, points_z_ptr_, index_x_ptr_,
+				index_y_ptr_, index_z_ptr_, owner_x_ptr_, splits_ptr_, aabb_min_ptr_, aabb_max_ptr_);
 		} 
+		
+		thrust_wrapper::gather(input_points_ptr_, index_x_ptr_, points_ptr_, nInputPoints_);
 
-		DeviceArray<float4> points_backup;
-		points_.copyTo(points_backup);
-		thrust_wrapper::gather(points_backup.ptr(), index_x_.ptr(), points_.ptr(), points_.size());
+	}
 
-		// bind src to texture
-		size_t offset;
-		cudaChannelFormatDesc desc_int2 = cudaCreateChannelDesc<int2>();
-		cudaBindTexture(&offset, &g_splits, splits_.ptr(), &desc_int2,
-			splits_.size()*sizeof(int2));
-		assert(offset == 0);
-		cudaChannelFormatDesc desc_int = cudaCreateChannelDesc<int>();
-		cudaBindTexture(&offset, &g_child1, child1_.ptr(), &desc_int,
-			child1_.size()*sizeof(int));
-		assert(offset == 0);
-		cudaBindTexture(&offset, &g_parent, parent_.ptr(), &desc_int,
-			parent_.size()*sizeof(int));
-		assert(offset == 0);
-		cudaChannelFormatDesc desc_f4 = cudaCreateChannelDesc<float4>();
-		cudaBindTexture(&offset, &g_aabbLow, aabb_min_.ptr(), &desc_f4,
-			aabb_min_.size()*sizeof(float4));
-		assert(offset == 0);
-		cudaBindTexture(&offset, &g_aabbHigh, aabb_max_.ptr(), &desc_f4,
-			aabb_max_.size()*sizeof(float4));
-		assert(offset == 0);
-		cudaBindTexture(&offset, &g_elements, points_.ptr(), &desc_f4,
-			points_.size()*sizeof(float4));
-		assert(offset == 0);
+	void GpuKdTree::allocateMemPool(int nInputPoints, int maxLeafSize)
+	{
+		nInputPoints_ = nInputPoints;
+		max_leaf_size_ = maxLeafSize;
+		if (nAllocatedPoints_ < nInputPoints_)
+		{
+			nAllocatedPoints_ = ceil(nInputPoints_ * 1.5);
+			prealloc_ = divUp(nAllocatedPoints_ * 16, max_leaf_size_);
+			mempool_.create(
+				nAllocatedPoints_*sizeof(float4) * 2 +
+				prealloc_ * sizeof(float4) * 2 +
+				nAllocatedPoints_ * sizeof(float) * 6 +
+				prealloc_ * sizeof(SplitInfo) +
+				prealloc_ * sizeof(int) * 2 +
+				nAllocatedPoints_ * sizeof(int) * 12 +
+				4
+				);
+			printf("GpuKdTree: re-allocate\n");
+
+			// assigne buffers
+			input_points_ptr_ = (float4*)mempool_.ptr();
+			points_ptr_ = input_points_ptr_ + nAllocatedPoints_;
+			aabb_min_ptr_ = points_ptr_ + nAllocatedPoints_;
+			aabb_max_ptr_ = aabb_min_ptr_ + prealloc_;
+			points_x_ptr_ = (float*)(aabb_max_ptr_ + prealloc_);
+			points_y_ptr_ = points_x_ptr_ + nAllocatedPoints_;
+			points_z_ptr_ = points_y_ptr_ + nAllocatedPoints_;
+			tmp_pt_x_ptr_ = points_z_ptr_ + nAllocatedPoints_;
+			tmp_pt_y_ptr_ = tmp_pt_x_ptr_ + nAllocatedPoints_;
+			tmp_pt_z_ptr_ = tmp_pt_y_ptr_ + nAllocatedPoints_;
+			splits_ptr_ = (SplitInfo*)(tmp_pt_z_ptr_ + nAllocatedPoints_);
+			child1_ptr_ = (int*)(splits_ptr_+prealloc_);
+			parent_ptr_ = child1_ptr_ + prealloc_;
+			index_x_ptr_ = parent_ptr_ + prealloc_;
+			index_y_ptr_ = index_x_ptr_ + nAllocatedPoints_;
+			index_z_ptr_ = index_y_ptr_ + nAllocatedPoints_;
+			owner_x_ptr_ = index_z_ptr_ + nAllocatedPoints_;
+			owner_y_ptr_ = owner_x_ptr_ + nAllocatedPoints_;
+			owner_z_ptr_ = owner_y_ptr_ + nAllocatedPoints_;
+			leftright_x_ptr_ = owner_z_ptr_ + nAllocatedPoints_;
+			leftright_y_ptr_ = leftright_x_ptr_ + nAllocatedPoints_;
+			leftright_z_ptr_ = leftright_y_ptr_ + nAllocatedPoints_;
+			tmp_index_ptr_ = leftright_z_ptr_ + nAllocatedPoints_;
+			tmp_owners_ptr_ = tmp_index_ptr_ + nAllocatedPoints_;
+			tmp_misc_ptr_ = tmp_owners_ptr_ + nAllocatedPoints_;
+			allocation_info_ptr_ = tmp_misc_ptr_ + nAllocatedPoints_;
+
+			// bind src to texture
+			size_t offset;
+			cudaChannelFormatDesc desc_int2 = cudaCreateChannelDesc<int2>();
+			cudaBindTexture(&offset, &g_splits, splits_ptr_, &desc_int2,
+				prealloc_*sizeof(int2));
+			assert(offset == 0);
+			cudaChannelFormatDesc desc_int = cudaCreateChannelDesc<int>();
+			cudaBindTexture(&offset, &g_child1_parent, child1_ptr_, &desc_int,
+				prealloc_*sizeof(int)*2);
+			assert(offset == 0);
+			cudaChannelFormatDesc desc_f4 = cudaCreateChannelDesc<float4>();
+			cudaBindTexture(&offset, &g_elements_aabbLow_aabbHigh, points_ptr_, &desc_f4,
+				prealloc_*sizeof(float4)*2 + nAllocatedPoints_*sizeof(float4));
+			assert(offset == 0);
+		}
+
+
+		allocation_info_host_.resize(3);
+		allocation_info_host_[GpuKdTree::NodeCount] = 1;
+		allocation_info_host_[GpuKdTree::NodesAllocated] = prealloc_;
+		allocation_info_host_[GpuKdTree::OutOfSpace] = 0;
+
+		// reset mem
+		cudaMemset(mempool_.ptr(), 0, mempool_.size()*mempool_.elem_size);
 	}
 
 	namespace KdTreeCudaPrivate
@@ -692,7 +718,7 @@ namespace dfusion
 
 		template< typename GPUResultSet>
 		__device__ void searchNeighbors(const float4& q,
-			GPUResultSet& result)
+			GPUResultSet& result, int parent_offset, int ablow_offset, int abhigh_offset)
 		{
 			bool backtrack = false;
 			int lastNode = -1;
@@ -708,7 +734,7 @@ namespace dfusion
 					+ (split.split_dim == 2)*(q.z - split.split_val);
 
 				// children are next to each other: leftChild+1 == rightChild
-				int leftChild = tex1Dfetch(g_child1, current);
+				int leftChild = tex1Dfetch(g_child1_parent, current);
 				int bestChild = leftChild + (diff1>=0);
 				int otherChild = leftChild + (diff1<0);
 
@@ -716,13 +742,13 @@ namespace dfusion
 					/* If this is a leaf node, then do check and return. */
 					if (leftChild == -1) {
 						for (int i = split.left; i < split.right; ++i) {
-							float dist = CudaL2Distance::dist(tex1Dfetch(g_elements, i), q);
+							float dist = CudaL2Distance::dist(tex1Dfetch(g_elements_aabbLow_aabbHigh, i), q);
 							result.insert(i, dist);
 						}
 
 						backtrack = true;
 						lastNode = current;
-						current = tex1Dfetch(g_parent, current); 
+						current = tex1Dfetch(g_child1_parent, current + parent_offset);
 					}
 					else { // go to closer child node
 						lastNode = current;
@@ -732,8 +758,8 @@ namespace dfusion
 				else { 
 					// continue moving back up the tree or visit far node?
 					// minimum possible distance between query point and a point inside the AABB
-					float4 aabbMin = tex1Dfetch(g_aabbLow, otherChild);
-					float4 aabbMax = tex1Dfetch(g_aabbHigh, otherChild);
+					float4 aabbMin = tex1Dfetch(g_elements_aabbLow_aabbHigh, otherChild+ablow_offset);
+					float4 aabbMax = tex1Dfetch(g_elements_aabbLow_aabbHigh, otherChild + abhigh_offset);
 					float mindistsq = (q.x < aabbMin.x) * CudaL2Distance::axisDist(q.x, aabbMin.x)
 						+ (q.x > aabbMax.x) * CudaL2Distance::axisDist(q.x, aabbMax.x)
 						+ (q.y < aabbMin.y) * CudaL2Distance::axisDist(q.y, aabbMin.y)
@@ -751,7 +777,7 @@ namespace dfusion
 					}
 					else {
 						lastNode = current;
-						current = tex1Dfetch(g_parent, current); 
+						current = tex1Dfetch(g_child1_parent, current + parent_offset);
 					}
 				}
 			}
@@ -760,7 +786,8 @@ namespace dfusion
 		template< typename GPUResultSet>
 		__global__ void nearestKernel(const float4* query,
 			int* resultIndex, float* resultDist,
-			int querysize, GPUResultSet result)
+			int querysize, GPUResultSet result,
+			int parent_offset, int ablow_offset, int abhigh_offset)
 		{
 			typedef float DistanceType;
 			typedef float ElementType;
@@ -772,7 +799,7 @@ namespace dfusion
 			float4 q = query[tid];
 
 			result.setResultLocation(resultDist, resultIndex, tid);
-			searchNeighbors(q, result);
+			searchNeighbors(q, result, parent_offset, ablow_offset, abhigh_offset);
 			result.finish();
 		}
 
@@ -786,6 +813,8 @@ namespace dfusion
 
 	void GpuKdTree::knnSearchGpu(const float4* queries, int* indices, float* dists, size_t knn, size_t n) const
 	{
+		if (n == 0)
+			return;
 		int threadsPerBlock = 128;
 		int blocksPerGrid = divUp(n, threadsPerBlock);
 		bool sorted = false;
@@ -796,7 +825,10 @@ namespace dfusion
 				indices,
 				dists,
 				n, 
-				KdTreeCudaPrivate::SingleResultSet<float>());
+				KdTreeCudaPrivate::SingleResultSet<float>(),
+				prealloc_,
+				nAllocatedPoints_,
+				nAllocatedPoints_+prealloc_);
 		}
 		else {
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
@@ -804,51 +836,54 @@ namespace dfusion
 				indices,
 				dists,
 				n,
-				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted)
+				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
+				prealloc_,
+				nAllocatedPoints_,
+				nAllocatedPoints_ + prealloc_
 				);
 		}
 
 		DeviceArray<int> tmp(n);
 		thrust_wrapper::copy(tmp.ptr(), indices, n);
 		KdTreeCudaPrivate::mapIndicesKerenel << <blocksPerGrid, threadsPerBlock >> >
-			(KdTreeCudaPrivate::map_indices(index_x_), tmp.ptr(), indices, n);
+			(KdTreeCudaPrivate::map_indices(index_x_ptr_), tmp.ptr(), indices, n);
 	}
 
 	void GpuKdTree::update_leftright_and_aabb(
-		const DeviceArray<float>& x,
-		const DeviceArray<float>& y,
-		const DeviceArray<float>& z,
-		const DeviceArray<int>& ix,
-		const DeviceArray<int>& iy,
-		const DeviceArray<int>& iz,
-		const DeviceArray<int>& owners,
-		DeviceArray<SplitInfo>& splits,
-		DeviceArray<float4>& aabbMin,
-		DeviceArray<float4>& aabbMax)
+		const float* x,
+		const float* y,
+		const float* z,
+		const int* ix,
+		const int* iy,
+		const int* iz,
+		const int* owners,
+		SplitInfo* splits,
+		float4* aabbMin,
+		float4* aabbMax)
 	{
-		DeviceArray<int>& labelsUnique = tmp_owners_;
-		DeviceArray<int>& countsUnique = tmp_index_;
+		int* labelsUnique = tmp_owners_ptr_;
+		int* countsUnique = tmp_index_ptr_;
 		// assume: points of each node are continuous in the array
 
 		// find which nodes are here, and where each node's points begin and end
 		int unique_labels = thrust_wrapper::unique_counting_by_key_copy(
-			owners.ptr(), 0, labelsUnique.ptr(), countsUnique.ptr(), owners.size());
+			owners, 0, labelsUnique, countsUnique, nInputPoints_);
 
 		// update the info
 		SetLeftAndRightAndAABB s;
-		s.maxPoints = x.size();
+		s.maxPoints = nInputPoints_;
 		s.nElements = unique_labels;
-		s.nodes = splits.ptr();
-		s.counts = countsUnique.ptr();
-		s.labels = labelsUnique.ptr();
-		s.x = x.ptr();
-		s.y = y.ptr();
-		s.z = z.ptr();
-		s.ix = ix.ptr();
-		s.iy = iy.ptr();
-		s.iz = iz.ptr();
-		s.aabbMin = aabbMin.ptr();
-		s.aabbMax = aabbMax.ptr();
+		s.nodes = splits;
+		s.counts = countsUnique;
+		s.labels = labelsUnique;
+		s.x = x;
+		s.y = y;
+		s.z = z;
+		s.ix = ix;
+		s.iy = iy;
+		s.iz = iz;
+		s.aabbMin = aabbMin;
+		s.aabbMax = aabbMax;
 
 		dim3 block(256);
 		dim3 grid(divUp(unique_labels, block.x));
@@ -864,31 +899,31 @@ namespace dfusion
 	//! (basically the split primitive according to sengupta et al)
 	//! about twice as fast as thrust::partition
 	void GpuKdTree::separate_left_and_right_children(
-		DeviceArray<int>& key_in, 
-		DeviceArray<int>& val_in, 
-		DeviceArray<int>& key_out, 
-		DeviceArray<int>& val_out, 
-		DeviceArray<int>& left_right_marks, 
+		int* key_in,
+		int* val_in,
+		int* key_out,
+		int* val_out,
+		int* left_right_marks,
 		bool scatter_val_out)
 	{
-		DeviceArray<int>* f_tmp = &val_out;
-		DeviceArray<int>* addr_tmp = &tmp_misc_;
+		int* f_tmp = val_out;
+		int* addr_tmp = tmp_misc_ptr_;
 
-		thrust_wrapper::exclusive_scan(left_right_marks.ptr(), f_tmp->ptr(), left_right_marks.size());
+		thrust_wrapper::exclusive_scan(left_right_marks, f_tmp, nInputPoints_);
 
 		set_addr3 sa;
-		sa.val_ = left_right_marks.ptr();
-		sa.f_ = f_tmp->ptr();
-		sa.npoints_ = key_in.size();
+		sa.val_ = left_right_marks;
+		sa.f_ = f_tmp;
+		sa.npoints_ = nInputPoints_;
 		{
 			dim3 block(256);
-			dim3 grid(divUp(val_in.size(), block.x));
-			set_addr3_kernel << <grid, block >> >(sa, addr_tmp->ptr(), val_in.size());
+			dim3 grid(divUp(nInputPoints_, block.x));
+			set_addr3_kernel << <grid, block >> >(sa, addr_tmp, nInputPoints_);
 			cudaSafeCall(cudaGetLastError());
 		}
-		thrust_wrapper::scatter(key_in.ptr(), addr_tmp->ptr(), key_out.ptr(), key_in.size());
+		thrust_wrapper::scatter(key_in, addr_tmp, key_out, nInputPoints_);
 		if (scatter_val_out) 
-			thrust_wrapper::scatter(val_in.ptr(), addr_tmp->ptr(), val_out.ptr(), val_in.size());
+			thrust_wrapper::scatter(val_in, addr_tmp, val_out, nInputPoints_);
 	}
 
 	template<class T>
@@ -906,14 +941,15 @@ namespace dfusion
 	//! new_size elements will be added to all vectors.
 	void GpuKdTree::resize_node_vectors(size_t new_size)
 	{
-		resize_vec(child1_, new_size, -1);
-		resize_vec(parent_, new_size, -1);
-		SplitInfo s;
-		s.left = 0;
-		s.right = 0;
-		resize_vec(splits_, new_size, s);
-		float4 f = make_float4(0,0,0,0);
-		resize_vec(aabb_min_, new_size, f);
-		resize_vec(aabb_max_, new_size, f);
+		throw std::exception("not supported!");
+		//resize_vec(child1_, new_size, -1);
+		//resize_vec(parent_, new_size, -1);
+		//SplitInfo s;
+		//s.left = 0;
+		//s.right = 0;
+		//resize_vec(splits_, new_size, s);
+		//float4 f = make_float4(0,0,0,0);
+		//resize_vec(aabb_min_, new_size, f);
+		//resize_vec(aabb_max_, new_size, f);
 	}
 }

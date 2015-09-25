@@ -7,6 +7,7 @@ void GlobalDataHolder::init()
 {
 	// debug
 	dfusion::GpuKdTree::test();
+	exit(0);
 	// end debug
 
 	m_kinect.InitKinect(1);

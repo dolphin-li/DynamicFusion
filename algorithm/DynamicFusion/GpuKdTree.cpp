@@ -14,8 +14,8 @@ namespace dfusion
 		try
 		{
 			const int Knn = 1;
-			const int maxLeafNodes = 32;
-			const int nQueryX = 256;
+			const int maxLeafNodes = 16;
+			const int nQueryX = 50;
 			const int nQuery =  nQueryX * nQueryX * nQueryX;
 
 			ObjMesh mesh;
@@ -84,32 +84,36 @@ namespace dfusion
 
 				// gpu build
 				ldp::tic();
-				GpuKdTree tree_d(points_d.ptr(), sizeof(float4), points_d.size(), maxLeafNodes);
-				tree_d.buildTree();
+				GpuKdTree tree_d;
+				for (int k = 0; k < 100; k++)
+				{
+					tree_d.buildTree(points_d.ptr(), sizeof(float4), points_d.size(), maxLeafNodes);
+					//Sleep(100);
+				}
 				cudaThreadSynchronize();
 				ldp::toc("gpu build time");
+				//continue;
 
 				ldp::tic();
 				tree_d.knnSearchGpu(points_d_query.ptr(), index_d.ptr(), dist_d.ptr(), Knn, points_d_query.size());
 				cudaThreadSynchronize();
 				ldp::toc("gpu search time");
 
-
-				////// compare
-				//index_d.download(index_d_host);
-				//dist_d.download(dist_d_host);
-				//for (size_t i = 0; i < index_d_host.size(); i++)
-				//{
-				//	int id1 = index_h[i];
-				//	int id2 = index_d_host[i];
-				//	float dt1 = dist_h[i];
-				//	float dt2 = sqrt(dist_d_host[i]);
-				//	if (id1 != id2)
-				//	{
-				//		if (fabs(dt1-dt2)>1e-7)
-				//		printf("error, cpu, gpu not matched: %d (%d %f) (%d %f)\n", i, id1, dt1, id2, dt2);
-				//	}
-				//}
+				//// compare
+				index_d.download(index_d_host);
+				dist_d.download(dist_d_host);
+				for (size_t i = 0; i < index_d_host.size(); i++)
+				{
+					int id1 = index_h[i];
+					int id2 = index_d_host[i];
+					float dt1 = dist_h[i];
+					float dt2 = sqrt(dist_d_host[i]);
+					if (id1 != id2)
+					{
+						if (fabs(dt1-dt2)>1e-7)
+						printf("error, cpu, gpu not matched: %d (%d %f) (%d %f)\n", i, id1, dt1, id2, dt2);
+					}
+				}
 			}
 		}// end for try
 		catch (std::exception e)
