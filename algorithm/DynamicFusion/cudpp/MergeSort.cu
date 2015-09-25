@@ -36,6 +36,7 @@ namespace dfusion
 		return 1U << (W - __clz(x - 1));
 	}
 
+#pragma region MergeSort
 	template<class KeyType, uint sortDir> static inline __device__ uint binarySearchInclusive(
 		KeyType val, KeyType *data, uint L, uint stride)
 	{
@@ -610,21 +611,23 @@ namespace dfusion
 		}
 	};
 
-	MergeSort<int, int> g_merge_sort_i_i;
-	MergeSort<int, float> g_merge_sort_i_f;
-	MergeSort<float, int> g_merge_sort_f_i;
-	DeviceArray<char> g_merge_sort_buf;
+	//MergeSort<int, int> g_merge_sort_i_i;
+	//MergeSort<int, float> g_merge_sort_i_f;
+	//MergeSort<float, int> g_merge_sort_f_i;
+	//DeviceArray<char> g_merge_sort_buf;
 
 	void mergeSort(const int* key_in, const int* val_in, int* key_out, int* val_out, int n, bool less)
 	{
-		g_merge_sort_i_i.mergeSort((int*)key_out, (int*)val_out, (int*)key_in, (int*)val_in, n, less);
+		//g_merge_sort_i_i.mergeSort((int*)key_out, (int*)val_out, (int*)key_in, (int*)val_in, n, less);
 	}
 	void mergeSort(const int* key_in, const float* val_in, int* key_out, float* val_out, int n, bool less)
 	{
-		g_merge_sort_i_f.mergeSort((int*)key_out, (float*)val_out, (int*)key_in, (float*)val_in, n, less);
+		//g_merge_sort_i_f.mergeSort((int*)key_out, (float*)val_out, (int*)key_in, (float*)val_in, n, less);
 	}
 	void mergeSort(const float* key_in, const int* val_in, float* key_out, int* val_out, int n, bool less)
 	{
-		g_merge_sort_f_i.mergeSort((float*)key_out, (int*)val_out, (float*)key_in, (int*)val_in, n, less);
+		//g_merge_sort_f_i.mergeSort((float*)key_out, (int*)val_out, (float*)key_in, (int*)val_in, n, less);
 	}
+#pragma endregion
+
 }

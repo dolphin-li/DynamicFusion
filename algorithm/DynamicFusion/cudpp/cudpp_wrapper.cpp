@@ -36,33 +36,31 @@ namespace cudpp_wrapper
 		CUDPP_CHECK(cudppDestroyPlan(scanplan), "scan plan destroy");
 	}
 
-	void sort_by_key(int* keys_d, float* values_d, int n)
+	void merge_sort_by_key(int* keys_d, float* values_d, int n)
 	{
 		CUDPPConfiguration config;
-		config.op = CUDPP_ADD;
 		config.datatype = CUDPP_FLOAT;
-		config.algorithm = CUDPP_SORT_RADIX;
-		config.options = CUDPP_OPTION_FORWARD;
+		config.algorithm = CUDPP_SORT_MERGE;
+		config.options = CUDPP_OPTION_KEY_VALUE_PAIRS;
 
 		// Run the scan
 		CUDPPHandle plan;
 		CUDPP_CHECK(cudppPlan(g_theCudpp, &plan, config, n, 1, 0), "sort_by_key plan create");
-		CUDPP_CHECK(cudppRadixSort(plan, keys_d, values_d, n), "sort_by_key");
+		CUDPP_CHECK(cudppMergeSort(plan, keys_d, values_d, n), "sort_by_key");
 		CUDPP_CHECK(cudppDestroyPlan(plan), "sort_by_key plan destroy");
 	}
 
-	void sort_by_key(float* keys_d, int* values_d, int n)
+	CUDPPHandle plan;
+	void merge_sort_by_key(float* keys_d, int* values_d, int n)
 	{
 		CUDPPConfiguration config;
-		config.op = CUDPP_ADD;
 		config.datatype = CUDPP_FLOAT;
-		config.algorithm = CUDPP_SORT_RADIX;
-		config.options = CUDPP_OPTION_FORWARD;
+		config.algorithm = CUDPP_SORT_MERGE;
+		config.options = CUDPP_OPTION_KEY_VALUE_PAIRS;
 
 		// Run the scan
-		CUDPPHandle plan;
 		CUDPP_CHECK(cudppPlan(g_theCudpp, &plan, config, n, 1, 0), "sort_by_key plan create");
-		CUDPP_CHECK(cudppRadixSort(plan, keys_d, values_d, n), "sort_by_key");
+		CUDPP_CHECK(cudppMergeSort(plan, keys_d, values_d, n), "sort_by_key");
 		CUDPP_CHECK(cudppDestroyPlan(plan), "sort_by_key plan destroy");
 	}
 }

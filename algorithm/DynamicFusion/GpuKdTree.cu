@@ -1,5 +1,6 @@
 #include "GpuKdTree.h"
 #include "cudpp\thrust_wrapper.h"
+#include "cudpp\cudpp_wrapper.h"
 #include "helper_math.h"
 #include "cudpp\MergeSort.h"
 namespace dfusion
@@ -413,12 +414,12 @@ namespace dfusion
 			allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
 		
 		// create sorted index list -> can be used to compute AABBs in O(1)
-		//thrust_wrapper::sort_by_key(tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
-		//thrust_wrapper::sort_by_key(tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
-		//thrust_wrapper::sort_by_key(tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
-		mergeSort(tmp_pt_x_ptr_, index_x_ptr_, tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
-		mergeSort(tmp_pt_y_ptr_, index_y_ptr_, tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
-		mergeSort(tmp_pt_z_ptr_, index_z_ptr_, tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
+		thrust_wrapper::sort_by_key(tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
+		thrust_wrapper::sort_by_key(tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
+		thrust_wrapper::sort_by_key(tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
+		//mergeSort(tmp_pt_x_ptr_, index_x_ptr_, tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
+		//mergeSort(tmp_pt_y_ptr_, index_y_ptr_, tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
+		//mergeSort(tmp_pt_z_ptr_, index_z_ptr_, tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
 
 		// bounding box info
 		{
