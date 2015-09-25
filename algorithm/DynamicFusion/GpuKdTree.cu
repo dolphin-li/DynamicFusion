@@ -717,7 +717,8 @@ namespace dfusion
 		__device__ void searchNeighbors(const float4& q,
 			GPUResultSet& result,
 			int split_off, int child1_off, int parent_off, 
-			int ele_off, int low_off, int high_off, int index_x_off
+			int ele_off, int low_off, int high_off, int index_x_off,
+			int debug_tid = 0
 			)
 		{
 			bool backtrack = false;
@@ -735,8 +736,8 @@ namespace dfusion
 
 				// children are next to each other: leftChild+1 == rightChild
 				int leftChild = read_itex(current, child1_off);
-				int bestChild = leftChild + (diff1>=0);
-				int otherChild = leftChild + (diff1<0);
+				int bestChild = leftChild +(diff1 >= 0);
+				int otherChild = leftChild +(diff1 < 0);
 
 				if (!backtrack) {
 					/* If this is a leaf node, then do check and return. */
@@ -802,7 +803,7 @@ namespace dfusion
 
 			result.setResultLocation(resultDist, resultIndex, tid);
 			searchNeighbors(q, result, split_off, child1_off, parent_off, 
-				ele_off, low_off, high_off, index_x_off);
+				ele_off, low_off, high_off, index_x_off, tid==2);
 			result.finish();
 		}
 	}
@@ -834,14 +835,14 @@ namespace dfusion
 				);
 		}
 		else {
-			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
-				queries,
-				indices,
-				dists,
-				n,
-				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
-				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
-				);
+			//KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+			//	queries,
+			//	indices,
+			//	dists,
+			//	n,
+			//	KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
+			//	split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
+			//	);
 		}
 	}
 

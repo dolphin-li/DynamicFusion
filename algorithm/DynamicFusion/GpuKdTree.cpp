@@ -15,7 +15,7 @@ namespace dfusion
 		{
 			const int Knn = 1;
 			const int maxLeafNodes = 32;
-			const int nQueryX = 150;
+			const int nQueryX = 2;
 			const int nQuery =  nQueryX * nQueryX * nQueryX;
 
 			ObjMesh mesh;
@@ -85,7 +85,7 @@ namespace dfusion
 				// gpu build
 				ldp::tic();
 				GpuKdTree tree_d;
-				for (int k = 0; k < 100; k++)
+				//for (int k = 0; k < 100; k++)
 				{
 					tree_d.buildTree(points_d.ptr(), sizeof(float4), points_d.size(), maxLeafNodes);
 					//Sleep(100);
