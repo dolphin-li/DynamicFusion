@@ -33,7 +33,7 @@ namespace thrust_wrapper
 		// just allocate bytes
 		typedef char value_type;
 
-		pooled_allocator(): buffer_(nullptr), current_size_(0) {}
+		pooled_allocator() : buffer_(nullptr), current_size_(0) {}
 
 		~pooled_allocator()
 		{
@@ -59,7 +59,7 @@ namespace thrust_wrapper
 					throw e;
 				}
 			}
-		
+
 			return buffer_;
 		}
 
@@ -186,6 +186,22 @@ namespace thrust_wrapper
 
 	pooled_allocator g_allocator;
 
+	void stable_sort_by_key(int* key_d, float4* value_d, int n)
+	{
+		thrust::device_ptr<int> key_begin(key_d);
+		thrust::device_ptr<int> key_end(key_d + n);
+		thrust::device_ptr<float4> points_begin(value_d);
+		thrust::stable_sort_by_key(thrust::cuda::par(g_allocator), key_begin, key_end, points_begin);
+	}
+
+	void stable_sort_by_key(float* key_d, int* value_d, int n)
+	{
+		thrust::device_ptr<float> key_begin(key_d);
+		thrust::device_ptr<float> key_end(key_d + n);
+		thrust::device_ptr<int> points_begin(value_d);
+		thrust::stable_sort_by_key(thrust::cuda::par(g_allocator), key_begin, key_end, points_begin);
+	}
+
 	void sort_by_key(int* key_d, float4* value_d, int n)
 	{
 		thrust::device_ptr<int> key_begin(key_d);
@@ -228,7 +244,7 @@ namespace thrust_wrapper
 		return ptr.first - key_begin;
 	}
 
-	size_t unique_counting_by_key_copy(const int* key_d, int input_count_begin, 
+	size_t unique_counting_by_key_copy(const int* key_d, int input_count_begin,
 		int* out_key_d, int* out_value_d, int n)
 	{
 		thrust::device_ptr<int> key_begin((int*)key_d);
@@ -288,7 +304,7 @@ namespace thrust_wrapper
 		thrust::device_ptr<float> ys(y);
 		thrust::device_ptr<float> zs(z);
 		thrust::transform(thrust::cuda::par(g_allocator), xyzw_begin, xyzw_end,
-			thrust::make_zip_iterator(thrust::make_tuple(xs, ys, zs)), 
+			thrust::make_zip_iterator(thrust::make_tuple(xs, ys, zs)),
 			pointxyz_to_px_py_pz());
 	}
 
@@ -335,4 +351,5 @@ namespace thrust_wrapper
 		thrust::device_ptr<float4> data_end(ptr_d + n);
 		thrust::fill(thrust::cuda::par(g_allocator), data_begin, data_end, value);
 	}
+
 }

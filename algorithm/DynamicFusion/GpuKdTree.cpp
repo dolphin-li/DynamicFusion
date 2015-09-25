@@ -14,8 +14,8 @@ namespace dfusion
 		try
 		{
 			const int Knn = 1;
-			const int maxLeafNodes = 16;
-			const int nQueryX = 50;
+			const int maxLeafNodes = 32;
+			const int nQueryX = 150;
 			const int nQuery =  nQueryX * nQueryX * nQueryX;
 
 			ObjMesh mesh;
@@ -92,7 +92,7 @@ namespace dfusion
 				}
 				cudaThreadSynchronize();
 				ldp::toc("gpu build time");
-				//continue;
+				
 
 				ldp::tic();
 				tree_d.knnSearchGpu(points_d_query.ptr(), index_d.ptr(), dist_d.ptr(), Knn, points_d_query.size());

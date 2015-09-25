@@ -1,11 +1,10 @@
 #include "GpuKdTree.h"
 #include "cudpp\thrust_wrapper.h"
 #include "helper_math.h"
+#include "cudpp\MergeSort.h"
 namespace dfusion
 {
-	texture<int2, cudaTextureType1D, cudaReadModeElementType> g_splits;
-	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_elements_aabbLow_aabbHigh;
-	texture<int, cudaTextureType1D, cudaReadModeElementType> g_child1_parent;
+	texture<int, cudaTextureType1D, cudaReadModeElementType> g_mempool_tex;
 
 	typedef GpuKdTree::SplitInfo SplitInfo;
 	//! used to update the left/right pointers and aabb infos after the node splits
@@ -72,6 +71,25 @@ namespace dfusion
 		default:
 			return f.z;
 		}
+	}
+
+	__device__ __forceinline__ float read_ftex(int id, int offset)
+	{
+		int v = tex1Dfetch(g_mempool_tex, id + offset);
+		return *((float*)&v);
+	}
+	__device__ __forceinline__ float4 read_f4tex(int id, int offset)
+	{
+		return make_float4(read_ftex(id << 2, offset), read_ftex((id << 2) + 1, offset),
+			read_ftex((id << 2) + 2, offset), read_ftex((id << 2) + 3, offset));
+	}
+	__device__ __forceinline__ int read_itex(int id, int offset)
+	{
+		return tex1Dfetch(g_mempool_tex, id + offset);
+	}
+	__device__ __forceinline__ int2 read_i2tex(int id, int offset)
+	{
+		return make_int2(read_itex((id << 1), offset), read_itex((id << 1) + 1, offset));
 	}
 
 	//! - decide whether a node has to be split
@@ -395,11 +413,13 @@ namespace dfusion
 			allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
 		
 		// create sorted index list -> can be used to compute AABBs in O(1)
-		thrust_wrapper::sort_by_key(tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
-		thrust_wrapper::sort_by_key(tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
-		thrust_wrapper::sort_by_key(tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
-		
-		
+		//thrust_wrapper::sort_by_key(tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
+		//thrust_wrapper::sort_by_key(tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
+		//thrust_wrapper::sort_by_key(tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
+		mergeSort(tmp_pt_x_ptr_, index_x_ptr_, tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
+		mergeSort(tmp_pt_y_ptr_, index_y_ptr_, tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
+		mergeSort(tmp_pt_z_ptr_, index_z_ptr_, tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
+
 		// bounding box info
 		{
 			dim3 block(1);
@@ -531,17 +551,9 @@ namespace dfusion
 
 			// bind src to texture
 			size_t offset;
-			cudaChannelFormatDesc desc_int2 = cudaCreateChannelDesc<int2>();
-			cudaBindTexture(&offset, &g_splits, splits_ptr_, &desc_int2,
-				prealloc_*sizeof(int2));
-			assert(offset == 0);
 			cudaChannelFormatDesc desc_int = cudaCreateChannelDesc<int>();
-			cudaBindTexture(&offset, &g_child1_parent, child1_ptr_, &desc_int,
-				prealloc_*sizeof(int)*2);
-			assert(offset == 0);
-			cudaChannelFormatDesc desc_f4 = cudaCreateChannelDesc<float4>();
-			cudaBindTexture(&offset, &g_elements_aabbLow_aabbHigh, points_ptr_, &desc_f4,
-				prealloc_*sizeof(float4)*2 + nAllocatedPoints_*sizeof(float4));
+			cudaBindTexture(&offset, &g_mempool_tex, mempool_.ptr(), &desc_int,
+				mempool_.size()*sizeof(int));
 			assert(offset == 0);
 		}
 
@@ -557,21 +569,6 @@ namespace dfusion
 
 	namespace KdTreeCudaPrivate
 	{	
-		//! thrust transform functor
-		//! transforms indices in the internal data set back to the original indices
-		struct map_indices
-		{
-			const int* v_;
-
-			map_indices(const int* v) : v_(v) {
-			}
-
-			__host__ __device__ int operator() (const int&i) const
-			{
-				if (i >= 0) return v_[i];
-				else return i;
-			}
-		};
 		//! implementation of L2 distance for the CUDA kernels
 		struct CudaL2Distance
 		{
@@ -636,7 +633,6 @@ namespace dfusion
 				return a>b;
 			}
 		};
-
 
 		// using this and the template uses 2 or 3 registers more than the direct implementation in the kNearestKernel, but
 		// there is no speed difference.
@@ -718,7 +714,10 @@ namespace dfusion
 
 		template< typename GPUResultSet>
 		__device__ void searchNeighbors(const float4& q,
-			GPUResultSet& result, int parent_offset, int ablow_offset, int abhigh_offset)
+			GPUResultSet& result,
+			int split_off, int child1_off, int parent_off, 
+			int ele_off, int low_off, int high_off, int index_x_off
+			)
 		{
 			bool backtrack = false;
 			int lastNode = -1;
@@ -727,14 +726,14 @@ namespace dfusion
 			GpuKdTree::SplitInfo split;
 			while (true) {
 				if (current == -1) break;
-				split = tex1Dfetch(g_splits, current);
+				split = read_i2tex(current, split_off);
 
 				float diff1 = (split.split_dim == 0)*(q.x - split.split_val)
 					+ (split.split_dim == 1)*(q.y - split.split_val)
 					+ (split.split_dim == 2)*(q.z - split.split_val);
 
 				// children are next to each other: leftChild+1 == rightChild
-				int leftChild = tex1Dfetch(g_child1_parent, current);
+				int leftChild = read_itex(current, child1_off);
 				int bestChild = leftChild + (diff1>=0);
 				int otherChild = leftChild + (diff1<0);
 
@@ -742,13 +741,13 @@ namespace dfusion
 					/* If this is a leaf node, then do check and return. */
 					if (leftChild == -1) {
 						for (int i = split.left; i < split.right; ++i) {
-							float dist = CudaL2Distance::dist(tex1Dfetch(g_elements_aabbLow_aabbHigh, i), q);
-							result.insert(i, dist);
+							float dist = CudaL2Distance::dist(read_f4tex(i, ele_off), q);
+							result.insert(read_itex(i, index_x_off), dist);
 						}
 
 						backtrack = true;
 						lastNode = current;
-						current = tex1Dfetch(g_child1_parent, current + parent_offset);
+						current = read_itex(current, parent_off);
 					}
 					else { // go to closer child node
 						lastNode = current;
@@ -758,8 +757,8 @@ namespace dfusion
 				else { 
 					// continue moving back up the tree or visit far node?
 					// minimum possible distance between query point and a point inside the AABB
-					float4 aabbMin = tex1Dfetch(g_elements_aabbLow_aabbHigh, otherChild+ablow_offset);
-					float4 aabbMax = tex1Dfetch(g_elements_aabbLow_aabbHigh, otherChild + abhigh_offset);
+					float4 aabbMin = read_f4tex(otherChild, low_off);
+					float4 aabbMax = read_f4tex(otherChild, high_off);
 					float mindistsq = (q.x < aabbMin.x) * CudaL2Distance::axisDist(q.x, aabbMin.x)
 						+ (q.x > aabbMax.x) * CudaL2Distance::axisDist(q.x, aabbMax.x)
 						+ (q.y < aabbMin.y) * CudaL2Distance::axisDist(q.y, aabbMin.y)
@@ -777,7 +776,7 @@ namespace dfusion
 					}
 					else {
 						lastNode = current;
-						current = tex1Dfetch(g_child1_parent, current + parent_offset);
+						current = read_itex(current, parent_off);
 					}
 				}
 			}
@@ -787,7 +786,9 @@ namespace dfusion
 		__global__ void nearestKernel(const float4* query,
 			int* resultIndex, float* resultDist,
 			int querysize, GPUResultSet result,
-			int parent_offset, int ablow_offset, int abhigh_offset)
+			int split_off, int child1_off, int parent_off, 
+			int ele_off, int low_off, int high_off, int index_x_off
+			)
 		{
 			typedef float DistanceType;
 			typedef float ElementType;
@@ -799,15 +800,9 @@ namespace dfusion
 			float4 q = query[tid];
 
 			result.setResultLocation(resultDist, resultIndex, tid);
-			searchNeighbors(q, result, parent_offset, ablow_offset, abhigh_offset);
+			searchNeighbors(q, result, split_off, child1_off, parent_off, 
+				ele_off, low_off, high_off, index_x_off);
 			result.finish();
-		}
-
-		__global__ void mapIndicesKerenel(map_indices mp, int* indices_in, int* indices_out, int n)
-		{
-			size_t tid = blockDim.x*blockIdx.x + threadIdx.x;
-			if (tid < n)
-				indices_out[tid] = mp(indices_in[tid]);
 		}
 	}
 
@@ -819,6 +814,14 @@ namespace dfusion
 		int blocksPerGrid = divUp(n, threadsPerBlock);
 		bool sorted = false;
 
+		int split_off = splits_offset_byte() / 4;
+		int child1_off = child1_offset_byte() / 4;
+		int parent_off = parent_offset_byte() / 4;
+		int ele_off = points_offset_byte() / 4;
+		int low_off = aabb_min_offset_byte() / 4;
+		int high_off = aabb_max_offset_byte() / 4;
+		int index_x_off = index_x_offset_byte() / 4;
+
 		if (knn == 1) {
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
@@ -826,9 +829,8 @@ namespace dfusion
 				dists,
 				n, 
 				KdTreeCudaPrivate::SingleResultSet<float>(),
-				prealloc_,
-				nAllocatedPoints_,
-				nAllocatedPoints_+prealloc_);
+				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
+				);
 		}
 		else {
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
@@ -837,16 +839,9 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
-				prealloc_,
-				nAllocatedPoints_,
-				nAllocatedPoints_ + prealloc_
+				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
 				);
 		}
-
-		DeviceArray<int> tmp(n);
-		thrust_wrapper::copy(tmp.ptr(), indices, n);
-		KdTreeCudaPrivate::mapIndicesKerenel << <blocksPerGrid, threadsPerBlock >> >
-			(KdTreeCudaPrivate::map_indices(index_x_ptr_), tmp.ptr(), indices, n);
 	}
 
 	void GpuKdTree::update_leftright_and_aabb(

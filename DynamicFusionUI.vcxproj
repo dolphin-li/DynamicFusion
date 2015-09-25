@@ -268,6 +268,7 @@
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_config.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_hash.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\MergeSort.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\thrust_wrapper.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_array.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_memory.h" />
@@ -380,6 +381,7 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="algorithm\DynamicFusion\cudpp\MergeSort.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\thrust_wrapper.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\GpuKdTree.cu" />
