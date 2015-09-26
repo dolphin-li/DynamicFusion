@@ -5,7 +5,10 @@
 #include "cudpp\MergeSort.h"
 namespace dfusion
 {
+#define CHECK_ZERO(a){if(a)printf("!!!error: %s=%d\n", #a, a);}
 	texture<int, cudaTextureType1D, cudaReadModeElementType> g_mempool_tex;
+	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_ele_low_high_tex;
+	__constant__ int g_ele_low_high_tex_off_d;
 
 	typedef GpuKdTree::SplitInfo SplitInfo;
 	//! used to update the left/right pointers and aabb infos after the node splits
@@ -83,6 +86,10 @@ namespace dfusion
 	{
 		return make_float4(read_ftex(id << 2, offset), read_ftex((id << 2) + 1, offset),
 			read_ftex((id << 2) + 2, offset), read_ftex((id << 2) + 3, offset));
+	}
+	__device__ __forceinline__ float4 read_f4tex_f4(int offset)
+	{
+		return tex1Dfetch(g_ele_low_high_tex, g_ele_low_high_tex_off_d + offset);
 	}
 	__device__ __forceinline__ int read_itex(int id, int offset)
 	{
@@ -417,9 +424,6 @@ namespace dfusion
 		thrust_wrapper::sort_by_key(tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
 		thrust_wrapper::sort_by_key(tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
 		thrust_wrapper::sort_by_key(tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
-		//mergeSort(tmp_pt_x_ptr_, index_x_ptr_, tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
-		//mergeSort(tmp_pt_y_ptr_, index_y_ptr_, tmp_pt_y_ptr_, index_y_ptr_, nInputPoints_);
-		//mergeSort(tmp_pt_z_ptr_, index_z_ptr_, tmp_pt_z_ptr_, index_z_ptr_, nInputPoints_);
 
 		// bounding box info
 		{
@@ -555,7 +559,12 @@ namespace dfusion
 			cudaChannelFormatDesc desc_int = cudaCreateChannelDesc<int>();
 			cudaBindTexture(&offset, &g_mempool_tex, mempool_.ptr(), &desc_int,
 				mempool_.size()*sizeof(int));
-			assert(offset == 0);
+			CHECK_ZERO(offset);
+			cudaChannelFormatDesc desc_f4 = cudaCreateChannelDesc<float4>();
+			cudaSafeCall(cudaBindTexture(&offset, &g_ele_low_high_tex, points_ptr_, &desc_f4,
+				aabb_max_offset_byte()-points_offset_byte()+prealloc_*sizeof(float4)));
+			int offset_f4 = offset / sizeof(float4);
+			cudaSafeCall(cudaMemcpyToSymbol(g_ele_low_high_tex_off_d, &offset_f4, sizeof(int)));
 		}
 
 
@@ -717,7 +726,8 @@ namespace dfusion
 		__device__ void searchNeighbors(const float4& q,
 			GPUResultSet& result,
 			int split_off, int child1_off, int parent_off, 
-			int ele_off, int low_off, int high_off, int index_x_off
+			int ele_off, int low_off, int high_off, int index_x_off,
+			int low_off2ele, int high_off2ele
 			)
 		{
 			bool backtrack = false;
@@ -742,7 +752,7 @@ namespace dfusion
 					/* If this is a leaf node, then do check and return. */
 					if (leftChild == -1) {
 						for (int i = split.left; i < split.right; ++i) {
-							float dist = CudaL2Distance::dist(read_f4tex(i, ele_off), q);
+							float dist = CudaL2Distance::dist(read_f4tex_f4(i), q);
 							result.insert(read_itex(i, index_x_off), dist);
 						}
 
@@ -758,8 +768,8 @@ namespace dfusion
 				else { 
 					// continue moving back up the tree or visit far node?
 					// minimum possible distance between query point and a point inside the AABB
-					float4 aabbMin = read_f4tex(otherChild, low_off);
-					float4 aabbMax = read_f4tex(otherChild, high_off);
+					float4 aabbMin = read_f4tex_f4(otherChild + low_off2ele);
+					float4 aabbMax = read_f4tex_f4(otherChild + high_off2ele);
 					float mindistsq = (q.x < aabbMin.x) * CudaL2Distance::axisDist(q.x, aabbMin.x)
 						+ (q.x > aabbMax.x) * CudaL2Distance::axisDist(q.x, aabbMax.x)
 						+ (q.y < aabbMin.y) * CudaL2Distance::axisDist(q.y, aabbMin.y)
@@ -788,7 +798,8 @@ namespace dfusion
 			int* resultIndex, float* resultDist,
 			int querysize, GPUResultSet result,
 			int split_off, int child1_off, int parent_off, 
-			int ele_off, int low_off, int high_off, int index_x_off
+			int ele_off, int low_off, int high_off, int index_x_off,
+			int low_off2ele, int high_off2ele
 			)
 		{
 			typedef float DistanceType;
@@ -802,7 +813,8 @@ namespace dfusion
 
 			result.setResultLocation(resultDist, resultIndex, tid);
 			searchNeighbors(q, result, split_off, child1_off, parent_off, 
-				ele_off, low_off, high_off, index_x_off);
+				ele_off, low_off, high_off, index_x_off,
+				low_off2ele, high_off2ele);
 			result.finish();
 		}
 	}
@@ -822,6 +834,8 @@ namespace dfusion
 		int low_off = aabb_min_offset_byte() / 4;
 		int high_off = aabb_max_offset_byte() / 4;
 		int index_x_off = index_x_offset_byte() / 4;
+		int low_off2ele = (low_off - ele_off) / 4;
+		int high_off2ele = (high_off - ele_off) / 4;
 
 		if (knn == 1) {
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
@@ -830,7 +844,8 @@ namespace dfusion
 				dists,
 				n, 
 				KdTreeCudaPrivate::SingleResultSet<float>(),
-				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
+				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off,
+				low_off2ele, high_off2ele
 				);
 		}
 		else {
@@ -840,7 +855,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
-				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
+				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off,
+				low_off2ele, high_off2ele
 				);
 		}
 	}

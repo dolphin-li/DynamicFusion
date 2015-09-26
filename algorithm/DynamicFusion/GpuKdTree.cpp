@@ -20,7 +20,7 @@ namespace dfusion
 
 			ObjMesh mesh;
 			mesh.loadObj(g_mesh_test_name, false, false);
-			//mesh.vertex_list.resize(1024);
+			mesh.vertex_list.resize(1024);
 
 			std::vector<CpuPoint> point_h(mesh.vertex_list.size());
 			std::vector<float4> point_d_host(mesh.vertex_list.size());
