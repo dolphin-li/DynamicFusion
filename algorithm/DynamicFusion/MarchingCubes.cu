@@ -1,6 +1,7 @@
 #include "MarchingCubes.h"
 #include "TsdfVolume.h"
 #include "cudpp\cudpp_wrapper.h"
+#include "cudpp\thrust_wrapper.h"
 #include "GpuMesh.h"
 #include "device_utils.h"
 
@@ -815,7 +816,7 @@ namespace dfusion
 		}
 
 		// scan to get total number of vertices
-		cudpp_wrapper::exlusive_scan(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_activeVoxels);
+		thrust_wrapper::exclusive_scan(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_activeVoxels);
 		tile.nverts = get_scanned_sum(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_activeVoxels);
 #endif
 	}

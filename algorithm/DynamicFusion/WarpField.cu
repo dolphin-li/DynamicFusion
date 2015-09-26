@@ -3,6 +3,7 @@
 #include "device_utils.h"
 #include "TsdfVolume.h"
 #include "cudpp\thrust_wrapper.h"
+#include "cudpp\ModerGpuWrapper.h"
 namespace dfusion
 {
 #pragma region --warpmesh
@@ -197,6 +198,7 @@ namespace dfusion
 
 		// sort
 		thrust_wrapper::sort_by_key(m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(), num_points);
+		//modergpu_wrapper::mergesort_by_key(m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(), num_points);
 
 		// segment scan
 		thrust_wrapper::inclusive_scan_by_key(m_meshPointsKey.ptr(), 

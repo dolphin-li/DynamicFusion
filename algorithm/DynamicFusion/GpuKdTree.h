@@ -79,6 +79,7 @@ namespace dfusion
 
 		void allocateMemPool(int nInputPoints, int maxLeafSize);
 		void resize_node_vectors(size_t new_size);
+		void bindTextures();
 
 		int input_points_offset_byte()const{ return (const char*)input_points_ptr_ - (const char*)mempool_.ptr(); }
 		int points_offset_byte()const{ return (const char*)points_ptr_ - (const char*)mempool_.ptr(); }
@@ -87,6 +88,9 @@ namespace dfusion
 		int points_x_offset_byte()const{ return (const char*)points_x_ptr_ - (const char*)mempool_.ptr(); }
 		int points_y_offset_byte()const{ return (const char*)points_y_ptr_ - (const char*)mempool_.ptr(); }
 		int points_z_offset_byte()const{ return (const char*)points_z_ptr_ - (const char*)mempool_.ptr(); }
+		int tpt_x_offset_byte()const{ return (const char*)tmp_pt_x_ptr_ - (const char*)mempool_.ptr(); }
+		int tpt_y_offset_byte()const{ return (const char*)tmp_pt_y_ptr_ - (const char*)mempool_.ptr(); }
+		int tpt_z_offset_byte()const{ return (const char*)tmp_pt_z_ptr_ - (const char*)mempool_.ptr(); }
 		int splits_offset_byte()const{ return (const char*)splits_ptr_ - (const char*)mempool_.ptr(); }
 		int child1_offset_byte()const{ return (const char*)child1_ptr_ - (const char*)mempool_.ptr(); }
 		int parent_offset_byte()const{ return (const char*)parent_ptr_ - (const char*)mempool_.ptr(); }

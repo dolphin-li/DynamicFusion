@@ -8,7 +8,39 @@ namespace dfusion
 #define CHECK_ZERO(a){if(a)printf("!!!error: %s=%d\n", #a, a);}
 	texture<int, cudaTextureType1D, cudaReadModeElementType> g_mempool_tex;
 	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_ele_low_high_tex;
-	__constant__ int g_ele_low_high_tex_off_d;
+	__constant__ int g_ele_low_high_tex_off_d[3];
+
+#pragma region offsets
+	__constant__ int g_mempool_tex_offs[26]; // size by int but not byte
+	__device__ __forceinline__ int get_mempool_tex_ipoint_off(){ return g_mempool_tex_offs[0]; }
+	__device__ __forceinline__ int get_mempool_tex_point_off(){ return g_mempool_tex_offs[1]; }
+	__device__ __forceinline__ int get_mempool_tex_low_off(){ return g_mempool_tex_offs[2]; }
+	__device__ __forceinline__ int get_mempool_tex_high_off(){ return g_mempool_tex_offs[3]; }
+	__device__ __forceinline__ int get_mempool_tex_px_off(){ return g_mempool_tex_offs[4]; }
+	__device__ __forceinline__ int get_mempool_tex_py_off(){ return g_mempool_tex_offs[5]; }
+	__device__ __forceinline__ int get_mempool_tex_pz_off(){ return g_mempool_tex_offs[6]; }
+	__device__ __forceinline__ int get_mempool_tex_tpx_off(){ return g_mempool_tex_offs[7]; }
+	__device__ __forceinline__ int get_mempool_tex_tpy_off(){ return g_mempool_tex_offs[8]; }
+	__device__ __forceinline__ int get_mempool_tex_tpz_off(){ return g_mempool_tex_offs[9]; }
+	__device__ __forceinline__ int get_mempool_tex_split_off(){ return g_mempool_tex_offs[10]; }
+	__device__ __forceinline__ int get_mempool_tex_child1_off(){ return g_mempool_tex_offs[11]; }
+	__device__ __forceinline__ int get_mempool_tex_parent_off(){ return g_mempool_tex_offs[12]; }
+	__device__ __forceinline__ int get_mempool_tex_idxx_off(){ return g_mempool_tex_offs[13]; }
+	__device__ __forceinline__ int get_mempool_tex_idxy_off(){ return g_mempool_tex_offs[14]; }
+	__device__ __forceinline__ int get_mempool_tex_idxz_off(){ return g_mempool_tex_offs[15]; }
+	__device__ __forceinline__ int get_mempool_tex_ownerx_off(){ return g_mempool_tex_offs[16]; }
+	__device__ __forceinline__ int get_mempool_tex_ownery_off(){ return g_mempool_tex_offs[17]; }
+	__device__ __forceinline__ int get_mempool_tex_ownerz_off(){ return g_mempool_tex_offs[18]; }
+	__device__ __forceinline__ int get_mempool_tex_lrx_off(){ return g_mempool_tex_offs[19]; }
+	__device__ __forceinline__ int get_mempool_tex_lry_off(){ return g_mempool_tex_offs[20]; }
+	__device__ __forceinline__ int get_mempool_tex_lrz_off(){ return g_mempool_tex_offs[21]; }
+	__device__ __forceinline__ int get_mempool_tex_tidx_off(){ return g_mempool_tex_offs[22]; }
+	__device__ __forceinline__ int get_mempool_tex_towner_off(){ return g_mempool_tex_offs[23]; }
+	__device__ __forceinline__ int get_mempool_tex_tmisc_off(){ return g_mempool_tex_offs[24]; }
+	__device__ __forceinline__ int get_mempool_tex_alloc_off(){ return g_mempool_tex_offs[25]; }
+	__device__ __forceinline__ int get_ele_low_high_tex_low_off(){ return g_ele_low_high_tex_off_d[1]; }
+	__device__ __forceinline__ int get_ele_low_high_tex_high_off(){ return g_ele_low_high_tex_off_d[2]; }
+#pragma endregion
 
 	typedef GpuKdTree::SplitInfo SplitInfo;
 	//! used to update the left/right pointers and aabb infos after the node splits
@@ -89,7 +121,7 @@ namespace dfusion
 	}
 	__device__ __forceinline__ float4 read_f4tex_f4(int offset)
 	{
-		return tex1Dfetch(g_ele_low_high_tex, g_ele_low_high_tex_off_d + offset);
+		return tex1Dfetch(g_ele_low_high_tex, g_ele_low_high_tex_off_d[0] + offset);
 	}
 	__device__ __forceinline__ int read_itex(int id, int offset)
 	{
@@ -555,16 +587,7 @@ namespace dfusion
 			allocation_info_ptr_ = tmp_misc_ptr_ + nAllocatedPoints_;
 
 			// bind src to texture
-			size_t offset;
-			cudaChannelFormatDesc desc_int = cudaCreateChannelDesc<int>();
-			cudaBindTexture(&offset, &g_mempool_tex, mempool_.ptr(), &desc_int,
-				mempool_.size()*sizeof(int));
-			CHECK_ZERO(offset);
-			cudaChannelFormatDesc desc_f4 = cudaCreateChannelDesc<float4>();
-			cudaSafeCall(cudaBindTexture(&offset, &g_ele_low_high_tex, points_ptr_, &desc_f4,
-				aabb_max_offset_byte()-points_offset_byte()+prealloc_*sizeof(float4)));
-			int offset_f4 = offset / sizeof(float4);
-			cudaSafeCall(cudaMemcpyToSymbol(g_ele_low_high_tex_off_d, &offset_f4, sizeof(int)));
+			bindTextures();
 		}
 
 
@@ -723,12 +746,7 @@ namespace dfusion
 		};
 
 		template< typename GPUResultSet>
-		__device__ void searchNeighbors(const float4& q,
-			GPUResultSet& result,
-			int split_off, int child1_off, int parent_off, 
-			int ele_off, int low_off, int high_off, int index_x_off,
-			int low_off2ele, int high_off2ele
-			)
+		__device__ void searchNeighbors(const float4& q, GPUResultSet& result)
 		{
 			bool backtrack = false;
 			int lastNode = -1;
@@ -737,14 +755,14 @@ namespace dfusion
 			GpuKdTree::SplitInfo split;
 			while (true) {
 				if (current == -1) break;
-				split = read_i2tex(current, split_off);
+				split = read_i2tex(current, get_mempool_tex_split_off());
 
 				float diff1 = (split.split_dim == 0)*(q.x - split.split_val)
 					+ (split.split_dim == 1)*(q.y - split.split_val)
 					+ (split.split_dim == 2)*(q.z - split.split_val);
 
 				// children are next to each other: leftChild+1 == rightChild
-				int leftChild = read_itex(current, child1_off);
+				int leftChild = read_itex(current, get_mempool_tex_child1_off());
 				int bestChild = leftChild +(diff1 >= 0);
 				int otherChild = leftChild +(diff1 < 0);
 
@@ -753,12 +771,12 @@ namespace dfusion
 					if (leftChild == -1) {
 						for (int i = split.left; i < split.right; ++i) {
 							float dist = CudaL2Distance::dist(read_f4tex_f4(i), q);
-							result.insert(read_itex(i, index_x_off), dist);
+							result.insert(read_itex(i, get_mempool_tex_idxx_off()), dist);
 						}
 
 						backtrack = true;
 						lastNode = current;
-						current = read_itex(current, parent_off);
+						current = read_itex(current, get_mempool_tex_parent_off());
 					}
 					else { // go to closer child node
 						lastNode = current;
@@ -768,8 +786,8 @@ namespace dfusion
 				else { 
 					// continue moving back up the tree or visit far node?
 					// minimum possible distance between query point and a point inside the AABB
-					float4 aabbMin = read_f4tex_f4(otherChild + low_off2ele);
-					float4 aabbMax = read_f4tex_f4(otherChild + high_off2ele);
+					float4 aabbMin = read_f4tex_f4(otherChild + get_ele_low_high_tex_low_off());
+					float4 aabbMax = read_f4tex_f4(otherChild + get_ele_low_high_tex_high_off());
 					float mindistsq = (q.x < aabbMin.x) * CudaL2Distance::axisDist(q.x, aabbMin.x)
 						+ (q.x > aabbMax.x) * CudaL2Distance::axisDist(q.x, aabbMax.x)
 						+ (q.y < aabbMin.y) * CudaL2Distance::axisDist(q.y, aabbMin.y)
@@ -787,7 +805,7 @@ namespace dfusion
 					}
 					else {
 						lastNode = current;
-						current = read_itex(current, parent_off);
+						current = read_itex(current, get_mempool_tex_parent_off());
 					}
 				}
 			}
@@ -796,10 +814,7 @@ namespace dfusion
 		template< typename GPUResultSet>
 		__global__ void nearestKernel(const float4* query,
 			int* resultIndex, float* resultDist,
-			int querysize, GPUResultSet result,
-			int split_off, int child1_off, int parent_off, 
-			int ele_off, int low_off, int high_off, int index_x_off,
-			int low_off2ele, int high_off2ele
+			int querysize, GPUResultSet result
 			)
 		{
 			typedef float DistanceType;
@@ -812,9 +827,7 @@ namespace dfusion
 			float4 q = query[tid];
 
 			result.setResultLocation(resultDist, resultIndex, tid);
-			searchNeighbors(q, result, split_off, child1_off, parent_off, 
-				ele_off, low_off, high_off, index_x_off,
-				low_off2ele, high_off2ele);
+			searchNeighbors(q, result);
 			result.finish();
 		}
 	}
@@ -827,25 +840,13 @@ namespace dfusion
 		int blocksPerGrid = divUp(n, threadsPerBlock);
 		bool sorted = false;
 
-		int split_off = splits_offset_byte() / 4;
-		int child1_off = child1_offset_byte() / 4;
-		int parent_off = parent_offset_byte() / 4;
-		int ele_off = points_offset_byte() / 4;
-		int low_off = aabb_min_offset_byte() / 4;
-		int high_off = aabb_max_offset_byte() / 4;
-		int index_x_off = index_x_offset_byte() / 4;
-		int low_off2ele = (low_off - ele_off) / 4;
-		int high_off2ele = (high_off - ele_off) / 4;
-
 		if (knn == 1) {
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
 				indices,
 				dists,
 				n, 
-				KdTreeCudaPrivate::SingleResultSet<float>(),
-				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off,
-				low_off2ele, high_off2ele
+				KdTreeCudaPrivate::SingleResultSet<float>()
 				);
 		}
 		else {
@@ -854,9 +855,7 @@ namespace dfusion
 				indices,
 				dists,
 				n,
-				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
-				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off,
-				low_off2ele, high_off2ele
+				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted)
 				);
 		}
 	}
@@ -963,5 +962,56 @@ namespace dfusion
 		//float4 f = make_float4(0,0,0,0);
 		//resize_vec(aabb_min_, new_size, f);
 		//resize_vec(aabb_max_, new_size, f);
+	}
+
+	void GpuKdTree::bindTextures()
+	{
+		size_t offset;
+		cudaChannelFormatDesc desc_int = cudaCreateChannelDesc<int>();
+		cudaBindTexture(&offset, &g_mempool_tex, mempool_.ptr(), &desc_int,
+			mempool_.size()*sizeof(int));
+		CHECK_ZERO(offset);
+		cudaChannelFormatDesc desc_f4 = cudaCreateChannelDesc<float4>();
+		cudaSafeCall(cudaBindTexture(&offset, &g_ele_low_high_tex, points_ptr_, &desc_f4,
+			aabb_max_offset_byte() - points_offset_byte() + prealloc_*sizeof(float4)));
+
+
+		int offset_f4[3] = {
+			int(offset / sizeof(float4)),
+			int((aabb_min_offset_byte() - points_offset_byte()) / sizeof(float4)),
+			int((aabb_max_offset_byte() - points_offset_byte()) / sizeof(float4))
+		};
+		cudaSafeCall(cudaMemcpyToSymbol(g_ele_low_high_tex_off_d, offset_f4, sizeof(offset_f4)));
+
+		// store texture offsets
+		int offsets_tex[26] = {
+			input_points_offset_byte() / 4,
+			points_offset_byte() / 4,
+			aabb_min_offset_byte() / 4,
+			aabb_max_offset_byte() / 4,
+			points_x_offset_byte() / 4,
+			points_y_offset_byte() / 4,
+			points_z_offset_byte() / 4,
+			tpt_x_offset_byte() / 4,
+			tpt_y_offset_byte() / 4,
+			tpt_z_offset_byte() / 4,
+			splits_offset_byte() / 4,
+			child1_offset_byte() / 4,
+			parent_offset_byte() / 4,
+			index_x_offset_byte() / 4,
+			index_y_offset_byte() / 4,
+			index_z_offset_byte() / 4,
+			owner_x_offset_byte() / 4,
+			owner_y_offset_byte() / 4,
+			owner_z_offset_byte() / 4,
+			leftright_x_offset_byte() / 4,
+			leftright_y_offset_byte() / 4,
+			leftright_z_offset_byte() / 4,
+			tmp_index_offset_byte() / 4,
+			tmp_owners_offset_byte() / 4,
+			tmp_misc_offset_byte() / 4,
+			allocation_info_offset_byte() / 4
+		};
+		cudaSafeCall(cudaMemcpyToSymbol(g_mempool_tex_offs, offsets_tex, sizeof(offsets_tex)));
 	}
 }

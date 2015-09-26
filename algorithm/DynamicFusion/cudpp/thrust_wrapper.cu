@@ -73,7 +73,7 @@ namespace thrust_wrapper
 					//std::cout << "cached_allocator::allocator(): no free block found; calling cuda::malloc" << std::endl;
 
 					// allocate memory and convert cuda::pointer to raw pointer
-					result = thrust::cuda::malloc<char>(num_bytes).get();
+					result = thrust::cuda::malloc<char>(nBlocks*BlockSize).get();
 				}
 				catch (std::runtime_error &e)
 				{
@@ -168,6 +168,14 @@ namespace thrust_wrapper
 		thrust::device_ptr<int> in_begin((int*)in);
 		thrust::device_ptr<int> in_end((int*)in + n);
 		thrust::device_ptr<int> out_begin(out);
+		thrust::exclusive_scan(thrust::cuda::par(g_allocator), in_begin, in_end, out_begin);
+	}
+
+	void exclusive_scan(const unsigned int* in, unsigned int* out, int n)
+	{
+		thrust::device_ptr<unsigned int> in_begin((unsigned int*)in);
+		thrust::device_ptr<unsigned int> in_end((unsigned int*)in + n);
+		thrust::device_ptr<unsigned int> out_begin(out);
 		thrust::exclusive_scan(thrust::cuda::par(g_allocator), in_begin, in_end, out_begin);
 	}
 
