@@ -15,12 +15,12 @@ namespace dfusion
 		{
 			const int Knn = 1;
 			const int maxLeafNodes = 32;
-			const int nQueryX = 256;
+			const int nQueryX = 2;
 			const int nQuery =  nQueryX * nQueryX * nQueryX;
 
 			ObjMesh mesh;
 			mesh.loadObj(g_mesh_test_name, false, false);
-			mesh.vertex_list.resize(1024);
+			//mesh.vertex_list.resize(1024);
 
 			std::vector<CpuPoint> point_h(mesh.vertex_list.size());
 			std::vector<float4> point_d_host(mesh.vertex_list.size());
@@ -92,7 +92,6 @@ namespace dfusion
 				}
 				cudaThreadSynchronize();
 				ldp::toc("gpu build time");
-				
 
 				ldp::tic();
 				for (int k = 0; k < 10; k++)
