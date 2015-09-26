@@ -5,6 +5,7 @@ using namespace ldp;
 
 void GlobalDataHolder::init()
 {
+
 	// debug
 	dfusion::GpuKdTree::test();
 	exit(0);
@@ -20,7 +21,6 @@ void GlobalDataHolder::init()
 	m_lights.spec = make_float3(0, 0, 0);
 
 	m_processor.init(m_dparam);
-
 
 }
 

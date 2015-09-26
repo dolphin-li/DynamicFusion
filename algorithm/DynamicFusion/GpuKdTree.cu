@@ -12,34 +12,34 @@ namespace dfusion
 
 #pragma region offsets
 	__constant__ int g_mempool_tex_offs[26]; // size by int but not byte
-	__device__ __forceinline__ int get_mempool_tex_ipoint_off(){ return g_mempool_tex_offs[0]; }
-	__device__ __forceinline__ int get_mempool_tex_point_off(){ return g_mempool_tex_offs[1]; }
-	__device__ __forceinline__ int get_mempool_tex_low_off(){ return g_mempool_tex_offs[2]; }
-	__device__ __forceinline__ int get_mempool_tex_high_off(){ return g_mempool_tex_offs[3]; }
-	__device__ __forceinline__ int get_mempool_tex_px_off(){ return g_mempool_tex_offs[4]; }
-	__device__ __forceinline__ int get_mempool_tex_py_off(){ return g_mempool_tex_offs[5]; }
-	__device__ __forceinline__ int get_mempool_tex_pz_off(){ return g_mempool_tex_offs[6]; }
-	__device__ __forceinline__ int get_mempool_tex_tpx_off(){ return g_mempool_tex_offs[7]; }
-	__device__ __forceinline__ int get_mempool_tex_tpy_off(){ return g_mempool_tex_offs[8]; }
-	__device__ __forceinline__ int get_mempool_tex_tpz_off(){ return g_mempool_tex_offs[9]; }
-	__device__ __forceinline__ int get_mempool_tex_split_off(){ return g_mempool_tex_offs[10]; }
-	__device__ __forceinline__ int get_mempool_tex_child1_off(){ return g_mempool_tex_offs[11]; }
-	__device__ __forceinline__ int get_mempool_tex_parent_off(){ return g_mempool_tex_offs[12]; }
-	__device__ __forceinline__ int get_mempool_tex_idxx_off(){ return g_mempool_tex_offs[13]; }
-	__device__ __forceinline__ int get_mempool_tex_idxy_off(){ return g_mempool_tex_offs[14]; }
-	__device__ __forceinline__ int get_mempool_tex_idxz_off(){ return g_mempool_tex_offs[15]; }
-	__device__ __forceinline__ int get_mempool_tex_ownerx_off(){ return g_mempool_tex_offs[16]; }
-	__device__ __forceinline__ int get_mempool_tex_ownery_off(){ return g_mempool_tex_offs[17]; }
-	__device__ __forceinline__ int get_mempool_tex_ownerz_off(){ return g_mempool_tex_offs[18]; }
-	__device__ __forceinline__ int get_mempool_tex_lrx_off(){ return g_mempool_tex_offs[19]; }
-	__device__ __forceinline__ int get_mempool_tex_lry_off(){ return g_mempool_tex_offs[20]; }
-	__device__ __forceinline__ int get_mempool_tex_lrz_off(){ return g_mempool_tex_offs[21]; }
-	__device__ __forceinline__ int get_mempool_tex_tidx_off(){ return g_mempool_tex_offs[22]; }
-	__device__ __forceinline__ int get_mempool_tex_towner_off(){ return g_mempool_tex_offs[23]; }
-	__device__ __forceinline__ int get_mempool_tex_tmisc_off(){ return g_mempool_tex_offs[24]; }
-	__device__ __forceinline__ int get_mempool_tex_alloc_off(){ return g_mempool_tex_offs[25]; }
-	__device__ __forceinline__ int get_ele_low_high_tex_low_off(){ return g_ele_low_high_tex_off_d[1]; }
-	__device__ __forceinline__ int get_ele_low_high_tex_high_off(){ return g_ele_low_high_tex_off_d[2]; }
+	__device__ __forceinline__ int get_mempool_tex_ipoint_off(int i = 0){ return g_mempool_tex_offs[0 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_point_off(int i = 0){ return g_mempool_tex_offs[1 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_low_off(int i = 0){ return g_mempool_tex_offs[2 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_high_off(int i = 0){ return g_mempool_tex_offs[3 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_px_off(int i = 0){ return g_mempool_tex_offs[4 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_py_off(int i = 0){ return g_mempool_tex_offs[5 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_pz_off(int i = 0){ return g_mempool_tex_offs[6 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_tpx_off(int i = 0){ return g_mempool_tex_offs[7 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_tpy_off(int i = 0){ return g_mempool_tex_offs[8 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_tpz_off(int i = 0){ return g_mempool_tex_offs[9 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_split_off(int i = 0){ return g_mempool_tex_offs[10 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_child1_off(int i = 0){ return g_mempool_tex_offs[11 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_parent_off(int i = 0){ return g_mempool_tex_offs[12 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_idxx_off(int i = 0){ return g_mempool_tex_offs[13 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_idxy_off(int i = 0){ return g_mempool_tex_offs[14 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_idxz_off(int i = 0){ return g_mempool_tex_offs[15 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_ownerx_off(int i = 0){ return g_mempool_tex_offs[16 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_ownery_off(int i = 0){ return g_mempool_tex_offs[17 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_ownerz_off(int i = 0){ return g_mempool_tex_offs[18 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_lrx_off(int i = 0){ return g_mempool_tex_offs[19 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_lry_off(int i = 0){ return g_mempool_tex_offs[20 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_lrz_off(int i = 0){ return g_mempool_tex_offs[21 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_tidx_off(int i = 0){ return g_mempool_tex_offs[22 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_towner_off(int i = 0){ return g_mempool_tex_offs[23 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_tmisc_off(int i = 0){ return g_mempool_tex_offs[24 + i]; }
+	__device__ __forceinline__ int get_mempool_tex_alloc_off(int i = 0){ return g_mempool_tex_offs[25 + i]; }
+	__device__ __forceinline__ int get_ele_low_high_tex_low_off(int i=0){ return g_ele_low_high_tex_off_d[1 + i]; }
+	__device__ __forceinline__ int get_ele_low_high_tex_high_off(int i = 0){ return g_ele_low_high_tex_off_d[2 + i]; }
 #pragma endregion
 
 	typedef GpuKdTree::SplitInfo SplitInfo;
@@ -153,7 +153,7 @@ namespace dfusion
 		__device__ void operator()(int my_index) 
 		{
 			int child1 = child1_[my_index];
-			SplitInfo& s = splits_[my_index];
+			SplitInfo s = splits_[my_index];
 			float4 aabbMin = aabbMin_[my_index];
 			float4 aabbMax = aabbMax_[my_index];
 
@@ -200,10 +200,8 @@ namespace dfusion
 			if (split_node && enough_space) {
 				int left = block_left + offset_to_global;
 
-				splits_[left].left = s.left;
-				splits_[left].right = s.right;
-				splits_[left + 1].left = 0;
-				splits_[left + 1].right = 0;
+				splits_[left] = s;
+				splits_[left+1] = SplitInfo(make_int2(0,0));
 
 				// split axis/position: middle of longest aabb extent
 				float4 aabbDim = aabbMax - aabbMin;
@@ -260,8 +258,8 @@ namespace dfusion
 		{
 			int owner = ox_[index]; 
 			int leftChild = child1_[owner];
-			int split_dim;
-			float dim_val1, dim_val2, dim_val3;
+			int split_dim = 0;
+			float dim_val1 = 0.f, dim_val2 = 0.f, dim_val3 = 0.f;
 			SplitInfo split;
 			lrx_[index] = 0;
 			lry_[index] = 0;
@@ -271,8 +269,10 @@ namespace dfusion
 				return;
 
 			// otherwise: load split data, and assign this index to the new owner
-			split = splits_[owner];
+			//split = splits_[owner];
+			split = read_i2tex(owner, get_mempool_tex_split_off());
 			split_dim = split.split_dim;
+
 			switch (split_dim) {
 			case 0:
 				dim_val1 = x_[point_ind1];
@@ -289,15 +289,11 @@ namespace dfusion
 				dim_val2 = z_[point_ind2];
 				dim_val3 = z_[point_ind3];
 				break;
-
 			}
 
-			int r1 = leftChild + (dim_val1 > split.split_val);
-			ox_[index] = r1;
-			int r2 = leftChild + (dim_val2 > split.split_val);
-			oy_[index] = r2;
+			ox_[index] = leftChild + (dim_val1 > split.split_val);
+			oy_[index] = leftChild + (dim_val2 > split.split_val);
 			oz_[index] = leftChild + (dim_val3 > split.split_val);
-
 			lrx_[index] = (dim_val1 > split.split_val);
 			lry_[index] = (dim_val2 > split.split_val);
 			lrz_[index] = (dim_val3 > split.split_val);
