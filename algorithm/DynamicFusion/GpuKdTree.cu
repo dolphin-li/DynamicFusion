@@ -62,7 +62,7 @@ namespace dfusion
 
 	//! just for convenience: access a float4 by an index in [0,1,2]
 	//! (casting it to a float* and accessing it by the index is way slower...)
-	__host__ __device__ static float get_value_by_index(const float4& f, int i)
+	__host__ __device__ __forceinline__ float get_value_by_index(const float4& f, int i)
 	{
 		switch (i) {
 		case 0:
@@ -169,7 +169,7 @@ namespace dfusion
 				// split axis/position: middle of longest aabb extent
 				float4 aabbDim = aabbMax - aabbMin;
 				int maxDim = 0;
-				float maxDimLength = aabbDim.x;
+				float maxDimLength =  aabbDim.x;
 				float4 splitVal = (aabbMax + aabbMin);
 				splitVal *= 0.5f;
 				for (int i = 1; i <= 2; i++) {
@@ -717,8 +717,7 @@ namespace dfusion
 		__device__ void searchNeighbors(const float4& q,
 			GPUResultSet& result,
 			int split_off, int child1_off, int parent_off, 
-			int ele_off, int low_off, int high_off, int index_x_off,
-			int debug_tid = 0
+			int ele_off, int low_off, int high_off, int index_x_off
 			)
 		{
 			bool backtrack = false;
@@ -803,7 +802,7 @@ namespace dfusion
 
 			result.setResultLocation(resultDist, resultIndex, tid);
 			searchNeighbors(q, result, split_off, child1_off, parent_off, 
-				ele_off, low_off, high_off, index_x_off, tid==2);
+				ele_off, low_off, high_off, index_x_off);
 			result.finish();
 		}
 	}
@@ -812,7 +811,7 @@ namespace dfusion
 	{
 		if (n == 0)
 			return;
-		int threadsPerBlock = 128;
+		int threadsPerBlock = 256;
 		int blocksPerGrid = divUp(n, threadsPerBlock);
 		bool sorted = false;
 
@@ -835,14 +834,14 @@ namespace dfusion
 				);
 		}
 		else {
-			//KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
-			//	queries,
-			//	indices,
-			//	dists,
-			//	n,
-			//	KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
-			//	split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
-			//	);
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted),
+				split_off, child1_off, parent_off, ele_off, low_off, high_off, index_x_off
+				);
 		}
 	}
 

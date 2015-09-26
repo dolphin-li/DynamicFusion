@@ -27,71 +27,14 @@
 namespace thrust_wrapper
 {
 	// cached_allocator: a simple allocator for caching allocation requests
-	class pooled_allocator
-	{
-	public:
-		// just allocate bytes
-		typedef char value_type;
-
-		pooled_allocator() : buffer_(nullptr), current_size_(0) {}
-
-		~pooled_allocator()
-		{
-			// free all allocations when cached_allocator goes out of scope
-			free_all();
-		}
-
-		char *allocate(std::ptrdiff_t num_bytes)
-		{
-			if (current_size_ < num_bytes)
-			{
-				// no allocation of the right size exists
-				// create a new one with cuda::malloc
-				// throw if cuda::malloc can't satisfy the request
-				try
-				{
-					free_all();
-					current_size_ = num_bytes*1.5;
-					buffer_ = thrust::cuda::malloc<char>(current_size_).get();
-				}
-				catch (std::runtime_error &e)
-				{
-					throw e;
-				}
-			}
-
-			return buffer_;
-		}
-
-		void deallocate(char *ptr, size_t n)
-		{
-		}
-
-	private:
-		size_t current_size_;
-		char* buffer_;
-
-		void free_all()
-		{
-			if (buffer_)
-			{
-				std::cout << "pooled_allocator::free_all(): cleaning up after ourselves..." << std::endl;
-
-				// transform the pointer to cuda::pointer before calling cuda::free
-				thrust::cuda::free(thrust::cuda::pointer<char>(buffer_));
-				buffer_ = nullptr;
-				current_size_ = 0;
-			}
-		}
-
-	};
-
-	// cached_allocator: a simple allocator for caching allocation requests
 	class cached_allocator
 	{
 	public:
 		// just allocate bytes
 		typedef char value_type;
+		enum{
+			BlockSize = 512
+		};
 
 		cached_allocator() {}
 
@@ -105,8 +48,10 @@ namespace thrust_wrapper
 		{
 			char *result = 0;
 
+			int nBlocks = (num_bytes+BlockSize-1)/BlockSize;
+
 			// search the cache for a free block
-			free_blocks_type::iterator free_block = free_blocks.find(num_bytes);
+			free_blocks_type::iterator free_block = free_blocks.find(nBlocks);
 
 			if (free_block != free_blocks.end())
 			{
@@ -137,7 +82,7 @@ namespace thrust_wrapper
 			}
 
 			// insert the allocated pointer into the allocated_blocks map
-			allocated_blocks.insert(std::make_pair(result, num_bytes));
+			allocated_blocks.insert(std::make_pair(result, nBlocks));
 
 			return result;
 		}
@@ -184,7 +129,7 @@ namespace thrust_wrapper
 
 	};
 
-	pooled_allocator g_allocator;
+	cached_allocator g_allocator;
 
 	void stable_sort_by_key(int* key_d, float4* value_d, int n)
 	{
