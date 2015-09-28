@@ -476,6 +476,7 @@ Q63. How do I use quaternions to rotate a vector?
 #ifndef TOOL_BOX_QUAT_CU_HPP__
 #define TOOL_BOX_QUAT_CU_HPP__
 
+#include <host_defines.h>
 #include "dualquaternion/transfo.hpp"
 
 // =============================================================================
@@ -509,7 +510,7 @@ namespace Tbx {
 
   @see Dual_quat_cu
 */
-class Quat_cu{
+class __align__(16) Quat_cu{
     public:
 
     // -------------------------------------------------------------------------

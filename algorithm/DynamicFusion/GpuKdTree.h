@@ -44,7 +44,7 @@ namespace dfusion
 
 	public:
 		GpuKdTree();
-		void buildTree(const void* points, int points_stride, int n, int max_leaf_size=32);
+		void buildTree(const float4* points, int n, int max_leaf_size=32);
 
 		/**
 		* \brief Perform k-nearest neighbor search

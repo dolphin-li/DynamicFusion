@@ -3,6 +3,7 @@
 #include "cudpp\cudpp_wrapper.h"
 #include "helper_math.h"
 #include "cudpp\ModerGpuWrapper.h"
+#include "GpuHeap.h"
 namespace dfusion
 {
 #define CHECK_ZERO(a){if(a)printf("!!!error: %s=%d\n", #a, a);}
@@ -359,7 +360,7 @@ namespace dfusion
 	}
 
 	__global__ void init_data_kernel(
-		const void* points_in, int points_in_stride,
+		const float4* points_in,
 		float4* points_out, float* point_x, float* point_y, float* point_z,
 		float* tmp_pt_x, float* tmp_pt_y, float* tmp_pt_z,
 		int* index_x, int* index_y, int* index_z, int nPoints,
@@ -368,7 +369,7 @@ namespace dfusion
 		int tid = threadIdx.x + blockIdx.x*blockDim.x;
 		if (tid < nPoints)
 		{
-			float4 xyz = *(const float4*)((const char*)points_in + points_in_stride*tid);
+			float4 xyz = points_in[tid];
 			points_out[tid] = xyz;
 			point_x[tid] = xyz.x;
 			point_y[tid] = xyz.y;
@@ -427,7 +428,7 @@ namespace dfusion
 		allocation_info_ptr_ = nullptr;
 	}
 
-	void GpuKdTree::buildTree(const void* points, int points_stride, int n, int max_leaf_size)
+	void GpuKdTree::buildTree(const float4* points, int n, int max_leaf_size)
 	{
 		// memory allocation
 		allocateMemPool(n, max_leaf_size);
@@ -438,15 +439,18 @@ namespace dfusion
 			dim3 block(256);
 			int num = max(nInputPoints_, prealloc_);
 			dim3 grid(divUp(num, block.x));
-			init_data_kernel << <grid, block >> >(points, points_stride,
+			init_data_kernel << <grid, block >> >(points,
 				input_points_ptr_, points_x_ptr_, points_y_ptr_,points_z_ptr_,
 				tmp_pt_x_ptr_, tmp_pt_y_ptr_, tmp_pt_z_ptr_,
 				index_x_ptr_, index_y_ptr_, index_z_ptr_, nInputPoints_,
 				child1_ptr_, parent_ptr_, splits_ptr_, prealloc_);
+			cudaSafeCall(cudaGetLastError(), "init_data_kernel");
 		}
+
 		// allocation info
 		cudaSafeCall(cudaMemcpy(allocation_info_ptr_, allocation_info_host_.data(),
 			allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
+
 		
 		// create sorted index list -> can be used to compute AABBs in O(1)
 		modergpu_wrapper::mergesort_by_key(tmp_pt_x_ptr_, index_x_ptr_, nInputPoints_);
@@ -670,17 +674,16 @@ namespace dfusion
 		// Register counts are the same as when removing not-needed variables in explicit specializations
 		// and the "if( useHeap )" branches are eliminated at compile time.
 		// The downside of this: a bit more complex kernel launch code.
-		template< typename DistanceType>
+		template< typename DistanceType, int K>
 		struct KnnResultSet
 		{
 			int foundNeighbors;
 			DistanceType largestHeapDist;
 			int maxDistIndex;
-			const int k;
 			const bool sorted;
 
-			__device__ __host__ KnnResultSet(int knn, bool sortResults) : 
-				foundNeighbors(0), largestHeapDist(INFINITY), k(knn), sorted(sortResults){ }
+			__device__ __host__ KnnResultSet(bool sortResults) : 
+				foundNeighbors(0), largestHeapDist(INFINITY), sorted(sortResults){ }
 
 			__device__ inline DistanceType worstDist()
 			{
@@ -689,10 +692,10 @@ namespace dfusion
 
 			__device__ inline void insert(int index, DistanceType dist)
 			{
-				if (foundNeighbors < k) {
+				if (foundNeighbors < K) {
 					resultDist[foundNeighbors] = dist;
 					resultIndex[foundNeighbors] = index;
-					if (foundNeighbors == k - 1)
+					if (foundNeighbors == K - 1)
 						findLargestDistIndex();
 					foundNeighbors++;
 				}
@@ -707,21 +710,23 @@ namespace dfusion
 			{
 				largestHeapDist = resultDist[0];
 				maxDistIndex = 0;
-				for (int i = 1; i<k; i++)
+				for (int i = 1; i<K; i++)
 				if (resultDist[i] > largestHeapDist) {
 					maxDistIndex = i;
 					largestHeapDist = resultDist[i];
 				}
 			}
 
-			float* resultDist;
-			int* resultIndex;
+			float resultDist[K];
+			int resultIndex[K];
+			float* resultDist_out;
+			int* resultIndex_out;
 
 			__device__ inline void setResultLocation(DistanceType* dists, int* index, int thread)
 			{
-				resultDist = dists + thread*k;
-				resultIndex = index + thread*k;
-				for (int i = 0; i < k; i++) {
+				resultDist_out = dists + thread*K;
+				resultIndex_out = index + thread*K;
+				for (int i = 0; i < K; i++) {
 					resultDist[i] = INFINITY;
 					resultIndex[i] = -1;
 				}
@@ -730,13 +735,18 @@ namespace dfusion
 			__host__ __device__ inline void finish()
 			{
 				if (sorted) {
-					//if (!useHeap) flann::cuda::heap::make_heap(resultDist, resultIndex, k, 
-					//	GreaterThan<DistanceType>());
-					//for (int i = k - 1; i>0; i--) {
-					//	swap(resultDist[0], resultDist[i]);
-					//	swap(resultIndex[0], resultIndex[i]);
-					//	flann::cuda::heap::sift_down(resultDist, resultIndex, 0, i, GreaterThan<DistanceType>());
-					//}
+					flann::cuda::heap::make_heap(resultDist, resultIndex, K, GreaterThan<DistanceType>());
+					for (int i = K - 1; i>0; i--) {
+						flann::cuda::swap(resultDist[0], resultDist[i]);
+						flann::cuda::swap(resultIndex[0], resultIndex[i]);
+						flann::cuda::heap::sift_down(resultDist, resultIndex, 0, i, GreaterThan<DistanceType>());
+					}
+				}
+
+				for (int i = 0; i < K; i++)
+				{
+					resultIndex_out[i] = resultIndex[i];
+					resultDist_out[i] = resultDist[i];
 				}
 			}
 		};
@@ -834,25 +844,83 @@ namespace dfusion
 			return;
 		int threadsPerBlock = 256;
 		int blocksPerGrid = divUp(n, threadsPerBlock);
-		bool sorted = false;
+		bool sorted = true;
 
-		if (knn == 1) {
-			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
-				queries,
-				indices,
-				dists,
-				n, 
-				KdTreeCudaPrivate::SingleResultSet<float>()
-				);
-		}
-		else {
+		switch (knn)
+		{
+		case 1:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
 				indices,
 				dists,
 				n,
-				KdTreeCudaPrivate::KnnResultSet<float>(knn, sorted)
+				KdTreeCudaPrivate::SingleResultSet<float>()
 				);
+		case 2:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 2>(sorted)
+				);
+			break;
+		case 3:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 3>(sorted)
+				);
+			break;
+		case 4:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 4>(sorted)
+				);
+			break;
+		case 5:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 5>(sorted)
+				);
+			break;
+		case 6:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 6>(sorted)
+				);
+			break;
+		case 7:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 7>(sorted)
+				);
+			break;
+		case 8:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 8>(sorted)
+				);
+			break;
+		default:
+			throw std::exception("non-supported K in KnnSearch!");
 		}
 	}
 

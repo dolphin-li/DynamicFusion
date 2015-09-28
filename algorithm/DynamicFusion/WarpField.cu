@@ -4,6 +4,7 @@
 #include "TsdfVolume.h"
 #include "cudpp\thrust_wrapper.h"
 #include "cudpp\ModerGpuWrapper.h"
+#include "GpuKdTree.h"
 namespace dfusion
 {
 #pragma region --warpmesh
@@ -147,7 +148,7 @@ namespace dfusion
 	}
 
 	__global__ void write_nodes_kernel(const float4* points_not_compact, 
-		const int* index, WarpNode* nodes, float weight_radius, int n)
+		const int* index, WarpNode* nodes, float4* nodesVW, float weight_radius, int n)
 	{
 		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
 		unsigned int threadId = __mul24(blockId, blockDim.x << 3) + threadIdx.x;
@@ -166,6 +167,7 @@ namespace dfusion
 				node.v_w.w = weight_radius;
 				node.dq = Tbx::Dual_quat_cu::identity();
 				nodes[threadId] = node;
+				nodesVW[threadId] = node.v_w;
 			}
 		}
 	}
@@ -224,7 +226,7 @@ namespace dfusion
 		if (num_after_compact > MaxNodeNum)
 			printf("warning: too many nodes %d vs %d\n", num_after_compact, MaxNodeNum);
 		write_nodes_kernel << <grid, block >> >(
-			m_meshPointsSorted.ptr(), m_meshPointsFlags.ptr(), getNodesPtr(0), 
+			m_meshPointsSorted.ptr(), m_meshPointsFlags.ptr(), getNodesPtr(0), getNodesVwPtr(0),
 			m_param.warp_param_dw, m_numNodes[0]);
 		cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
 	}
@@ -233,7 +235,7 @@ namespace dfusion
 #pragma region --update ann field
 	void WarpField::updateAnnField()
 	{
-
+		m_nodeTree->buildTree(m_nodesVW.ptr(), m_numNodes[0]);
 	}
 #pragma endregion
 

@@ -13,14 +13,14 @@ namespace dfusion
 	{
 		try
 		{
-			const int Knn = 1;
-			const int maxLeafNodes = 16;
+			const int Knn = 4;
+			const int maxLeafNodes = 32;
 			const int nQueryX = 256;
 			const int nQuery =  nQueryX * nQueryX * nQueryX;
 
 			ObjMesh mesh;
 			mesh.loadObj(g_mesh_test_name, false, false);
-			//mesh.vertex_list.resize(256);
+			mesh.vertex_list.resize(1024);
 
 			std::vector<CpuPoint> point_h(mesh.vertex_list.size());
 			std::vector<float4> point_d_host(mesh.vertex_list.size());
@@ -75,10 +75,7 @@ namespace dfusion
 				for (int i = 0; i < point_h_query.size(); i++)
 				{
 					CpuPoint p = point_h_query[i];
-					float dist = 0.f;
-					CpuPoint nbp = tree_h.nearestPoint(p, dist);
-					index_h[i] = nbp.idx;
-					dist_h[i] = dist;
+					tree_h.kNearestPoints(p, index_h.data() + i*Knn, dist_h.data() + i*Knn, Knn);
 				}
 				ldp::toc("cpu search time");
 
@@ -87,7 +84,7 @@ namespace dfusion
 				GpuKdTree tree_d;
 				for (int k = 0; k < 100; k++)
 				{
-					tree_d.buildTree(points_d.ptr(), sizeof(float4), points_d.size(), maxLeafNodes);
+					tree_d.buildTree(points_d.ptr(), points_d.size(), maxLeafNodes);
 					//Sleep(100);
 				}
 				cudaThreadSynchronize();
@@ -99,23 +96,28 @@ namespace dfusion
 				cudaThreadSynchronize();
 				ldp::toc("gpu search time");
 
+#if 1
 				//// compare
 				index_d.download(index_d_host);
 				dist_d.download(dist_d_host);
-				for (size_t i = 0; i < index_d_host.size(); i++)
+				for (size_t i = 0; i < index_d_host.size()/Knn; i++)
 				{
-					int id1 = index_h[i];
-					int id2 = index_d_host[i];
-					float dt1 = dist_h[i];
-					float dt2 = sqrt(dist_d_host[i]);
-					if (id1 != id2 && fabs(dt1 - dt2)>1e-7)
+					for (int k = 0; k<Knn; k++)
 					{
-						printf("error, cpu, gpu not matched: %d (%d %f) (%d %f)\n", i, id1, dt1, id2, dt2);
-						printf("\tq: %f %f %f\n", point_h_query[i].p[0], point_h_query[i].p[1], point_h_query[i].p[2]);
-						printf("\th: %f %f %f\n", point_h[id1].p[0], point_h[id1].p[1], point_h[id1].p[2]);
-						printf("\td: %f %f %f\n", point_h[id2].p[0], point_h[id2].p[1], point_h[id2].p[2]);
-					}
-				}
+						int id1 = index_h[i*Knn+k];
+						int id2 = index_d_host[i*Knn + k];
+						float dt1 = dist_h[i*Knn + k];
+						float dt2 = sqrt(dist_d_host[i*Knn + k]);
+						if (id1 != id2 && fabs(dt1 - dt2)>1e-7)
+						{
+							printf("error, cpu, gpu not matched: (%d %d) (%d %f) (%d %f)\n", i, k, id1, dt1, id2, dt2);
+							printf("\tq: %f %f %f\n", point_h_query[i].p[0], point_h_query[i].p[1], point_h_query[i].p[2]);
+							printf("\th: %f %f %f\n", point_h[id1].p[0], point_h[id1].p[1], point_h[id1].p[2]);
+							printf("\td: %f %f %f\n", point_h[id2].p[0], point_h[id2].p[1], point_h[id2].p[2]);
+						}
+					}// k
+				}// i
+#endif
 			}
 		}// end for try
 		catch (std::exception e)

@@ -6,8 +6,9 @@ namespace dfusion
 {
 	class GpuMesh;
 	class TsdfVolume;
+	class GpuKdTree;
 
-	struct WarpNode
+	struct __align__(16) WarpNode
 	{
 		float4 v_w; // dg_v, dg_w in the paper
 		Tbx::Dual_quat_cu dq; // dg_se3 in the paper
@@ -60,15 +61,18 @@ namespace dfusion
 		void insertNewNodes(GpuMesh& src);
 		void updateAnnField();
 		void updateGraph(int level);
+		float4* getNodesVwPtr(int level){ return m_nodesVW.ptr() + MaxNodeNum*level; }
 	private:
 		Param m_param;
 		TsdfVolume* m_volume;
 		Tbx::Transfo m_rigidTransform;
 
+		int m_lastNumNodes[GraphLevelNum];
 		int m_numNodes[GraphLevelNum];
 
 		// store quaternion-translation parts:
 		DeviceArray<WarpNode> m_nodesQuatTrans;
+		DeviceArray<float4> m_nodesVW;
 		
 		// process the input GpuMesh
 		int3 m_nodesGridSize;
@@ -76,6 +80,8 @@ namespace dfusion
 		DeviceArray<float4> m_meshPointsSorted;
 		DeviceArray<int> m_meshPointsKey;
 		DeviceArray<int> m_meshPointsFlags;
+
+		GpuKdTree* m_nodeTree;
 
 		// type: KnnIdx
 		cudaArray_t m_knnField;

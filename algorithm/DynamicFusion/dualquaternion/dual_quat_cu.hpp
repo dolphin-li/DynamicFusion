@@ -42,7 +42,7 @@ namespace Tbx {
 
     @note Article: "Geometric skinning with approximate dual quaternion blending"
  */
-class Dual_quat_cu {
+class __align__(16) Dual_quat_cu{
     public:
 
     // -------------------------------------------------------------------------
