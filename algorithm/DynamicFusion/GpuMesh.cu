@@ -83,28 +83,28 @@ namespace dfusion
 	}
 
 
-	__global__ void copy_warp_node_to_gl_buffer_kernel(WarpNode* gldata, 
-		Tbx::Transfo trans, const WarpNode* nodes, int n)
+	__global__ void copy_warp_node_to_gl_buffer_kernel(float4* gldata, 
+		Tbx::Transfo trans, const float4* nodes, int n)
 	{
 		int i = threadIdx.x + blockIdx.x * blockDim.x;
 
 		if (i < n)
 		{
-			WarpNode node = nodes[i];
-			Tbx::Vec3 t = trans * Tbx::Point3(node.v_w.x, node.v_w.y, node.v_w.z);
-			node.v_w.x = t.x;
-			node.v_w.y = t.y;
-			node.v_w.z = t.z;
+			float4 node = nodes[i];
+			Tbx::Vec3 t = trans * Tbx::Point3(node.x, node.y, node.z);
+			node.x = t.x;
+			node.y = t.y;
+			node.z = t.z;
 			gldata[i] = node;
 		}
 	}
 
-	void GpuMesh::copy_warp_node_to_gl_buffer(WarpNode* gldata, const WarpField* warpField)
+	void GpuMesh::copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField)
 	{
 		int n = warpField->getNumNodesInLevel(0);
 		if (n == 0)
 			return;
-		const WarpNode* nodes = warpField->getNodesPtr(0);
+		const float4* nodes = warpField->getNodesVwPtr(0);
 		Tbx::Transfo tr = warpField->get_rigidTransform();
 		dim3 block(256);
 		dim3 grid(1);

@@ -565,7 +565,7 @@ namespace dfusion
 			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id_warpnodes));
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
 
-			glBufferData(GL_ARRAY_BUFFER, WarpField::MaxNodeNum*WarpField::GraphLevelNum*sizeof(WarpNode), 
+			glBufferData(GL_ARRAY_BUFFER, WarpField::MaxNodeNum*WarpField::GraphLevelNum*sizeof(float4), 
 				0, GL_DYNAMIC_DRAW);
 			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res_warp, m_vbo_id_warpnodes,
 					cudaGraphicsMapFlagsNone));
@@ -652,7 +652,7 @@ namespace dfusion
 		// draw wrap field nodes
 		if (warpField)
 		{
-			WarpNode* gldata = nullptr;
+			float4* gldata = nullptr;
 			size_t num_bytes = 0;
 			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0));
 			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
@@ -666,7 +666,7 @@ namespace dfusion
 
 			glDisable(GL_LIGHTING);
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
-			glVertexPointer(3, GL_FLOAT, sizeof(WarpNode), 0);
+			glVertexPointer(3, GL_FLOAT, sizeof(float4), 0);
 			glEnableClientState(GL_VERTEX_ARRAY);
 
 			glColor3f(0.0, 1.0, 0.0);

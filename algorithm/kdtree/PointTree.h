@@ -111,6 +111,20 @@ namespace ldp
 				return m_points.pts[index];
 			}
 
+			void kNearestPoints(Point p, int* idx, T* dist, int k)
+			{
+				nanoflann::KNNResultSet<T> resultSet(k);
+				std::vector<size_t> tmpIdx(k);
+				resultSet.init(tmpIdx.data(), dist);
+				m_tree->findNeighbors(resultSet, p.p.ptr(), nanoflann::SearchParams(10));
+
+				for (int i = 0; i < k; i++)
+				{
+					dist[i] = sqrt(dist[i]);
+					idx[i] = tmpIdx[i];
+				}
+			}
+
 			void pointInSphere(Point c, T radius, std::vector<std::pair<size_t, T>>& indices_dists)
 			{
 				nanoflann::RadiusResultSet<T> resultSet(radius, indices_dists);

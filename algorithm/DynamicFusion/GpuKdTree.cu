@@ -4,6 +4,7 @@
 #include "helper_math.h"
 #include "cudpp\ModerGpuWrapper.h"
 #include "GpuHeap.h"
+#include "WarpField.h"
 namespace dfusion
 {
 #define CHECK_ZERO(a){if(a)printf("!!!error: %s=%d\n", #a, a);}
@@ -683,7 +684,8 @@ namespace dfusion
 			const bool sorted;
 
 			__device__ __host__ KnnResultSet(bool sortResults) : 
-				foundNeighbors(0), largestHeapDist(INFINITY), sorted(sortResults){ }
+				foundNeighbors(0), largestHeapDist(INFINITY), sorted(sortResults),
+				resultIndex_out(0){}
 
 			__device__ inline DistanceType worstDist()
 			{
@@ -724,8 +726,11 @@ namespace dfusion
 
 			__device__ inline void setResultLocation(DistanceType* dists, int* index, int thread)
 			{
-				resultDist_out = dists + thread*K;
-				resultIndex_out = index + thread*K;
+				if (index)
+				{
+					resultDist_out = dists + thread*K;
+					resultIndex_out = index + thread*K;
+				}
 				for (int i = 0; i < K; i++) {
 					resultDist[i] = INFINITY;
 					resultIndex[i] = -1;
@@ -743,10 +748,13 @@ namespace dfusion
 					}
 				}
 
-				for (int i = 0; i < K; i++)
+				if (resultDist_out)
 				{
-					resultIndex_out[i] = resultIndex[i];
-					resultDist_out[i] = resultDist[i];
+					for (int i = 0; i < K; i++)
+					{
+						resultIndex_out[i] = resultIndex[i];
+						resultDist_out[i] = resultDist[i];
+					}
 				}
 			}
 		};
@@ -836,6 +844,37 @@ namespace dfusion
 			searchNeighbors(q, result);
 			result.finish();
 		}
+
+		template< typename GPUResultSet>
+		__global__ void nearestKernel(cudaSurfaceObject_t volumeSurf, int3 resolution,
+			float3 origion, float voxelSize, GPUResultSet result
+			)
+		{
+			typedef float DistanceType;
+			typedef float ElementType;
+
+			int ix = blockDim.x*blockIdx.x + threadIdx.x;
+			int iy = blockDim.y*blockIdx.y + threadIdx.y;
+			int iz = blockDim.z*blockIdx.z + threadIdx.z;
+
+			if (ix < resolution.x && iy < resolution.y && iz < resolution.z)
+			{
+				float4 q;
+				q.x = origion.x + ix*voxelSize;
+				q.y = origion.y + iy*voxelSize;
+				q.z = origion.z + iz*voxelSize;
+				q.w = 0.f;
+				searchNeighbors(q, result);
+
+				result.setResultLocation(nullptr, nullptr, 0);
+				searchNeighbors(q, result);
+				result.finish();
+
+				surf3Dwrite(make_ushort4(result.resultIndex[0], result.resultIndex[1], 
+					result.resultIndex[2], result.resultIndex[3]), 
+					volumeSurf, ix*sizeof(WarpField::KnnIdx), iy, iz);
+			}
+		}
 	}
 
 	void GpuKdTree::knnSearchGpu(const float4* queries, int* indices, float* dists, size_t knn, size_t n) const
@@ -922,6 +961,27 @@ namespace dfusion
 		default:
 			throw std::exception("non-supported K in KnnSearch!");
 		}
+	}
+
+	void GpuKdTree::knnSearchGpu(cudaSurfaceObject_t volumeSurf, int3 resolution,
+		float3 origion, float voxelSize, size_t knn) const
+	{
+		if (knn != 4)
+			throw std::exception("non-supported knn-k");
+
+		dim3 threadsPerBlock(32, 8, 2);
+		dim3 blocksPerGrid(divUp(resolution.x, threadsPerBlock.x),
+			divUp(resolution.y, threadsPerBlock.y),
+			divUp(resolution.z, threadsPerBlock.z));
+		bool sorted = true;
+
+		KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+			volumeSurf,
+			resolution,
+			origion,
+			voxelSize,
+			KdTreeCudaPrivate::KnnResultSet<float, 4>(sorted)
+			);
 	}
 
 	void GpuKdTree::update_leftright_and_aabb(

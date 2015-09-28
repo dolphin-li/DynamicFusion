@@ -55,6 +55,17 @@ namespace dfusion
 		*/
 		void knnSearchGpu(const float4* queries, int* indices, float* dists, size_t knn, size_t n) const;
 
+		/**
+		* \brief Perform k-nearest neighbor search on a grid: (x,y,z) = origion + (ix,iy,iz)*voxelSize
+		* \param[out] volumeSurf the volume of type WarpField::KnnIdx (generally uchar4, ushort4)
+		* \param[in] resolution the resolution of the input grid
+		* \param[in] origion the origion point of the input grid
+		* \param[in] voxelSize the voxel size of the input grid
+		* \param[in] knn Number of nearest neighbors to return
+		*/
+		void knnSearchGpu(cudaSurfaceObject_t volumeSurf, int3 resolution, 
+			float3 origion, float voxelSize, size_t knn) const;
+
 		// for debug
 		static void test();
 	protected:

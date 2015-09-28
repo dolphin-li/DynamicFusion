@@ -148,7 +148,7 @@ namespace dfusion
 	}
 
 	__global__ void write_nodes_kernel(const float4* points_not_compact, 
-		const int* index, WarpNode* nodes, float4* nodesVW, float weight_radius, int n)
+		const int* index, Tbx::Dual_quat_cu* nodesDq, float4* nodesVW, float weight_radius, int n)
 	{
 		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
 		unsigned int threadId = __mul24(blockId, blockDim.x << 3) + threadIdx.x;
@@ -158,16 +158,15 @@ namespace dfusion
 		{
 			if (threadId < n)
 			{
-				WarpNode node;
+				Tbx::Dual_quat_cu dq = Tbx::Dual_quat_cu::identity();
 				float4 p = points_not_compact[index[threadId]];
 				float inv_w = 1.f / p.w;
-				node.v_w.x = p.x * inv_w;
-				node.v_w.y = p.y * inv_w;
-				node.v_w.z = p.z * inv_w;
-				node.v_w.w = weight_radius;
-				node.dq = Tbx::Dual_quat_cu::identity();
-				nodes[threadId] = node;
-				nodesVW[threadId] = node.v_w;
+				p.x *= inv_w;
+				p.y *= inv_w;
+				p.z *= inv_w;
+				p.w = weight_radius;
+				nodesDq[threadId] = dq;
+				nodesVW[threadId] = p;
 			}
 		}
 	}
@@ -226,7 +225,7 @@ namespace dfusion
 		if (num_after_compact > MaxNodeNum)
 			printf("warning: too many nodes %d vs %d\n", num_after_compact, MaxNodeNum);
 		write_nodes_kernel << <grid, block >> >(
-			m_meshPointsSorted.ptr(), m_meshPointsFlags.ptr(), getNodesPtr(0), getNodesVwPtr(0),
+			m_meshPointsSorted.ptr(), m_meshPointsFlags.ptr(), getNodesDqPtr(0), getNodesVwPtr(0),
 			m_param.warp_param_dw, m_numNodes[0]);
 		cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
 	}
@@ -236,6 +235,13 @@ namespace dfusion
 	void WarpField::updateAnnField()
 	{
 		m_nodeTree->buildTree(m_nodesVW.ptr(), m_numNodes[0]);
+
+		cudaSurfaceObject_t surf = bindKnnFieldSurface();
+
+		m_nodeTree->knnSearchGpu(surf, m_volume->getResolution(),
+			m_volume->getOrigion(), m_volume->getVoxelSize(), KnnK);
+
+		unBindKnnFieldSurface(surf);
 	}
 #pragma endregion
 

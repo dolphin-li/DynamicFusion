@@ -63,4 +63,45 @@ namespace dfusion
 				updateGraph(lv);
 		}
 	}
+
+	cudaSurfaceObject_t WarpField::bindKnnFieldSurface()
+	{
+		cudaSurfaceObject_t t;
+		cudaResourceDesc    surfRes;
+		memset(&surfRes, 0, sizeof(cudaResourceDesc));
+		surfRes.resType = cudaResourceTypeArray;
+		surfRes.res.array.array = m_knnField;
+		cudaSafeCall(cudaCreateSurfaceObject(&t, &surfRes));
+		return t;
+	}
+
+	void WarpField::unBindKnnFieldSurface(cudaSurfaceObject_t t)
+	{
+		cudaSafeCall(cudaDestroySurfaceObject(t));
+	}
+
+	cudaTextureObject_t WarpField::bindKnnFieldTexture()
+	{
+		cudaTextureObject_t t;
+		cudaResourceDesc texRes;
+		memset(&texRes, 0, sizeof(cudaResourceDesc));
+		texRes.resType = cudaResourceTypeArray;
+		texRes.res.array.array = m_knnField;
+		cudaTextureDesc texDescr;
+		memset(&texDescr, 0, sizeof(cudaTextureDesc));
+		texDescr.normalizedCoords = 0;
+		texDescr.filterMode = cudaFilterModePoint;
+		texDescr.addressMode[0] = cudaAddressModeClamp;
+		texDescr.addressMode[1] = cudaAddressModeClamp;
+		texDescr.addressMode[2] = cudaAddressModeClamp;
+		texDescr.readMode = cudaReadModeElementType;
+		cudaSafeCall(cudaCreateTextureObject(&t, &texRes, &texDescr, NULL));
+		return t;
+	}
+
+	void WarpField::unBindKnnFieldTexture(cudaTextureObject_t t)
+	{
+		cudaSafeCall(cudaDestroyTextureObject(t));
+	}
+
 }

@@ -65,7 +65,7 @@ namespace dfusion
 		void copy_invert_y(const uchar4* gldata, ColorMap& img);
 		void copy_gldepth_to_depthmap(const uchar4* gldata, DepthMap& depth, 
 			float s1, float s2, float camNear);
-		void copy_warp_node_to_gl_buffer(WarpNode* gldata, const WarpField* warpField);
+		void copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField);
 	private:
 		PointType* m_verts_d;
 		PointType* m_normals_d;

@@ -8,27 +8,6 @@ namespace dfusion
 	class TsdfVolume;
 	class GpuKdTree;
 
-	struct __align__(16) WarpNode
-	{
-		float4 v_w; // dg_v, dg_w in the paper
-		Tbx::Dual_quat_cu dq; // dg_se3 in the paper
-		float4 dummy; // free for now, may be used later
-		__device__ __host__ void set(float4 a, float4 b, float4 c)
-		{
-			dq = Tbx::Dual_quat_cu(Tbx::Quat_cu(a.x, a.y, a.z, a.w),
-				Tbx::Quat_cu(b.x, b.y, b.z, b.w));
-			v_w = c;
-		}
-		__device__ __host__ void get(float4& a, float4& b, float4& c)
-		{
-			Tbx::Quat_cu q0 = dq.get_non_dual_part();
-			Tbx::Quat_cu q1 = dq.get_dual_part();
-			a = make_float4(q0.w(), q0.i(), q0.j(), q0.k());
-			b = make_float4(q1.w(), q1.i(), q1.j(), q1.k());
-			c = v_w;
-		}
-	};
-
 	class WarpField
 	{
 	public:
@@ -37,6 +16,7 @@ namespace dfusion
 			GraphLevelNum = 4,
 			MaxNodeNum = 4096,
 			KnnK = 4, // num of KnnIdx
+			KnnInvalidId = MaxNodeNum,
 		};
 	public:
 		WarpField();
@@ -55,13 +35,19 @@ namespace dfusion
 
 		int getNumLevels()const{ return GraphLevelNum; }
 		int getNumNodesInLevel(int level)const{ return m_numNodes[level]; }
-		WarpNode* getNodesPtr(int level){ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
-		const WarpNode* getNodesPtr(int level)const{ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
+		Tbx::Dual_quat_cu* getNodesDqPtr(int level){ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
+		const Tbx::Dual_quat_cu* getNodesDqPtr(int level)const{ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
+		float4* getNodesVwPtr(int level){ return m_nodesVW.ptr() + MaxNodeNum*level; }
+		const float4* getNodesVwPtr(int level)const{ return m_nodesVW.ptr() + MaxNodeNum*level; }
+
+		cudaSurfaceObject_t bindKnnFieldSurface();
+		void unBindKnnFieldSurface(cudaSurfaceObject_t t);
+		cudaTextureObject_t bindKnnFieldTexture();
+		void unBindKnnFieldTexture(cudaTextureObject_t t);
 	protected:
 		void insertNewNodes(GpuMesh& src);
 		void updateAnnField();
 		void updateGraph(int level);
-		float4* getNodesVwPtr(int level){ return m_nodesVW.ptr() + MaxNodeNum*level; }
 	private:
 		Param m_param;
 		TsdfVolume* m_volume;
@@ -71,7 +57,7 @@ namespace dfusion
 		int m_numNodes[GraphLevelNum];
 
 		// store quaternion-translation parts:
-		DeviceArray<WarpNode> m_nodesQuatTrans;
+		DeviceArray<Tbx::Dual_quat_cu> m_nodesQuatTrans;
 		DeviceArray<float4> m_nodesVW;
 		
 		// process the input GpuMesh

@@ -94,7 +94,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PreprocessorDefinitions>UNICODE;WIN32;WIN64;QT_DLL;QT_CORE_LIB;QT_GUI_LIB;QT_OPENGL_LIB;QT_WIDGETS_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(KINECTSDK10_DIR)\inc;$(ProjectDir)\algorithm\DynamicFusion;$(ProjectDir)\algorithm\freeglut;$(ProjectDir)\algorithm\renderable;$(ProjectDir)\algorithm\mpu;$(ProjectDir)\algorithm\ldpmat;$(ProjectDir)\algorithm\kdtree;$(ProjectDir)\algorithm\freeImage;$(ProjectDir)\algorithm\camera;$(ProjectDir)\algorithm\bfgs;$(ProjectDir)\algorithm;.\GeneratedFiles;.;$(QTDIR)\include;.\GeneratedFiles\$(ConfigurationName);$(QTDIR)\include\QtCore;$(QTDIR)\include\QtGui;$(QTDIR)\include\QtOpenGL;$(QTDIR)\include\QtWidgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(KINECTSDK10_DIR)\inc;$(ProjectDir)\algorithm\DynamicFusion\cudpp\ModernGpu\include;$(ProjectDir)\algorithm\DynamicFusion;$(ProjectDir)\algorithm\freeglut;$(ProjectDir)\algorithm\renderable;$(ProjectDir)\algorithm\mpu;$(ProjectDir)\algorithm\ldpmat;$(ProjectDir)\algorithm\kdtree;$(ProjectDir)\algorithm\freeImage;$(ProjectDir)\algorithm\camera;$(ProjectDir)\algorithm\bfgs;$(ProjectDir)\algorithm;.\GeneratedFiles;.;$(QTDIR)\include;.\GeneratedFiles\$(ConfigurationName);$(QTDIR)\include\QtCore;$(QTDIR)\include\QtGui;$(QTDIR)\include\QtOpenGL;$(QTDIR)\include\QtWidgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -130,7 +130,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PreprocessorDefinitions>UNICODE;WIN32;WIN64;QT_DLL;QT_NO_DEBUG;NDEBUG;QT_CORE_LIB;QT_GUI_LIB;QT_OPENGL_LIB;QT_WIDGETS_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(KINECTSDK10_DIR)\inc;$(ProjectDir)\algorithm\DynamicFusion;$(ProjectDir)\algorithm\freeglut;$(ProjectDir)\algorithm\renderable;$(ProjectDir)\algorithm\mpu;$(ProjectDir)\algorithm\ldpmat;$(ProjectDir)\algorithm\kdtree;$(ProjectDir)\algorithm\freeImage;$(ProjectDir)\algorithm\camera;$(ProjectDir)\algorithm\bfgs;$(ProjectDir)\algorithm;.\GeneratedFiles;.;$(QTDIR)\include;.\GeneratedFiles\$(ConfigurationName);$(QTDIR)\include\QtCore;$(QTDIR)\include\QtGui;$(QTDIR)\include\QtOpenGL;$(QTDIR)\include\QtWidgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(KINECTSDK10_DIR)\inc;$(ProjectDir)\algorithm\DynamicFusion\cudpp\ModernGpu\include;$(ProjectDir)\algorithm\DynamicFusion;$(ProjectDir)\algorithm\freeglut;$(ProjectDir)\algorithm\renderable;$(ProjectDir)\algorithm\mpu;$(ProjectDir)\algorithm\ldpmat;$(ProjectDir)\algorithm\kdtree;$(ProjectDir)\algorithm\freeImage;$(ProjectDir)\algorithm\camera;$(ProjectDir)\algorithm\bfgs;$(ProjectDir)\algorithm;.\GeneratedFiles;.;$(QTDIR)\include;.\GeneratedFiles\$(ConfigurationName);$(QTDIR)\include\QtCore;$(QTDIR)\include\QtGui;$(QTDIR)\include\QtOpenGL;$(QTDIR)\include\QtWidgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat />
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
@@ -152,6 +152,9 @@
     <ClCompile Include="algorithm\BFGS\solver.cpp" />
     <ClCompile Include="algorithm\camera\Camera.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mgpuutil.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mmio.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\sparsematrix.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\device_memory.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionParam.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cpp" />
@@ -268,7 +271,51 @@
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_config.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_hash.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.h" />
-    <ClInclude Include="algorithm\DynamicFusion\cudpp\MergeSort.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctaloadbalance.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctamerge.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctascan.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctasearch.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctasegreduce.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctasegscan.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctasegsort.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctasortedsearch.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\devicetypes.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\deviceutil.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\intrinsics.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\launchbox.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\loadstore.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\serialsets.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\sortnetwork.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\bulkinsert.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\bulkremove.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\csrtools.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\cubradixsort.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\intervalmove.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\join.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\loadbalance.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\localitysort.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\merge.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\mergesort.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\reduce.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\reducebykey.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\scan.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\search.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\segmentedsort.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\segreduce.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\segreducecsr.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\kernels\sets.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\mgpudevice.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\mgpuenums.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\mgpuhost.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\mmio.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\moderngpu.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\sparsematrix.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\util\format.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\util\mgpualloc.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\util\mgpucontext.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\util\static.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\util\util.h" />
+    <ClInclude Include="algorithm\DynamicFusion\cudpp\ModerGpuWrapper.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\thrust_wrapper.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_array.h" />
     <ClInclude Include="algorithm\DynamicFusion\device_memory.h" />
@@ -284,6 +331,7 @@
     <ClInclude Include="algorithm\DynamicFusion\DynamicFusionProcessor.h" />
     <ClInclude Include="algorithm\DynamicFusion\glsl\glsl.h" />
     <ClInclude Include="algorithm\DynamicFusion\glsl\glslprogram.h" />
+    <ClInclude Include="algorithm\DynamicFusion\GpuHeap.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuKdTree.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuMesh.h" />
     <ClInclude Include="algorithm\DynamicFusion\kernel_containers.h" />
@@ -381,7 +429,8 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="algorithm\DynamicFusion\cudpp\MergeSort.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mgpucontext.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\cudpp\ModerGpuWrapper.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\thrust_wrapper.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\GpuKdTree.cu" />
