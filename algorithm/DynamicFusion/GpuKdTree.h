@@ -44,7 +44,7 @@ namespace dfusion
 
 	public:
 		GpuKdTree();
-		void buildTree(const float4* points, int n, int max_leaf_size=32);
+		void buildTree(const float4* points, int n, int stride_in_float4, int max_leaf_size=32);
 
 		/**
 		* \brief Perform k-nearest neighbor search
@@ -58,12 +58,13 @@ namespace dfusion
 		/**
 		* \brief Perform k-nearest neighbor search on a grid: (x,y,z) = origion + (ix,iy,iz)*voxelSize
 		* \param[out] volumeSurf the volume of type WarpField::KnnIdx (generally uchar4, ushort4)
-		* \param[in] resolution the resolution of the input grid
+		* \param[in] begin the x0y0z0 of the input grid
+		* \param[in] end the x1y1z1 of the input grid: valid range: begin:end
 		* \param[in] origion the origion point of the input grid
 		* \param[in] voxelSize the voxel size of the input grid
 		* \param[in] knn Number of nearest neighbors to return
 		*/
-		void knnSearchGpu(cudaSurfaceObject_t volumeSurf, int3 resolution, 
+		void knnSearchGpu(cudaSurfaceObject_t volumeSurf, int3 begin, int3 end, 
 			float3 origion, float voxelSize, size_t knn) const;
 
 		// for debug

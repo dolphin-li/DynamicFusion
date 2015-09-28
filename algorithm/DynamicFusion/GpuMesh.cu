@@ -90,7 +90,7 @@ namespace dfusion
 
 		if (i < n)
 		{
-			float4 node = nodes[i];
+			float4 node = nodes[i*3+2];
 			Tbx::Vec3 t = trans * Tbx::Point3(node.x, node.y, node.z);
 			node.x = t.x;
 			node.y = t.y;
@@ -104,7 +104,7 @@ namespace dfusion
 		int n = warpField->getNumNodesInLevel(0);
 		if (n == 0)
 			return;
-		const float4* nodes = warpField->getNodesVwPtr(0);
+		const float4* nodes = warpField->getNodesDqVwPtr(0);
 		Tbx::Transfo tr = warpField->get_rigidTransform();
 		dim3 block(256);
 		dim3 grid(1);

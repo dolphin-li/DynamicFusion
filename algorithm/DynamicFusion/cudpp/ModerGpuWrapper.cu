@@ -17,6 +17,18 @@ namespace modergpu_wrapper
 			g_context = CreateCudaDevice(0);
 	}
 
+	void mergesort(int* val, int count)
+	{
+		create_context();
+		MergesortKeys(val, count, *g_context);
+	}
+
+	void mergesort(float* val, int count)
+	{
+		create_context();
+		MergesortKeys(val, count, *g_context);
+	}
+
 	void mergesort_by_key(int* keys_global, int* values_global, int count)
 	{
 		create_context();

@@ -361,7 +361,7 @@ namespace dfusion
 	}
 
 	__global__ void init_data_kernel(
-		const float4* points_in,
+		const float4* points_in, int stride_in_float4,
 		float4* points_out, float* point_x, float* point_y, float* point_z,
 		float* tmp_pt_x, float* tmp_pt_y, float* tmp_pt_z,
 		int* index_x, int* index_y, int* index_z, int nPoints,
@@ -370,7 +370,7 @@ namespace dfusion
 		int tid = threadIdx.x + blockIdx.x*blockDim.x;
 		if (tid < nPoints)
 		{
-			float4 xyz = points_in[tid];
+			float4 xyz = points_in[tid*stride_in_float4];
 			points_out[tid] = xyz;
 			point_x[tid] = xyz.x;
 			point_y[tid] = xyz.y;
@@ -429,7 +429,7 @@ namespace dfusion
 		allocation_info_ptr_ = nullptr;
 	}
 
-	void GpuKdTree::buildTree(const float4* points, int n, int max_leaf_size)
+	void GpuKdTree::buildTree(const float4* points, int n, int stride_in_float4, int max_leaf_size)
 	{
 		// memory allocation
 		allocateMemPool(n, max_leaf_size);
@@ -440,7 +440,7 @@ namespace dfusion
 			dim3 block(256);
 			int num = max(nInputPoints_, prealloc_);
 			dim3 grid(divUp(num, block.x));
-			init_data_kernel << <grid, block >> >(points,
+			init_data_kernel << <grid, block >> >(points, stride_in_float4,
 				input_points_ptr_, points_x_ptr_, points_y_ptr_,points_z_ptr_,
 				tmp_pt_x_ptr_, tmp_pt_y_ptr_, tmp_pt_z_ptr_,
 				index_x_ptr_, index_y_ptr_, index_z_ptr_, nInputPoints_,
@@ -846,18 +846,18 @@ namespace dfusion
 		}
 
 		template< typename GPUResultSet>
-		__global__ void nearestKernel(cudaSurfaceObject_t volumeSurf, int3 resolution,
+		__global__ void nearestKernel(cudaSurfaceObject_t volumeSurf, int3 begin, int3 end,
 			float3 origion, float voxelSize, GPUResultSet result
 			)
 		{
 			typedef float DistanceType;
 			typedef float ElementType;
 
-			int ix = blockDim.x*blockIdx.x + threadIdx.x;
-			int iy = blockDim.y*blockIdx.y + threadIdx.y;
-			int iz = blockDim.z*blockIdx.z + threadIdx.z;
+			int ix = blockDim.x*blockIdx.x + threadIdx.x + begin.x;
+			int iy = blockDim.y*blockIdx.y + threadIdx.y + begin.y;
+			int iz = blockDim.z*blockIdx.z + threadIdx.z + begin.z;
 
-			if (ix < resolution.x && iy < resolution.y && iz < resolution.z)
+			if (ix < end.x && iy < end.y && iz < end.z)
 			{
 				float4 q;
 				q.x = origion.x + ix*voxelSize;
@@ -963,21 +963,25 @@ namespace dfusion
 		}
 	}
 
-	void GpuKdTree::knnSearchGpu(cudaSurfaceObject_t volumeSurf, int3 resolution,
+	void GpuKdTree::knnSearchGpu(cudaSurfaceObject_t volumeSurf, int3 begin, int3 end,
 		float3 origion, float voxelSize, size_t knn) const
 	{
 		if (knn != 4)
 			throw std::exception("non-supported knn-k");
 
+		if (begin.x >= end.x || begin.y >= end.y || begin.z >= end.z)
+			return;
+
 		dim3 threadsPerBlock(32, 8, 2);
-		dim3 blocksPerGrid(divUp(resolution.x, threadsPerBlock.x),
-			divUp(resolution.y, threadsPerBlock.y),
-			divUp(resolution.z, threadsPerBlock.z));
+		dim3 blocksPerGrid(divUp(end.x-begin.x, threadsPerBlock.x),
+			divUp(end.y - begin.y, threadsPerBlock.y),
+			divUp(end.z - begin.z, threadsPerBlock.z));
 		bool sorted = true;
 
 		KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 			volumeSurf,
-			resolution,
+			begin,
+			end,
 			origion,
 			voxelSize,
 			KdTreeCudaPrivate::KnnResultSet<float, 4>(sorted)

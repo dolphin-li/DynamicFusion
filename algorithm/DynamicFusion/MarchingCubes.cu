@@ -791,6 +791,9 @@ namespace dfusion
 			m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
 		cudaSafeCall(cudaGetLastError(), "compact voxels");
 #else
+		int zero_mem = 0;
+		cudaSafeCall(cudaMemcpyToSymbol(output_count, &zero_mem, sizeof(int)));
+
 		OccupiedVoxels ov;
 
 		ov.voxels_indeces = m_compVoxelArray.ptr();

@@ -24,8 +24,8 @@ namespace dfusion
 		m_param = param;
 		m_volume = vol;
 		m_rigidTransform = Tbx::Transfo::identity();
-		m_nodesQuatTrans.create(MaxNodeNum*GraphLevelNum);
-		m_nodesVW.create(MaxNodeNum*GraphLevelNum);
+		m_nodesQuatTransVw.create(MaxNodeNum*GraphLevelNum*3);
+		cudaMemset(m_nodesQuatTransVw.ptr(), 0, m_nodesQuatTransVw.size()*m_nodesQuatTransVw.elem_size);
 		for (int lv = 0; lv < GraphLevelNum; lv++)
 			m_numNodes[lv] = 0;
 		int3 res = m_volume->getResolution();
@@ -38,6 +38,7 @@ namespace dfusion
 		cudaExtent ext = make_cudaExtent(res.x, res.y, res.z);
 		cudaChannelFormatDesc desc = cudaCreateChannelDesc<KnnIdx>();
 		cudaSafeCall(cudaMalloc3DArray(&m_knnField, &desc, ext), "cudaMalloc3D");
+		initKnnField();
 
 		if (m_nodeTree)
 			delete m_nodeTree;
@@ -104,4 +105,29 @@ namespace dfusion
 		cudaSafeCall(cudaDestroyTextureObject(t));
 	}
 
+	cudaTextureObject_t WarpField::bindNodesDqVwTexture()
+	{
+		cudaTextureObject_t t;
+		cudaResourceDesc texRes;
+		memset(&texRes, 0, sizeof(cudaResourceDesc));
+		texRes.resType = cudaResourceTypeLinear;
+		texRes.res.linear.devPtr = m_nodesQuatTransVw.ptr();
+		texRes.res.linear.desc = cudaCreateChannelDesc<float4>();
+		texRes.res.linear.sizeInBytes = m_nodesQuatTransVw.size()*sizeof(float4);
+		cudaTextureDesc texDescr;
+		memset(&texDescr, 0, sizeof(cudaTextureDesc));
+		texDescr.normalizedCoords = 0;
+		texDescr.filterMode = cudaFilterModePoint;
+		texDescr.addressMode[0] = cudaAddressModeClamp;
+		texDescr.addressMode[1] = cudaAddressModeClamp;
+		texDescr.addressMode[2] = cudaAddressModeClamp;
+		texDescr.readMode = cudaReadModeElementType;
+		cudaSafeCall(cudaCreateTextureObject(&t, &texRes, &texDescr, NULL));
+		return t;
+	}
+
+	void WarpField::unBindNodesDqVwTexture(cudaTextureObject_t t)
+	{
+		cudaSafeCall(cudaDestroyTextureObject(t));
+	}
 }

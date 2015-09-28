@@ -8,6 +8,24 @@ namespace dfusion
 	class TsdfVolume;
 	class GpuKdTree;
 
+	__device__ __host__ __forceinline__ static Tbx::Quat_cu pack_quat(float4 a)
+	{
+		return Tbx::Quat_cu(a.x, a.y, a.z, a.w);
+	}
+	__device__ __host__ __forceinline__ static float4 unpack_quat(Tbx::Quat_cu a)
+	{
+		return make_float4(a.w(), a.i(), a.j(), a.k());
+	}
+	__device__ __host__ __forceinline__ static Tbx::Dual_quat_cu pack_dual_quat(float4 a, float4 b)
+	{
+		return Tbx::Dual_quat_cu(pack_quat(a), pack_quat(b));
+	}
+	__device__ __host__ __forceinline__ static void unpack_dual_quat(Tbx::Dual_quat_cu dq, float4& a, float4& b)
+	{
+		a = unpack_quat(dq.get_non_dual_part());
+		b = unpack_quat(dq.get_dual_part());
+	}
+
 	class WarpField
 	{
 	public:
@@ -35,16 +53,19 @@ namespace dfusion
 
 		int getNumLevels()const{ return GraphLevelNum; }
 		int getNumNodesInLevel(int level)const{ return m_numNodes[level]; }
-		Tbx::Dual_quat_cu* getNodesDqPtr(int level){ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
-		const Tbx::Dual_quat_cu* getNodesDqPtr(int level)const{ return m_nodesQuatTrans.ptr() + MaxNodeNum*level; }
-		float4* getNodesVwPtr(int level){ return m_nodesVW.ptr() + MaxNodeNum*level; }
-		const float4* getNodesVwPtr(int level)const{ return m_nodesVW.ptr() + MaxNodeNum*level; }
+
+		// memory: [q0-q1-vw][q0-q1-vw]....
+		float4* getNodesDqVwPtr(int level){ return m_nodesQuatTransVw.ptr() + MaxNodeNum*level; }
+		const float4* getNodesDqVwPtr(int level)const{ return m_nodesQuatTransVw.ptr() + MaxNodeNum*level; }
 
 		cudaSurfaceObject_t bindKnnFieldSurface();
 		void unBindKnnFieldSurface(cudaSurfaceObject_t t);
 		cudaTextureObject_t bindKnnFieldTexture();
 		void unBindKnnFieldTexture(cudaTextureObject_t t);
+		cudaTextureObject_t bindNodesDqVwTexture();
+		void unBindNodesDqVwTexture(cudaTextureObject_t t);
 	protected:
+		void initKnnField();
 		void insertNewNodes(GpuMesh& src);
 		void updateAnnField();
 		void updateGraph(int level);
@@ -57,8 +78,7 @@ namespace dfusion
 		int m_numNodes[GraphLevelNum];
 
 		// store quaternion-translation parts:
-		DeviceArray<Tbx::Dual_quat_cu> m_nodesQuatTrans;
-		DeviceArray<float4> m_nodesVW;
+		DeviceArray<float4> m_nodesQuatTransVw;//q0-q1-vw-q0-q1-vw...
 		
 		// process the input GpuMesh
 		int3 m_nodesGridSize;
@@ -66,6 +86,7 @@ namespace dfusion
 		DeviceArray<float4> m_meshPointsSorted;
 		DeviceArray<int> m_meshPointsKey;
 		DeviceArray<int> m_meshPointsFlags;
+		DeviceArray<float> m_tmpBuffer;
 
 		GpuKdTree* m_nodeTree;
 
