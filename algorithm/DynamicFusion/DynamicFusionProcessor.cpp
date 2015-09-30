@@ -42,6 +42,7 @@ namespace dfusion
 		m_rayCaster = nullptr;
 		m_marchCube = nullptr;
 		m_canoMesh = nullptr;
+		m_warpedMesh = nullptr;
 		m_warpField = nullptr;
 		m_frame_id = 0;
 	}
@@ -119,6 +120,7 @@ namespace dfusion
 		DFUSION_SAFE_DELETE(m_rayCaster);
 		DFUSION_SAFE_DELETE(m_marchCube);
 		DFUSION_SAFE_DELETE(m_canoMesh);
+		DFUSION_SAFE_DELETE(m_warpedMesh);
 		DFUSION_SAFE_DELETE(m_warpField);
 		m_frame_id = 0;
 		m_depth_curr_pyd.clear();
@@ -127,6 +129,30 @@ namespace dfusion
 		m_depth_prev_pyd.clear();
 		m_vmap_prev_pyd.clear();
 		m_nmap_prev_pyd.clear();
+	}
+
+	void DynamicFusionProcessor::updateParam(const Param& param)
+	{
+		bool reCreate = false;
+		bool reSet = false;
+
+		for (int k = 0; k < 3; k++)
+		{
+			if (m_param.volume_resolution[k] != param.volume_resolution[k])
+				reCreate = true;
+		}
+		if (m_param.voxels_per_meter != param.voxels_per_meter)
+			reCreate = true;
+
+		if (reCreate)
+			throw std::exception("Dynamic Resizing Not Allowed Now!");
+
+		m_param = param;
+
+		if (reCreate)
+			init(param);
+		else if (reSet)
+			reset();
 	}
 
 	void DynamicFusionProcessor::reset()
@@ -173,7 +199,7 @@ namespace dfusion
 		{
 			Camera cam = *m_camera;
 			cam.setModelViewMatrix(userCam.getModelViewMatrix());
-			m_warpedMesh->renderToImg(cam, light, img, m_warpField);
+			m_warpedMesh->renderToImg(cam, light, img, m_param, m_warpField);
 		}
 	}
 
@@ -201,6 +227,7 @@ namespace dfusion
 		m_warpedMesh->renderToDepth(*m_camera, m_depth_prev_pyd[0]);
 		createVMap(m_kinect_intr, m_depth_prev_pyd[0], m_vmap_prev_pyd[0]);
 		createNMap(m_vmap_prev_pyd[0], m_nmap_prev_pyd[0]);
+
 		for (int i = 1; i < RIGID_ALIGN_PYD_LEVELS; ++i){
 			resizeVMap(m_vmap_prev_pyd[i - 1], m_vmap_prev_pyd[i]);
 			resizeNMap(m_nmap_prev_pyd[i - 1], m_nmap_prev_pyd[i]);

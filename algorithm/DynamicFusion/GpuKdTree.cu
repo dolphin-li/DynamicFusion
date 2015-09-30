@@ -431,6 +431,9 @@ namespace dfusion
 
 	void GpuKdTree::buildTree(const float4* points, int n, int stride_in_float4, int max_leaf_size)
 	{
+		if(n == 0)
+			return;
+
 		// memory allocation
 		allocateMemPool(n, max_leaf_size);
 		
@@ -586,9 +589,6 @@ namespace dfusion
 			tmp_owners_ptr_ = tmp_index_ptr_ + nAllocatedPoints_;
 			tmp_misc_ptr_ = tmp_owners_ptr_ + nAllocatedPoints_;
 			allocation_info_ptr_ = tmp_misc_ptr_ + nAllocatedPoints_;
-
-			// bind src to texture
-			bindTextures();
 		}
 
 
@@ -599,6 +599,9 @@ namespace dfusion
 
 		// reset mem
 		cudaMemset(mempool_.ptr(), 0, mempool_.size()*mempool_.elem_size);
+
+		// bind src to texture
+		bindTextures();
 	}
 
 	namespace KdTreeCudaPrivate
@@ -618,7 +621,7 @@ namespace dfusion
 		};
 
 		//! result set for the 1nn search. Doesn't do any global memory accesses on its own,
-		template< typename DistanceType >
+		template< typename DistanceType, typename IndexType = int >
 		struct SingleResultSet
 		{
 			int bestIndex;
@@ -641,14 +644,14 @@ namespace dfusion
 			}
 
 			DistanceType* resultDist;
-			int* resultIndex;
+			IndexType* resultIndex;
 
-			__device__ inline void setResultLocation(DistanceType* dists, int* index, int thread)
+			__device__ inline void setResultLocation(DistanceType* dists, IndexType* index, int thread)
 			{
 				resultDist = dists + thread;
 				resultIndex = index + thread;
 				resultDist[0] = INFINITY;
-				resultIndex[0] = -1;
+				resultIndex[0] = IndexType(-1);
 			}
 
 			__device__ inline void finish()
@@ -675,7 +678,7 @@ namespace dfusion
 		// Register counts are the same as when removing not-needed variables in explicit specializations
 		// and the "if( useHeap )" branches are eliminated at compile time.
 		// The downside of this: a bit more complex kernel launch code.
-		template< typename DistanceType, int K>
+		template< typename DistanceType, int K, typename IndexType = int>
 		struct KnnResultSet
 		{
 			int foundNeighbors;
@@ -685,7 +688,13 @@ namespace dfusion
 
 			__device__ __host__ KnnResultSet(bool sortResults) : 
 				foundNeighbors(0), largestHeapDist(INFINITY), sorted(sortResults),
-				resultIndex_out(0){}
+				resultIndex_out(0), resultDist_out(0){
+				for (int i = 0; i < K; i++)
+				{
+					resultDist[i] = INFINITY;
+					resultIndex[i] = -1;
+				}
+			}
 
 			__device__ inline DistanceType worstDist()
 			{
@@ -722,15 +731,14 @@ namespace dfusion
 			float resultDist[K];
 			int resultIndex[K];
 			float* resultDist_out;
-			int* resultIndex_out;
+			IndexType* resultIndex_out;
 
-			__device__ inline void setResultLocation(DistanceType* dists, int* index, int thread)
+			__device__ inline void setResultLocation(DistanceType* dists, IndexType* index, int thread)
 			{
 				if (index)
-				{
-					resultDist_out = dists + thread*K;
 					resultIndex_out = index + thread*K;
-				}
+				if (dists)
+					resultDist_out = dists + thread*K;
 				for (int i = 0; i < K; i++) {
 					resultDist[i] = INFINITY;
 					resultIndex[i] = -1;
@@ -751,10 +759,12 @@ namespace dfusion
 				if (resultDist_out)
 				{
 					for (int i = 0; i < K; i++)
-					{
-						resultIndex_out[i] = resultIndex[i];
 						resultDist_out[i] = resultDist[i];
-					}
+				}
+				if (resultIndex_out)
+				{
+					for (int i = 0; i < K; i++)
+						resultIndex_out[i] = resultIndex[i];
 				}
 			}
 		};
@@ -825,9 +835,10 @@ namespace dfusion
 			}
 		}
 
-		template< typename GPUResultSet>
+		template< typename GPUResultSet, typename IndexType = int>
 		__global__ void nearestKernel(const float4* query,
-			int* resultIndex, float* resultDist,
+			int query_stride_in_float4,
+			IndexType* resultIndex, float* resultDist,
 			int querysize, GPUResultSet result
 			)
 		{
@@ -838,7 +849,7 @@ namespace dfusion
 
 			if (tid >= querysize) return;
 
-			float4 q = query[tid];
+			float4 q = query[tid*query_stride_in_float4];
 
 			result.setResultLocation(resultDist, resultIndex, tid);
 			searchNeighbors(q, result);
@@ -877,7 +888,8 @@ namespace dfusion
 		}
 	}
 
-	void GpuKdTree::knnSearchGpu(const float4* queries, int* indices, float* dists, size_t knn, size_t n) const
+	void GpuKdTree::knnSearchGpu(const float4* queries, int query_stride_in_float4,
+		ushort* indices, float* dists, size_t knn, size_t n) const
 	{
 		if (n == 0)
 			return;
@@ -885,11 +897,113 @@ namespace dfusion
 		int blocksPerGrid = divUp(n, threadsPerBlock);
 		bool sorted = true;
 
+		// bind src to texture
+		bindTextures();
+
 		switch (knn)
 		{
 		case 1:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::SingleResultSet<float, ushort>()
+				);
+		case 2:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 2, ushort>(sorted)
+				);
+			break;
+		case 3:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 3, ushort>(sorted)
+				);
+			break;
+		case 4:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 4, ushort>(sorted)
+				);
+			break;
+		case 5:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 5, ushort>(sorted)
+				);
+			break;
+		case 6:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 6, ushort>(sorted)
+				);
+			break;
+		case 7:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 7, ushort>(sorted)
+				);
+			break;
+		case 8:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
+				indices,
+				dists,
+				n,
+				KdTreeCudaPrivate::KnnResultSet<float, 8, ushort>(sorted)
+				);
+			break;
+		default:
+			throw std::exception("non-supported K in KnnSearch!");
+		}
+	}
+
+	void GpuKdTree::knnSearchGpu(const float4* queries, int query_stride_in_float4, 
+		int* indices, float* dists, size_t knn, size_t n) const
+	{
+		if (n == 0)
+			return;
+		int threadsPerBlock = 256;
+		int blocksPerGrid = divUp(n, threadsPerBlock);
+		bool sorted = true;
+
+		// bind src to texture
+		bindTextures();
+
+		switch (knn)
+		{
+		case 1:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -898,6 +1012,7 @@ namespace dfusion
 		case 2:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -907,6 +1022,7 @@ namespace dfusion
 		case 3:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -916,6 +1032,7 @@ namespace dfusion
 		case 4:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -925,6 +1042,7 @@ namespace dfusion
 		case 5:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -934,6 +1052,7 @@ namespace dfusion
 		case 6:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -943,6 +1062,7 @@ namespace dfusion
 		case 7:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -952,6 +1072,7 @@ namespace dfusion
 		case 8:
 			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
 				queries,
+				query_stride_in_float4,
 				indices,
 				dists,
 				n,
@@ -971,6 +1092,9 @@ namespace dfusion
 
 		if (begin.x >= end.x || begin.y >= end.y || begin.z >= end.z)
 			return;
+
+		// bind src to texture
+		bindTextures();
 
 		dim3 threadsPerBlock(32, 8, 2);
 		dim3 blocksPerGrid(divUp(end.x-begin.x, threadsPerBlock.x),
@@ -1092,7 +1216,7 @@ namespace dfusion
 		//resize_vec(aabb_max_, new_size, f);
 	}
 
-	void GpuKdTree::bindTextures()
+	void GpuKdTree::bindTextures()const
 	{
 		size_t offset;
 		cudaChannelFormatDesc desc_int = cudaCreateChannelDesc<int>();

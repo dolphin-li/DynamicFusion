@@ -53,7 +53,10 @@ namespace dfusion
 		* \param[out] dists Distances to the nearest neighbors found, size knn*n
 		* \param[in] knn Number of nearest neighbors to return
 		*/
-		void knnSearchGpu(const float4* queries, int* indices, float* dists, size_t knn, size_t n) const;
+		void knnSearchGpu(const float4* queries, int query_stride_in_float4, 
+			int* indices, float* dists, size_t knn, size_t n) const;
+		void knnSearchGpu(const float4* queries, int query_stride_in_float4,
+			ushort* indices, float* dists, size_t knn, size_t n) const;
 
 		/**
 		* \brief Perform k-nearest neighbor search on a grid: (x,y,z) = origion + (ix,iy,iz)*voxelSize
@@ -91,7 +94,7 @@ namespace dfusion
 
 		void allocateMemPool(int nInputPoints, int maxLeafSize);
 		void resize_node_vectors(size_t new_size);
-		void bindTextures();
+		void bindTextures()const;
 
 		int input_points_offset_byte()const{ return (const char*)input_points_ptr_ - (const char*)mempool_.ptr(); }
 		int points_offset_byte()const{ return (const char*)points_ptr_ - (const char*)mempool_.ptr(); }

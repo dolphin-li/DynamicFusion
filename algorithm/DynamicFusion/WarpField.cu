@@ -53,9 +53,6 @@ namespace dfusion
 #pragma region --init knn field
 	__global__ void initKnnFieldKernel(cudaSurfaceObject_t knnSurf, int3 resolution)
 	{
-		typedef float DistanceType;
-		typedef float ElementType;
-
 		int ix = blockDim.x*blockIdx.x + threadIdx.x;
 		int iy = blockDim.y*blockIdx.y + threadIdx.y;
 		int iz = blockDim.z*blockIdx.z + threadIdx.z;
@@ -65,6 +62,17 @@ namespace dfusion
 			WarpField::KnnIdx idx = make_ushort4(WarpField::MaxNodeNum, WarpField::MaxNodeNum, 
 				WarpField::MaxNodeNum, WarpField::MaxNodeNum);
 			surf3Dwrite(idx, knnSurf, ix*sizeof(WarpField::KnnIdx), iy, iz);
+		}
+	}
+
+	__global__ void initKnnFieldKernel1(WarpField::KnnIdx* knnPtr, int n)
+	{
+		int ix = blockDim.x*blockIdx.x + threadIdx.x;
+
+		if (ix < n)
+		{
+			knnPtr[ix] = make_ushort4(WarpField::MaxNodeNum, WarpField::MaxNodeNum,
+				WarpField::MaxNodeNum, WarpField::MaxNodeNum);
 		}
 	}
 
@@ -80,6 +88,11 @@ namespace dfusion
 		initKnnFieldKernel << <grid, block >> >(surf, res);
 		cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel");
 		unBindKnnFieldSurface(surf);
+
+		dim3 block1(256);
+		dim3 grid1(divUp(m_nodesGraph.size(), block1.x));
+		initKnnFieldKernel1 << <grid, block >> >(m_nodesGraph.ptr(), m_nodesGraph.size());
+		cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel1");
 	}
 #pragma endregion
 
@@ -204,8 +217,8 @@ namespace dfusion
 	}
 
 	__global__ void pointToKey_kernel(
-		const GpuMesh::PointType* points, int* key,
-		float4* copypoints, int n, int step,
+		const GpuMesh::PointType* points,
+		int* key, float4* copypoints, int n, int step,
 		float invGridSize, float3 origion, int3 gridRes)
 	{
 		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
@@ -442,108 +455,6 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --update ann field
-	__device__ int newKnnRegion_global_count = 0;
-	__device__ int newKnnRegion_output_count;
-	__device__ unsigned int newKnnRegion_blocks_done = 0;
-	struct NewKnnRegionCounter
-	{
-		enum
-		{
-			CTA_SIZE_X = 32,
-			CTA_SIZE_Y = 8,
-			CTA_SIZE_Z = 2,
-			CTA_SIZE = CTA_SIZE_X*CTA_SIZE_Y*CTA_SIZE_Z,
-			WARPS_COUNT = CTA_SIZE / Warp::WARP_SIZE
-		};
-
-		mutable float4* out_points;
-		float4* nodesDqVw;
-		int3 res;
-		float3 origion;
-		float voxelSize;
-
-#if 0
-		__device__ __forceinline__ void operator () () const
-		{
-			int tid_x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
-			int tid_y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
-			int tid_z = threadIdx.z + blockIdx.z * CTA_SIZE_Z;
-
-			if (__all(tid_x >= res.x && tid_y >= res.y && tid_z >= res.z))
-				return;
-
-			int warp_id = Warp::id();
-			int lane_id = Warp::laneId();
-			volatile __shared__ int warps_buffer[WARPS_COUNT];
-
-			int flag = 0;
-			float4 p4;
-			if (tid_x < res.x && tid_y < res.y && tid_z < res.z)
-			{
-				float3 p = make_float3(tid_x*voxelSize+origion.x,
-					tid_y*voxelSize + origion.y, tid_z*voxelSize + origion.z);
-				p4 = GpuMesh::to_point(p, 1.f);
-
-				// generating key
-				float3 p1 = (p - origion)*key_invGridSize;
-				int x = int(p1.x);
-				int y = int(p1.y);
-				int z = int(p1.z);
-				key = (z*key_gridRes.y + y)*key_gridRes.x + x;
-
-				// identify voxel
-				p1 = (p - origion)*vol_invVoxelSize;
-				x = int(p1.x);
-				y = int(p1.y);
-				z = int(p1.z);
-
-				// assert knnIdx sorted, thus the 1st should be the nearest
-				WarpField::KnnIdx knnIdx;
-				surf3Dread(&knnIdx, knnSurf, x*sizeof(WarpField::KnnIdx), y, z);
-				float4 nearestVw;
-				//tex1Dfetch(&nearestVw, nodesDqVwTex, knnIdx.x*3+2); // [q0-q1-vw] memory stored
-				nearestVw = nodesDqVw[knnIdx.x * 3 + 2]; // [q0-q1-vw] memory stored
-				float3 nearestV = make_float3(nearestVw.x, nearestVw.y, nearestVw.z);
-				float dif = dot(nearestV - p, nearestV - p) / (nearestVw.w * nearestVw.w);
-				flag = dif > 1.f;
-			}
-
-			int total = __popc(__ballot(flag>0));
-
-			if (total)
-			{
-				if (lane_id == 0)
-				{
-					int old = atomicAdd(&newPoints_global_count, total);
-					warps_buffer[warp_id] = old;
-				}
-
-				int old_global_voxels_count = warps_buffer[warp_id];
-				int offs = Warp::binaryExclScan(__ballot(flag>0));
-				if (old_global_voxels_count + offs < n && flag)
-				{
-					out_keys[old_global_voxels_count + offs] = key;
-					out_points[old_global_voxels_count + offs] = p4;
-				}
-			}// end if total
-
-			if (Block::flattenedThreadId() == 0)
-			{
-				unsigned int total_blocks = gridDim.x * gridDim.y * gridDim.z;
-				unsigned int value = atomicInc(&newPoints_blocks_done, total_blocks);
-
-				//last block
-				if (value == total_blocks - 1)
-				{
-					newPoints_output_count = newPoints_global_count;
-					newPoints_blocks_done = 0;
-					newPoints_global_count = 0;
-				}
-			}
-		} /* operator () */
-#endif
-	};
-
 	__global__ void seperate_xyz_nodes(const float4* nodesDqVw, 
 		float* x, float* y, float* z, int n)
 	{
@@ -555,11 +466,6 @@ namespace dfusion
 			y[tid] = dqVw.y;
 			z[tid] = dqVw.z;
 		}
-	}
-
-	__global__ void test_kernel()
-	{
-
 	}
 
 	__global__ void collect_aabb_box_kernel(float4* aabb_min, float4* aabb_max,
@@ -582,9 +488,9 @@ namespace dfusion
 		// if 1st frame, then perform whole-volume search, which is slow
 		if (m_lastNumNodes[0] == 0)
 		{
-			m_nodeTree->buildTree(m_nodesQuatTransVw.ptr() + 2, m_numNodes[0], 3);
+			m_nodeTree[0]->buildTree(m_nodesQuatTransVw.ptr() + 2, m_numNodes[0], 3);
 			cudaSurfaceObject_t surf = bindKnnFieldSurface();
-			m_nodeTree->knnSearchGpu(surf, make_int3(0,0,0), res, origion, vsz, KnnK);
+			m_nodeTree[0]->knnSearchGpu(surf, make_int3(0, 0, 0), res, origion, vsz, KnnK);
 			unBindKnnFieldSurface(surf);
 		}
 		// else, collect voxels around the new added node and then perform sub-volume searching
@@ -634,9 +540,11 @@ namespace dfusion
 			end.y = max(1, min(res.y, end.y + ext));
 			end.z = max(1, min(res.z, end.z + ext));
 
-			m_nodeTree->buildTree(m_nodesQuatTransVw.ptr() + 2, m_numNodes[0], 3);
+			// perform knn search on the sub volume
+			m_nodeTree[0]->buildTree(m_nodesQuatTransVw.ptr() + 2, m_numNodes[0], 3);
 			cudaSurfaceObject_t surf = bindKnnFieldSurface();
-			m_nodeTree->knnSearchGpu(surf, begin, end, origion, vsz, KnnK);
+			m_nodeTree[0]->knnSearchGpu(surf, begin, end, origion, vsz, KnnK);
+			//m_nodeTree[0]->knnSearchGpu(surf, make_int3(0,0,0), res, origion, vsz, KnnK);
 			unBindKnnFieldSurface(surf);
 		}
 	}
@@ -645,7 +553,91 @@ namespace dfusion
 #pragma region --update graph
 	void WarpField::updateGraph(int level)
 	{
+		if (level == 0)
+			throw std::exception("called an invalid level function\n");
 
+		int num_points = m_numNodes[level - 1];
+
+		if (num_points == 0)
+		{
+			m_numNodes[level] = 0;
+			return;
+		}
+
+		// reset symbols
+		int zero_mem_symbol = 0;
+		cudaMemcpyToSymbol(newPoints_global_count, &zero_mem_symbol, sizeof(int));
+		cudaMemcpyToSymbol(newPoints_blocks_done, &zero_mem_symbol, sizeof(int));
+		cudaMemcpyToSymbol(validVoxel_global_count, &zero_mem_symbol, sizeof(int));
+		cudaMemcpyToSymbol(validVoxel_blocks_done, &zero_mem_symbol, sizeof(int));
+		cudaSafeCall(cudaDeviceSynchronize(), "set zero: new point");
+
+		float radius = m_param.warp_radius_search_epsilon * pow(m_param.warp_radius_search_beta, level);
+
+		{
+			dim3 block(32);
+			dim3 grid(1, 1, 1);
+			grid.x = divUp(num_points, block.x << 3);
+
+			// copy to new buffer and generate sort key
+			pointToKey_kernel << <grid, block >> >(
+				getNodesDqVwPtr(level-1)+2, m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(),
+				num_points, 3, 1.f / radius, m_volume->getOrigion(), m_nodesGridSize);
+			cudaSafeCall(cudaGetLastError(), "pointToKey_kernel lv");
+		}
+
+		if (num_points == 0)
+			return;
+
+		// sort
+		thrust_wrapper::sort_by_key(m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(), num_points);
+
+		// segment scan
+		thrust_wrapper::inclusive_scan_by_key(m_meshPointsKey.ptr(),
+			m_meshPointsSorted.ptr(), m_meshPointsSorted.ptr(), num_points);
+
+		// compact
+		ValidVoxelCounter counter;
+		counter.counts = m_meshPointsFlags.ptr();
+		counter.key_sorted = m_meshPointsKey.ptr();
+		counter.n = num_points;
+		counter.weight_thre = 1;
+		counter.points_scaned = m_meshPointsSorted.ptr();
+		if (num_points)
+		{
+			dim3 block1(ValidVoxelCounter::CTA_SIZE);
+			dim3 grid1(divUp(num_points, block1.x));
+			get_validVoxel_kernel << <grid1, block1 >> >(counter);
+			cudaSafeCall(cudaGetLastError(), "get_validVoxel_kernel lv");
+			cudaSafeCall(cudaDeviceSynchronize(), "get_validVoxel_kernel lv sync");
+		}
+
+		int num_after_compact = 0;
+		cudaSafeCall(cudaMemcpyFromSymbol(&num_after_compact,
+			validVoxel_output_count, sizeof(int)), "copy voxel count from symbol");
+		m_numNodes[level] = min(num_after_compact, MaxNodeNum);
+		if (num_after_compact > MaxNodeNum)
+			printf("warning: too many nodes %d vs %d in level\n", 
+			num_after_compact + m_lastNumNodes[0], MaxNodeNum, level);
+
+		// write level nodes
+		if (m_numNodes[level] > 0)
+		{
+			dim3 block(32);
+			dim3 grid(1, 1, 1);
+			grid.x = divUp(m_numNodes[level], block.x);
+			write_nodes_kernel << <grid, block >> >(
+				m_meshPointsSorted.ptr(), m_meshPointsFlags.ptr(),
+				getNodesDqVwPtr(level), m_param.warp_param_dw*pow(m_param.warp_radius_search_beta, level), 
+				m_numNodes[level]);
+			cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
+		}
+
+		// build graph
+		m_nodeTree[level]->buildTree(getNodesDqVwPtr(level) + 2, m_numNodes[level], 3);
+
+		m_nodeTree[level]->knnSearchGpu(getNodesDqVwPtr(level - 1) + 2, 3,
+			(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
 	}
 #pragma endregion
 }

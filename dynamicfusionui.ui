@@ -274,6 +274,58 @@
       <string>Reset</string>
      </property>
     </widget>
+    <widget class="QGroupBox" name="groupBox_6">
+     <property name="geometry">
+      <rect>
+       <x>480</x>
+       <y>10</y>
+       <width>231</width>
+       <height>141</height>
+      </rect>
+     </property>
+     <property name="title">
+      <string>view</string>
+     </property>
+     <widget class="QCheckBox" name="cbShowMesh">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>20</y>
+        <width>81</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>show mesh</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="cbShowNodes">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>40</y>
+        <width>81</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>show nodes</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="cbShowGraph">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>60</y>
+        <width>81</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>show graph</string>
+      </property>
+     </widget>
+    </widget>
    </widget>
   </widget>
   <action name="actionLoad_frames">

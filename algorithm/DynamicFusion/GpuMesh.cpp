@@ -227,7 +227,7 @@ namespace dfusion
 				SelectPalette(g_hdc, g_hpalette, FALSE);
 				RealizePalette(g_hdc);
 				if (g_testmesh)
-					g_testmesh->renderToImg(g_testCam, LightSource(), ColorMap());
+					g_testmesh->renderToImg(g_testCam, LightSource(), ColorMap(), Param());
 				break;
 			}
 			break;
@@ -238,7 +238,7 @@ namespace dfusion
 				SelectPalette(g_hdc, g_hpalette, FALSE);
 				RealizePalette(g_hdc);
 				if (g_testmesh)
-					g_testmesh->renderToImg(g_testCam, LightSource(), ColorMap());
+					g_testmesh->renderToImg(g_testCam, LightSource(), ColorMap(), Param());
 				return TRUE;
 			}
 			break;
@@ -248,7 +248,7 @@ namespace dfusion
 				PAINTSTRUCT ps;
 				BeginPaint(hWnd, &ps);
 				if (g_glrc && g_testmesh)
-					g_testmesh->renderToImg(g_testCam, LightSource(), ColorMap());
+					g_testmesh->renderToImg(g_testCam, LightSource(), ColorMap(), Param());
 				EndPaint(hWnd, &ps);
 				return 0;
 			}
@@ -565,7 +565,9 @@ namespace dfusion
 			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id_warpnodes));
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
 
-			glBufferData(GL_ARRAY_BUFFER, WarpField::MaxNodeNum*WarpField::GraphLevelNum*sizeof(float4), 
+			glBufferData(GL_ARRAY_BUFFER, WarpField::MaxNodeNum*
+				WarpField::GraphLevelNum*(sizeof(float4)
+				+WarpField::KnnK*sizeof(int)*2), 
 				0, GL_DYNAMIC_DRAW);
 			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res_warp, m_vbo_id_warpnodes,
 					cudaGraphicsMapFlagsNone));
@@ -602,7 +604,8 @@ namespace dfusion
 		m_vbo_id_warpnodes = 0;
 	}
 
-	void GpuMesh::renderToImg(const Camera& camera, LightSource light, ColorMap& img, const WarpField* warpField)
+	void GpuMesh::renderToImg(const Camera& camera, LightSource light, ColorMap& img, 
+		const Param& param, const WarpField* warpField)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
@@ -634,20 +637,23 @@ namespace dfusion
 		camera.apply();
 
 		// draw mesh vertices
-		unlockVertsNormals();
-		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
-		glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
-		glEnableClientState(GL_VERTEX_ARRAY);
+		if (param.view_show_mesh)
+		{
+			unlockVertsNormals();
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
+			glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
+			glEnableClientState(GL_VERTEX_ARRAY);
 
-		size_t shift = m_num*sizeof(PointType);
-		glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
-		glEnableClientState(GL_NORMAL_ARRAY);
+			size_t shift = m_num*sizeof(PointType);
+			glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
+			glEnableClientState(GL_NORMAL_ARRAY);
 
-		glColor3f(1.0, 1.0, 1.0);
-		glDrawArrays(GL_TRIANGLES, 0, m_num);
-		glDisableClientState(GL_VERTEX_ARRAY);
-		glDisableClientState(GL_NORMAL_ARRAY);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
+			glColor3f(1.0, 1.0, 1.0);
+			glDrawArrays(GL_TRIANGLES, 0, m_num);
+			glDisableClientState(GL_VERTEX_ARRAY);
+			glDisableClientState(GL_NORMAL_ARRAY);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
 
 		// draw wrap field nodes
 		if (warpField)
@@ -659,21 +665,55 @@ namespace dfusion
 			copy_warp_node_to_gl_buffer(gldata, warpField);
 			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0));
 
+			glDisable(GL_LIGHTING);
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
+			glEnableClientState(GL_VERTEX_ARRAY);
 
+			// draw level nodes
 			g_shader_node->begin();
 			g_shader_node->setUniform1f("pointScale", width / tanf(camera.getFov()*0.5f*(float)M_PI / 180.0f));
 			g_shader_node->setUniform1f("pointRadius", 0.005);
 
-			glDisable(GL_LIGHTING);
-			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
-			glVertexPointer(3, GL_FLOAT, sizeof(float4), 0);
-			glEnableClientState(GL_VERTEX_ARRAY);
+			if (param.view_show_nodes)
+			{
+				glVertexPointer(3, GL_FLOAT, sizeof(float4), 0);
+				glColor3f(0.0, 1.0, 0.0);
+				glDrawArrays(GL_POINTS, 0, warpField->getNumNodesInLevel(0));
 
-			glColor3f(0.0, 1.0, 0.0);
-			glDrawArrays(GL_POINTS, 0, warpField->getNumNodesInLevel(0));
+				g_shader_node->setUniform1f("pointRadius", 0.01);
+				glVertexPointer(3, GL_FLOAT, sizeof(float4), (void*)(WarpField::MaxNodeNum*sizeof(float4)));
+				glColor3f(0.0, 1.0, 1.0);
+				glDrawArrays(GL_POINTS, 0, warpField->getNumNodesInLevel(1));
+
+				g_shader_node->setUniform1f("pointRadius", 0.02);
+				glVertexPointer(3, GL_FLOAT, sizeof(float4), (void*)(WarpField::MaxNodeNum*sizeof(float4)* 2));
+				glColor3f(1.0, 1.0, 0.0);
+				glDrawArrays(GL_POINTS, 0, warpField->getNumNodesInLevel(2));
+
+				g_shader_node->setUniform1f("pointRadius", 0.04);
+				glVertexPointer(3, GL_FLOAT, sizeof(float4), (void*)(WarpField::MaxNodeNum*sizeof(float4)* 3));
+				glColor3f(1.0, 0.0, 0.0);
+				glDrawArrays(GL_POINTS, 0, warpField->getNumNodesInLevel(3));
+				g_shader_node->end();
+			}
+
+			// draw edges
+			if (param.view_show_graph)
+			{
+				glVertexPointer(3, GL_FLOAT, sizeof(float4), (void*)0);
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_vbo_id_warpnodes);
+				glColor3f(0.0, 1.0, 0.0);
+				glDrawElements(GL_LINES, warpField->getNumNodesInLevel(0)*WarpField::KnnK, GL_UNSIGNED_INT,
+					(void*)(WarpField::MaxNodeNum*WarpField::GraphLevelNum*sizeof(float4)));
+				//glColor3f(0.0, 1.0, 1.0);
+				//glDrawElements(GL_LINES, warpField->getNumNodesInLevel(1)*WarpField::KnnK, GL_UNSIGNED_INT,
+				//	(void*)(WarpField::MaxNodeNum*WarpField::GraphLevelNum*sizeof(float4)+
+				//	WarpField::MaxNodeNum*2*WarpField::KnnK*sizeof(int)
+				//	));
+			}
 			glDisableClientState(GL_VERTEX_ARRAY);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
-			g_shader_node->end();
 		}
 
 		glPopAttrib();

@@ -71,8 +71,12 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 	gtime_t time_e = gtime_now();
 	double sec = gtime_seconds(time_s, time_e);
 	double fps = 1.0 / sec;
-	setWindowTitle(QString().sprintf("FPS:%.1f;  Nodes: %d", fps,
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0)));
+	setWindowTitle(QString().sprintf("FPS:%.1f;  Nodes: %d %d %d %d", fps,
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3)
+		));
 }
 
 void DynamicFusionUI::dragEnterEvent(QDragEnterEvent* ev)
@@ -133,6 +137,10 @@ void DynamicFusionUI::updateUiFromParam()
 	if (g_dataholder.m_dparam.volume_resolution[2] == 512)
 		ui.rbResZ512->setChecked(true);
 	ui.sbVoxelsPerMeter->setValue(g_dataholder.m_dparam.voxels_per_meter);
+
+	ui.cbShowMesh->setChecked(g_dataholder.m_dparam.view_show_mesh);
+	ui.cbShowNodes->setChecked(g_dataholder.m_dparam.view_show_nodes);
+	ui.cbShowGraph->setChecked(g_dataholder.m_dparam.view_show_graph);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -191,7 +199,8 @@ void DynamicFusionUI::updateLoadedStaticVolume()
 		break;
 	case DynamicFusionUI::RenderMarchCube:
 		g_dataholder.m_marchCube.run(g_dataholder.m_mesh);
-		g_dataholder.m_mesh.renderToImg(cam, g_dataholder.m_lights, g_dataholder.m_warpedview_shading);
+		g_dataholder.m_mesh.renderToImg(cam, g_dataholder.m_lights, g_dataholder.m_warpedview_shading,
+			g_dataholder.m_dparam);
 		break;
 	default:
 		break;
@@ -330,53 +339,193 @@ void DynamicFusionUI::on_rbMarchCube_clicked()
 
 void DynamicFusionUI::on_rbResX128_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[0] = 128;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[0] = 128;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResX256_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[0] = 256;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[0] = 256;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResX384_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[0] = 384;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[0] = 384;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResX512_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[0] = 512;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[0] = 512;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResY128_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[1] = 128;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[1] = 128;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResY256_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[1] = 256;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[1] = 256;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResY384_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[1] = 384;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[1] = 384;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResY512_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[1] = 512;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[1] = 512;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResZ128_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[2] = 128;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[2] = 128;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResZ256_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[2] = 256;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[2] = 256;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResZ384_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[2] = 384;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[2] = 384;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_rbResZ512_clicked()
 {
-	g_dataholder.m_dparam.volume_resolution[2] = 512;
+	try
+	{
+		g_dataholder.m_dparam.volume_resolution[2] = 512;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_sbVoxelsPerMeter_valueChanged(int v)
 {
-	g_dataholder.m_dparam.voxels_per_meter = v;
+	try
+	{
+		g_dataholder.m_dparam.voxels_per_meter = v;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_cbShowMesh_clicked()
+{
+	try
+	{
+		g_dataholder.m_dparam.view_show_mesh = ui.cbShowMesh->isChecked();
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_cbShowNodes_clicked()
+{
+	try
+	{
+		g_dataholder.m_dparam.view_show_nodes = ui.cbShowNodes->isChecked();
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_cbShowGraph_clicked()
+{
+	try
+	{
+		g_dataholder.m_dparam.view_show_graph = ui.cbShowGraph->isChecked();
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }

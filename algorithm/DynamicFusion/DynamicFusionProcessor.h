@@ -26,6 +26,8 @@ namespace dfusion
 		void shading(const Camera& userCam, LightSource light, ColorMap& img, bool use_ray_casting);
 
 		const WarpField* getWarpField()const;
+
+		void updateParam(const Param& param);
 	protected:
 		void estimateWarpField();
 		void nonRigidTsdfFusion();

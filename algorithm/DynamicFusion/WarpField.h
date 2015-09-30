@@ -29,6 +29,7 @@ namespace dfusion
 	class WarpField
 	{
 	public:
+		typedef ushort IdxType;
 		typedef ushort4 KnnIdx;
 		enum{
 			GraphLevelNum = 4,
@@ -55,8 +56,12 @@ namespace dfusion
 		int getNumNodesInLevel(int level)const{ return m_numNodes[level]; }
 
 		// memory: [q0-q1-vw][q0-q1-vw]....
-		float4* getNodesDqVwPtr(int level){ return m_nodesQuatTransVw.ptr() + MaxNodeNum*level; }
-		const float4* getNodesDqVwPtr(int level)const{ return m_nodesQuatTransVw.ptr() + MaxNodeNum*level; }
+		float4* getNodesDqVwPtr(int level){ return m_nodesQuatTransVw.ptr() + 3*MaxNodeNum*level; }
+		const float4* getNodesDqVwPtr(int level)const{ return m_nodesQuatTransVw.ptr() + 3*MaxNodeNum*level; }
+
+		// each level is connected to k-nn of its coarser level
+		KnnIdx* getNodesEdgesPtr(int level){ return m_nodesGraph.ptr() + MaxNodeNum*level; }
+		const KnnIdx* getNodesEdgesPtr(int level)const{ return m_nodesGraph.ptr() + MaxNodeNum*level; }
 
 		cudaSurfaceObject_t bindKnnFieldSurface();
 		void unBindKnnFieldSurface(cudaSurfaceObject_t t);
@@ -79,6 +84,7 @@ namespace dfusion
 
 		// store quaternion-translation parts:
 		DeviceArray<float4> m_nodesQuatTransVw;//q0-q1-vw-q0-q1-vw...
+		DeviceArray<KnnIdx> m_nodesGraph;//knn from level to level+1
 		
 		// process the input GpuMesh
 		int3 m_nodesGridSize;
@@ -88,7 +94,7 @@ namespace dfusion
 		DeviceArray<int> m_meshPointsFlags;
 		DeviceArray<float> m_tmpBuffer;
 
-		GpuKdTree* m_nodeTree;
+		GpuKdTree* m_nodeTree[GraphLevelNum];
 
 		// type: KnnIdx
 		cudaArray_t m_knnField;

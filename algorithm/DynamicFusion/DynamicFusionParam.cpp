@@ -24,7 +24,7 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		warp_radius_search_epsilon = 0.05;
-		warp_param_dw = warp_radius_search_epsilon * 2;
+		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
 		warp_valid_point_num_each_node = 0.1 * (pow(warp_radius_search_epsilon*voxels_per_meter, 3) 
@@ -37,5 +37,12 @@ namespace dfusion
 		fusion_lambda = 200;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
+
+		/** *****************************************************
+		* visualization related
+		* ******************************************************/
+		view_show_mesh = true;
+		view_show_nodes = true;
+		view_show_graph = true;
 	}
 }

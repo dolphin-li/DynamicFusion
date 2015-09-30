@@ -57,6 +57,12 @@ namespace dfusion
 		float fusion_lambda;
 		float fusion_psi_data;
 		float fusion_psi_reg;
-		
+
+		/** *****************************************************
+		* visualization related
+		* ******************************************************/
+		bool view_show_mesh;
+		bool view_show_nodes;
+		bool view_show_graph;
 	};
 }

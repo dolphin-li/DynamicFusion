@@ -83,8 +83,9 @@ namespace dfusion
 	}
 
 
-	__global__ void copy_warp_node_to_gl_buffer_kernel(float4* gldata, 
-		Tbx::Transfo trans, const float4* nodes, int n)
+	__global__ void copy_warp_node_to_gl_buffer_kernel(float4* gldata, int* glindex,
+		Tbx::Transfo trans, const float4* nodes, const WarpField::KnnIdx* nodesKnn, int n, 
+		int node_start_id)
 	{
 		int i = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -96,21 +97,45 @@ namespace dfusion
 			node.y = t.y;
 			node.z = t.z;
 			gldata[i] = node;
+
+			if (glindex && nodesKnn)
+			{
+				WarpField::IdxType* knnIdx = (WarpField::IdxType*)&(nodesKnn[i]);
+				int start = 2 * WarpField::KnnK * i;
+				for (int k = 0; k < WarpField::KnnK; k++)
+				{
+					int nn = knnIdx[k];
+					if (nn >= WarpField::MaxNodeNum || nn < 0)
+						nn = i-WarpField::MaxNodeNum;
+					glindex[start + k*2 + 0] = i + node_start_id;
+					glindex[start + k*2 + 1] = nn + node_start_id + WarpField::MaxNodeNum;
+				}
+			}
 		}
 	}
 
 	void GpuMesh::copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField)
 	{
-		int n = warpField->getNumNodesInLevel(0);
-		if (n == 0)
-			return;
-		const float4* nodes = warpField->getNodesDqVwPtr(0);
-		Tbx::Transfo tr = warpField->get_rigidTransform();
-		dim3 block(256);
-		dim3 grid(1);
-		grid.x = divUp(n, block.x);
-
-		copy_warp_node_to_gl_buffer_kernel << <grid, block >> >(gldata, tr, nodes, n);
-		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_warp_node_to_gl_buffer");
+		int* glindex = (int*)(gldata + WarpField::MaxNodeNum * WarpField::GraphLevelNum);
+		int node_start_id = 0;
+		for (int lv = 0; lv < warpField->getNumLevels(); lv++, 
+			gldata += WarpField::MaxNodeNum, 
+			node_start_id += WarpField::MaxNodeNum,
+			glindex += WarpField::MaxNodeNum*2*WarpField::KnnK)
+		{
+			int n = warpField->getNumNodesInLevel(lv);
+			if (n == 0)
+				return;
+			const float4* nodes = warpField->getNodesDqVwPtr(lv);
+			const WarpField::KnnIdx* indices = nullptr;
+			if (lv < warpField->getNumLevels() - 1)
+				indices = warpField->getNodesEdgesPtr(lv);
+			Tbx::Transfo tr = warpField->get_rigidTransform();
+			dim3 block(32);
+			dim3 grid(divUp(n, block.x));
+			copy_warp_node_to_gl_buffer_kernel << <grid, block >> >(
+				gldata, glindex, tr, nodes, indices, n, node_start_id);
+			cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_warp_node_to_gl_buffer");
+		}
 	}
 }

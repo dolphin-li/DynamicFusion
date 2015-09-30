@@ -9,7 +9,8 @@ namespace dfusion
 	{
 		m_volume = nullptr;
 		m_knnField = nullptr;
-		m_nodeTree = nullptr;
+		for (int k = 0; k < GraphLevelNum; k++)
+			m_nodeTree[k] = nullptr;
 		m_current_point_buffer_size = 0;
 		memset(m_numNodes, 0, sizeof(m_numNodes));
 		memset(m_lastNumNodes, 0, sizeof(m_lastNumNodes));
@@ -24,8 +25,10 @@ namespace dfusion
 		m_param = param;
 		m_volume = vol;
 		m_rigidTransform = Tbx::Transfo::identity();
-		m_nodesQuatTransVw.create(MaxNodeNum*GraphLevelNum*3);
+		m_nodesQuatTransVw.create(MaxNodeNum*GraphLevelNum * 3);
+		m_nodesGraph.create(MaxNodeNum*GraphLevelNum);
 		cudaMemset(m_nodesQuatTransVw.ptr(), 0, m_nodesQuatTransVw.size()*m_nodesQuatTransVw.elem_size);
+		cudaMemset(m_nodesGraph.ptr(), 0, m_nodesGraph.size()*m_nodesGraph.elem_size);
 		for (int lv = 0; lv < GraphLevelNum; lv++)
 			m_numNodes[lv] = 0;
 		int3 res = m_volume->getResolution();
@@ -40,9 +43,12 @@ namespace dfusion
 		cudaSafeCall(cudaMalloc3DArray(&m_knnField, &desc, ext), "cudaMalloc3D");
 		initKnnField();
 
-		if (m_nodeTree)
-			delete m_nodeTree;
-		m_nodeTree = new GpuKdTree();
+		for (int k = 0; k < GraphLevelNum; k++)
+		{
+			if (m_nodeTree[k])
+				delete m_nodeTree[k];
+			m_nodeTree[k] = new GpuKdTree();
+		}
 
 		// nodes grid
 		m_nodesGridSize = make_int3(std::ceil(res.x*vsz/m_param.warp_radius_search_epsilon),

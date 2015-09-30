@@ -16,6 +16,7 @@ namespace dfusion
 	* *************************************************************************/
 	class WarpField;
 	struct WarpNode;
+	class Param;
 	class GpuMesh
 	{
 	public:
@@ -55,7 +56,7 @@ namespace dfusion
 
 		// unlockVertsNormals is performed insided
 		void renderToImg(const Camera& camera, LightSource light, ColorMap& img, 
-			const WarpField* warpField = nullptr);
+			const Param& param, const WarpField* warpField = nullptr);
 		void renderToDepth(const Camera& camera, DepthMap& img);
 	protected:
 		void createRendererForWarpField(const WarpField* warpField);
