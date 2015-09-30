@@ -71,7 +71,7 @@ namespace dfusion
 		}
 	}
 
-	cudaSurfaceObject_t WarpField::bindKnnFieldSurface()
+	cudaSurfaceObject_t WarpField::bindKnnFieldSurface()const
 	{
 		cudaSurfaceObject_t t;
 		cudaResourceDesc    surfRes;
@@ -82,12 +82,12 @@ namespace dfusion
 		return t;
 	}
 
-	void WarpField::unBindKnnFieldSurface(cudaSurfaceObject_t t)
+	void WarpField::unBindKnnFieldSurface(cudaSurfaceObject_t t)const
 	{
 		cudaSafeCall(cudaDestroySurfaceObject(t));
 	}
 
-	cudaTextureObject_t WarpField::bindKnnFieldTexture()
+	cudaTextureObject_t WarpField::bindKnnFieldTexture()const
 	{
 		cudaTextureObject_t t;
 		cudaResourceDesc texRes;
@@ -106,18 +106,18 @@ namespace dfusion
 		return t;
 	}
 
-	void WarpField::unBindKnnFieldTexture(cudaTextureObject_t t)
+	void WarpField::unBindKnnFieldTexture(cudaTextureObject_t t)const
 	{
 		cudaSafeCall(cudaDestroyTextureObject(t));
 	}
 
-	cudaTextureObject_t WarpField::bindNodesDqVwTexture()
+	cudaTextureObject_t WarpField::bindNodesDqVwTexture()const
 	{
 		cudaTextureObject_t t;
 		cudaResourceDesc texRes;
 		memset(&texRes, 0, sizeof(cudaResourceDesc));
 		texRes.resType = cudaResourceTypeLinear;
-		texRes.res.linear.devPtr = m_nodesQuatTransVw.ptr();
+		texRes.res.linear.devPtr = (void*)m_nodesQuatTransVw.ptr();
 		texRes.res.linear.desc = cudaCreateChannelDesc<float4>();
 		texRes.res.linear.sizeInBytes = m_nodesQuatTransVw.size()*sizeof(float4);
 		cudaTextureDesc texDescr;
@@ -132,8 +132,13 @@ namespace dfusion
 		return t;
 	}
 
-	void WarpField::unBindNodesDqVwTexture(cudaTextureObject_t t)
+	void WarpField::unBindNodesDqVwTexture(cudaTextureObject_t t)const
 	{
 		cudaSafeCall(cudaDestroyTextureObject(t));
+	}
+
+	const TsdfVolume* WarpField::getVolume()const
+	{
+		return m_volume;
 	}
 }

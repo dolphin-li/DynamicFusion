@@ -8,20 +8,49 @@
 namespace dfusion
 {
 #pragma region --warpmesh
-	__global__ void warp_mesh_kernel(const  GpuMesh::PointType*__restrict__ vsrc,
-		const GpuMesh::PointType* nsrc,
-		GpuMesh::PointType* vdst, GpuMesh::PointType* ndst, Tbx::Quat_cu R, float3 t, int n)
+
+	struct MeshWarper
 	{
-		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
-		unsigned int i = __mul24(blockId, blockDim.x << 3) + threadIdx.x;
+		const GpuMesh::PointType* vsrc;
+		const GpuMesh::PointType* nsrc;
+		cudaTextureObject_t knnTex;
+		cudaTextureObject_t nodesDqVwTex;
+		GpuMesh::PointType* vdst;
+		GpuMesh::PointType* ndst;
+		int num;
+
+		Tbx::Quat_cu R;
+		float3 t;
+
+		float3 origion;
+		float invVoxelSize;
+
+		__device__ __forceinline__ void operator()(int tid)
+		{
+			float3 p = GpuMesh::from_point(vsrc[tid]);
+			float3 n = GpuMesh::from_point(nsrc[tid]);
+
+			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
+				nodesDqVwTex, p, origion, invVoxelSize);
+
+			Tbx::Point3 dq_p = dq_blend.transform(Tbx::Point3(convert(p)));
+			Tbx::Vec3 dq_n = dq_blend.rotate(convert(n));
+
+			vdst[tid] = GpuMesh::to_point(convert(R.rotate(dq_p)) + t);
+			ndst[tid] = GpuMesh::to_point(convert(R.rotate(dq_n)));
+		}
+	};
+
+	__global__ void warp_mesh_kernel(MeshWarper warper)
+	{
+		unsigned int i = blockIdx.x * (blockDim.x << 3) + threadIdx.x;
 
 #pragma unroll
 		for (int k = 0; k < 8; k++)
 		{
-			if (i < n)
+			if (i < warper.num)
 			{
-				vdst[i] = GpuMesh::to_point(convert(R.rotate(convert(GpuMesh::from_point(vsrc[i]))))+t);
-				ndst[i] = GpuMesh::to_point(convert(R.rotate(convert(GpuMesh::from_point(nsrc[i])))));
+				warper(i);
 			}
 			i += blockDim.x;
 		}
@@ -30,21 +59,30 @@ namespace dfusion
 	{
 		dst.create(src.num());
 
-		dim3 block(512);
-		dim3 grid(1, 1, 1);
-		grid.x = divUp(dst.num(), block.x<<3);
-
-		//Mat33 R = convert(m_rigidTransform.get_mat3());
-		float3 t = convert(m_rigidTransform.get_translation());
-		Tbx::Quat_cu q(m_rigidTransform);
-
 		src.lockVertsNormals();
 		dst.lockVertsNormals();
 
-		warp_mesh_kernel << <grid, block >> >(src.verts(), src.normals(), 
-			dst.verts(), dst.normals(), q, t, src.num());
+		MeshWarper warper;
+		warper.t = convert(m_rigidTransform.get_translation());
+		warper.R = Tbx::Quat_cu(m_rigidTransform);
+		warper.knnTex = bindKnnFieldTexture();
+		warper.nodesDqVwTex = bindNodesDqVwTexture();
+		warper.vsrc = src.verts();
+		warper.nsrc = src.normals();
+		warper.vdst = dst.verts();
+		warper.ndst = dst.normals();
+		warper.num = src.num();
+		warper.origion = m_volume->getOrigion();
+		warper.invVoxelSize = 1.f / m_volume->getVoxelSize();
+
+		dim3 block(512);
+		dim3 grid(1, 1, 1);
+		grid.x = divUp(dst.num(), block.x << 3);
+		warp_mesh_kernel << <grid, block >> >(warper);
 		cudaSafeCall(cudaGetLastError(), "warp");
 
+		unBindKnnFieldTexture(warper.knnTex);
+		unBindNodesDqVwTexture(warper.nodesDqVwTex);
 		dst.unlockVertsNormals();
 		src.unlockVertsNormals();
 	}
@@ -171,7 +209,9 @@ namespace dfusion
 					tex1Dfetch(&nearestVw, nodesDqVwTex, knnIdx.x * 3 + 2); // [q0-q1-vw] memory stored
 
 					float3 nearestV = make_float3(nearestVw.x, nearestVw.y, nearestVw.z);
-					float dif = dot(nearestV - p, nearestV - p) / (nearestVw.w * nearestVw.w);
+
+					// note .w store 1/radius
+					float dif = dot(nearestV - p, nearestV - p) * (nearestVw.w * nearestVw.w);
 					flag = (dif > 1.f);
 				}
 			}
@@ -309,24 +349,43 @@ namespace dfusion
 		counter();
 	}
 
-	__global__ void write_nodes_kernel(const float4* points_not_compact, 
-		const int* index, float4* nodesDqVw, float weight_radius, int n)
+	struct NodesWriter
 	{
-		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
-		unsigned int threadId = __mul24(blockId, blockDim.x) + threadIdx.x;
+		const float4* points_not_compact;
+		const int* index;
+		float4* nodesDqVw;
+		float inv_weight_radius;
+		int num;
 
-		if (threadId < n)
+		cudaTextureObject_t knnTex;
+		cudaTextureObject_t nodesDqVwTex;
+		float3 origion;
+		float invVoxelSize;
+
+		__device__ __forceinline__ void operator()(int threadId)
 		{
-			Tbx::Dual_quat_cu dq = Tbx::Dual_quat_cu::identity();
 			int idx = index[threadId];
 			float4 p = points_not_compact[idx];
 			float inv_w = 1.f / p.w;
 			p.x *= inv_w;
 			p.y *= inv_w;
 			p.z *= inv_w;
-			p.w = weight_radius;
-			unpack_dual_quat(dq, nodesDqVw[threadId*3], nodesDqVw[threadId*3+1]);
+			p.w = inv_weight_radius;
 			nodesDqVw[threadId * 3 + 2] = p;
+
+			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
+				nodesDqVwTex, make_float3(p.x, p.y, p.z), origion, invVoxelSize);
+			unpack_dual_quat(dq_blend, nodesDqVw[threadId * 3], nodesDqVw[threadId * 3 + 1]);
+		}
+	};
+
+	__global__ void write_nodes_kernel(NodesWriter nw)
+	{
+		int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+		if (threadId < nw.num)
+		{
+			nw(threadId);
 		}
 	}
 
@@ -445,11 +504,23 @@ namespace dfusion
 			dim3 block(256);
 			dim3 grid(1, 1, 1);
 			grid.x = divUp(m_numNodes[0] - m_lastNumNodes[0], block.x);
-			write_nodes_kernel << <grid, block >> >(
-				m_meshPointsSorted.ptr(), m_meshPointsFlags.ptr(),
-				getNodesDqVwPtr(0) + m_lastNumNodes[0] * 3,
-				m_param.warp_param_dw, m_numNodes[0] - m_lastNumNodes[0]);
+
+			NodesWriter nw;
+			nw.points_not_compact = m_meshPointsSorted.ptr();
+			nw.index = m_meshPointsFlags.ptr();
+			nw.nodesDqVw = getNodesDqVwPtr(0) + m_lastNumNodes[0] * 3;
+			nw.num = m_numNodes[0] - m_lastNumNodes[0];
+			nw.inv_weight_radius = 1.f / m_param.warp_param_dw;
+			nw.origion = m_volume->getOrigion();
+			nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
+			nw.knnTex = bindKnnFieldTexture();
+			nw.nodesDqVwTex = bindNodesDqVwTexture();
+
+			write_nodes_kernel << <grid, block >> >(nw);
 			cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
+
+			unBindKnnFieldTexture(nw.knnTex);
+			unBindNodesDqVwTexture(nw.nodesDqVwTex);
 		}
 	}
 #pragma endregion
@@ -626,10 +697,20 @@ namespace dfusion
 			dim3 block(32);
 			dim3 grid(1, 1, 1);
 			grid.x = divUp(m_numNodes[level], block.x);
-			write_nodes_kernel << <grid, block >> >(
-				m_meshPointsSorted.ptr(), m_meshPointsFlags.ptr(),
-				getNodesDqVwPtr(level), m_param.warp_param_dw*pow(m_param.warp_radius_search_beta, level), 
-				m_numNodes[level]);
+
+
+			NodesWriter nw;
+			nw.points_not_compact = m_meshPointsSorted.ptr();
+			nw.index = m_meshPointsFlags.ptr();
+			nw.nodesDqVw = getNodesDqVwPtr(level);
+			nw.num = m_numNodes[level];
+			nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_radius_search_beta, level));
+			nw.origion = m_volume->getOrigion();
+			nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
+			nw.knnTex = bindKnnFieldTexture();
+			nw.nodesDqVwTex = bindNodesDqVwTexture();
+
+			write_nodes_kernel << <grid, block >> >(nw);
 			cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
 		}
 

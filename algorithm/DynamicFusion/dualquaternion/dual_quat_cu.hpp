@@ -96,8 +96,10 @@ class __align__(16) Dual_quat_cu{
     }
 
     /// Transformation of point p with the dual quaternion
+	/// NOTE: perform normalize() before this if nedded
 	__device__ __host__ Point3 transform(const Point3& p) const
     {
+#if 0
         // As the dual quaternions may be the results from a
         // linear blending we have to normalize it :
         float norm = _quat_0.norm();
@@ -112,14 +114,28 @@ class __align__(16) Dual_quat_cu{
 
         // Rotate
         return qblend_0.rotate(p) + trans;
+#else
+		// Translation from the normalized dual quaternion equals :
+		// 2.f * qblend_e * conjugate(qblend_0)
+		Vec3 v0 = _quat_0.get_vec_part();
+		Vec3 ve = _quat_e.get_vec_part();
+		Vec3 trans = (ve*_quat_0.w() - v0*_quat_e.w() + v0.cross(ve)) * 2.f;
+
+		// Rotate
+		return _quat_0.rotate(p) + trans;
+#endif
     }
 
     /// Rotate a vector with the dual quaternion
 	__device__ __host__ Vec3 rotate(const Vec3& v) const
     {
+#if 0
         Quat_cu tmp = _quat_0;
         tmp.normalize();
         return tmp.rotate(v);
+#else
+		return _quat_0.rotate(v);
+#endif
     }
 
 	__device__ __host__ Dual_quat_cu dual_quat_from(const Quat_cu& q, const Vec3& t) const

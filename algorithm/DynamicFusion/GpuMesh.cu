@@ -1,5 +1,7 @@
 #include "GpuMesh.h"
 #include "WarpField.h"
+#include "TsdfVolume.h"
+#include <helper_math.h>
 namespace dfusion
 {
 	__device__ __forceinline__ PixelRGBA copy_uchar4_pixelRGBA(uchar4 a)
@@ -10,6 +12,11 @@ namespace dfusion
 		p.b = a.z;
 		p.a = a.w;
 		return p;
+	}
+
+	__device__ __forceinline__ WarpField::IdxType get_by_arrayid(WarpField::KnnIdx knn, int i)
+	{
+		return ((WarpField::IdxType*)(&knn))[i];
 	}
 
 	__global__ void copy_invert_y_kernel(PtrStepSz<uchar4> gldata,
@@ -83,19 +90,26 @@ namespace dfusion
 	}
 
 
-	__global__ void copy_warp_node_to_gl_buffer_kernel(float4* gldata, int* glindex,
-		Tbx::Transfo trans, const float4* nodes, const WarpField::KnnIdx* nodesKnn, int n, 
-		int node_start_id)
+	__global__ void copy_warp_node_to_gl_buffer_kernel(
+		float4* gldata, int* glindex,
+		Tbx::Transfo trans, const float4* nodes, 
+		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, float3 origion, float invVoxelSize,
+		const WarpField::KnnIdx* nodesKnn, 
+		int n, int node_start_id)
 	{
 		int i = threadIdx.x + blockIdx.x * blockDim.x;
 
 		if (i < n)
 		{
 			float4 node = nodes[i*3+2];
-			Tbx::Vec3 t = trans * Tbx::Point3(node.x, node.y, node.z);
+
+			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
+				nodesDqVwTex, make_float3(node.x, node.y, node.z), origion, invVoxelSize);
+			Tbx::Vec3 t = trans * dq_blend.transform(Tbx::Point3(node.x, node.y, node.z));
 			node.x = t.x;
 			node.y = t.y;
 			node.z = t.z;
+
 			gldata[i] = node;
 
 			if (glindex && nodesKnn)
@@ -118,6 +132,12 @@ namespace dfusion
 	{
 		int* glindex = (int*)(gldata + WarpField::MaxNodeNum * WarpField::GraphLevelNum);
 		int node_start_id = 0;
+
+		cudaTextureObject_t nodesDqVwTex = warpField->bindNodesDqVwTexture();
+		cudaTextureObject_t knnTex = warpField->bindKnnFieldTexture();
+		float3 origion = warpField->getVolume()->getOrigion();
+		float invVsz = 1.f/warpField->getVolume()->getVoxelSize();
+
 		for (int lv = 0; lv < warpField->getNumLevels(); lv++, 
 			gldata += WarpField::MaxNodeNum, 
 			node_start_id += WarpField::MaxNodeNum,
@@ -134,8 +154,12 @@ namespace dfusion
 			dim3 block(32);
 			dim3 grid(divUp(n, block.x));
 			copy_warp_node_to_gl_buffer_kernel << <grid, block >> >(
-				gldata, glindex, tr, nodes, indices, n, node_start_id);
+				gldata, glindex, tr, nodes, 
+				knnTex, nodesDqVwTex, origion, invVsz,
+				indices, n, node_start_id);
 			cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_warp_node_to_gl_buffer");
 		}
+		warpField->unBindKnnFieldTexture(knnTex);
+		warpField->unBindNodesDqVwTexture(nodesDqVwTex);
 	}
 }
