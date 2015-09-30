@@ -141,6 +141,9 @@ void DynamicFusionUI::updateUiFromParam()
 	ui.cbShowMesh->setChecked(g_dataholder.m_dparam.view_show_mesh);
 	ui.cbShowNodes->setChecked(g_dataholder.m_dparam.view_show_nodes);
 	ui.cbShowGraph->setChecked(g_dataholder.m_dparam.view_show_graph);
+
+	ui.sbShowGraphLevel->setMaximum(dfusion::WarpField::GraphLevelNum);
+	ui.sbShowGraphLevel->setValue(g_dataholder.m_dparam.view_show_graph_level);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -522,6 +525,18 @@ void DynamicFusionUI::on_cbShowGraph_clicked()
 	try
 	{
 		g_dataholder.m_dparam.view_show_graph = ui.cbShowGraph->isChecked();
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_sbShowGraphLevel_valueChanged(int v)
+{
+	try
+	{
+		g_dataholder.m_dparam.view_show_graph_level = v;
 		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 	}
 	catch (std::exception e)

@@ -64,5 +64,6 @@ namespace dfusion
 		bool view_show_mesh;
 		bool view_show_nodes;
 		bool view_show_graph;
+		int view_show_graph_level;
 	};
 }

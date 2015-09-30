@@ -44,5 +44,6 @@ namespace dfusion
 		view_show_mesh = true;
 		view_show_nodes = true;
 		view_show_graph = true;
+		view_show_graph_level = 0;
 	}
 }
