@@ -74,8 +74,8 @@ namespace dfusion
 		* **********************/
 
 		// map of verts in canonical view
-		MapArr m_vmap_cano;
+		DeviceArray2D<float4> m_vmap_cano;
 		// map of normals in canonical view
-		MapArr m_nmap_cano;
+		DeviceArray2D<float4> m_nmap_cano;
 	};
 }

@@ -98,17 +98,20 @@ namespace dfusion
 
 	// vertex shader for rendering cano view
 	const char *g_vshader_cano_src = STRCPY(
+		varying vec4 color;
 		void main()
 		{
 			gl_Position = gl_ModelViewProjectionMatrix  * gl_Vertex;
+			color = gl_Color;
 		}
 	);
 
 	// pixel shader for rendering cano view
 	const char *g_fshader_cano_src = STRCPY(
+		varying vec4 color;
 		void main()
 		{
-			gl_FragColor = gl_Color;
+			gl_FragColor = color;
 		}
 	);
 #pragma endregion
@@ -780,6 +783,7 @@ namespace dfusion
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPushAttrib(GL_ALL_ATTRIB_BITS);
+		glEnableClientState(GL_VERTEX_ARRAY);
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_LIGHTING);
 		camera.apply();
@@ -788,17 +792,11 @@ namespace dfusion
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
 
 		glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
-		glEnableClientState(GL_VERTEX_ARRAY);
 		glDrawArrays(GL_TRIANGLES, 0, m_num);
-		glDisableClientState(GL_VERTEX_ARRAY);
 
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glPopAttrib();
-		g_shader_depth->end();
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
 		glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-
 		float4* gldata = nullptr;
 		size_t num_bytes = 0;
 		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
@@ -810,20 +808,84 @@ namespace dfusion
 		copy_gldepth_to_depthmap(gldata, img, s1, s2, camera.getFrustumNear());
 		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
 
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glDisableClientState(GL_VERTEX_ARRAY);
+		glPopAttrib();
+		g_shader_depth->end();
+
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 		CHECK_GL_ERROR("renderToDepth");
 	}
 
 	void GpuMesh::renderToCanonicalMaps(const Camera& camera,
-		const GpuMesh* canoMesh, MapArr& vmap, MapArr& nmap)
+		GpuMesh* canoMesh, DeviceArray2D<float4>& vmap, 
+		DeviceArray2D<float4>& nmap)
 	{
+		if (canoMesh->num() != m_num)
+			throw std::exception("GpuMesh::renderToCanonicalMaps(): mesh size not matched!");
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
 		const int width = std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft()));
 		const int height = std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop()));
 
 		createRenderer(width, height);
-		vmap.create(height * 3, width);
-		nmap.create(height * 3, width);
+		vmap.create(height, width);
+		nmap.create(height, width);
+
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glPushAttrib(GL_ALL_ATTRIB_BITS);
+		glEnable(GL_DEPTH_TEST);
+		glDisable(GL_LIGHTING);
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_COLOR_ARRAY);
+		unlockVertsNormals();
+		canoMesh->unlockVertsNormals();
+
+		g_shader_cano->begin();
+		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
+		glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
+		glBindBuffer(GL_ARRAY_BUFFER, canoMesh->m_vbo_id);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
+		camera.apply();
+
+		// draw cano vertices as colors
+		glColorPointer(3, GL_FLOAT, sizeof(PointType), 0);
+		glDrawArrays(GL_TRIANGLES, 0, m_num);
+		// read the buffer
+		{
+			glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, 0);
+			float4* gldata = nullptr;
+			size_t num_bytes = 0;
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
+			copy_canoview(gldata, vmap);
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
+		}
+		g_shader_cano->end();
+
+		// draw cano normals as colors
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glColorPointer(3, GL_FLOAT, sizeof(PointType), (void*)(canoMesh->num()*sizeof(PointType)));
+		glDrawArrays(GL_TRIANGLES, 0, m_num);
+		// read the buffer
+		{
+			glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, 0);
+			float4* gldata = nullptr;
+			size_t num_bytes = 0;
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
+			copy_canoview(gldata, nmap);
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
+		}
+
+		g_shader_cano->end();
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glDisableClientState(GL_COLOR_ARRAY);
+		glDisableClientState(GL_VERTEX_ARRAY);
+		glPopAttrib();
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+		CHECK_GL_ERROR("renderToCanonicalMaps");
 	}
 }

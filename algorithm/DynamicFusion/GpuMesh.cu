@@ -96,6 +96,37 @@ namespace dfusion
 	}
 
 
+	__global__ void copy_canoview_kernel(PtrStepSz<float4> gldata,
+		PtrStepSz<float4> map)
+	{
+		int u = threadIdx.x + blockIdx.x * blockDim.x;
+		int v = threadIdx.y + blockIdx.y * blockDim.y;
+
+		if (u >= map.cols || v >= map.rows)
+			return;
+
+		map(v,u) = gldata(map.rows - 1 - v, u);
+	}
+
+	void GpuMesh::copy_canoview(const float4* gldata, DeviceArray2D<float4>& map)
+	{
+		dim3 block(32, 8);
+		dim3 grid(1, 1, 1);
+		grid.x = divUp(map.cols(), block.x);
+		grid.y = divUp(map.rows(), block.y);
+
+		PtrStepSz<float4> gldataptr;
+		gldataptr.data = (float4*)gldata;
+		gldataptr.rows = map.rows();
+		gldataptr.cols = map.cols();
+		gldataptr.step = map.cols()*sizeof(float4);
+
+		copy_canoview_kernel << <grid, block >> >(gldataptr, map);
+		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_canoview");
+		cudaThreadSynchronize();
+	}
+
+
 	__global__ void copy_warp_node_to_gl_buffer_kernel(
 		float4* gldata, int* glindex,
 		Tbx::Transfo trans, const float4* nodes, 
@@ -168,4 +199,5 @@ namespace dfusion
 		warpField->unBindKnnFieldTexture(knnTex);
 		warpField->unBindNodesDqVwTexture(nodesDqVwTex);
 	}
+
 }

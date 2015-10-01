@@ -63,7 +63,8 @@ namespace dfusion
 		// then the mesh is rendered with each pixel storing the canonical mesh verts/normals
 		// given by canoMesh
 		void renderToCanonicalMaps(const Camera& camera, 
-			const GpuMesh* canoMesh, MapArr& vmap, MapArr& nmap);
+			GpuMesh* canoMesh, DeviceArray2D<float4>& vmap, 
+			DeviceArray2D<float4>& nmap);
 	protected:
 		void createRendererForWarpField(const WarpField* warpField);
 		void releaseRendererForWarpField();
@@ -72,6 +73,7 @@ namespace dfusion
 		void copy_invert_y(const float4* gldata, ColorMap& img);
 		void copy_gldepth_to_depthmap(const float4* gldata, DepthMap& depth, 
 			float s1, float s2, float camNear);
+		void copy_canoview(const float4* gldata, DeviceArray2D<float4>& map);
 		void copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField);
 	private:
 		PointType* m_verts_d;

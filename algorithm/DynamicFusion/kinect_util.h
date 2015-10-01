@@ -18,6 +18,7 @@ namespace dfusion
 
 	// normal to color
 	void generateNormalMap(const MapArr& nmap, ColorMap& dst, Mat33 R);
+	void generateNormalMap(const DeviceArray2D<float4>& nmap, ColorMap& dst);
 
 	// a simple copy function
 	void copyColorMapToPbo(PtrStepSz<PixelRGBA> src, PtrStepSz<uchar4> dst);

@@ -239,6 +239,46 @@ namespace dfusion
 		ig();
 	}
 
+	struct NormalGenerator1
+	{
+		enum
+		{
+			CTA_SIZE_X = 32, CTA_SIZE_Y = 8
+		};
+
+		PtrStep<float4> nmap;
+		mutable PtrStepSz<PixelRGBA> dst;
+
+		__device__ __forceinline__ void operator () () const
+		{
+			int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
+			int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
+
+			if (x >= dst.cols || y >= dst.rows)
+				return;
+
+			float4 n = nmap(y,x);
+
+			PixelRGBA color;
+			color.a = color.r = color.g = color.b = 0;
+
+			if (!isnan(n.x))
+			{
+				color.r = max(0, min(255, int(255 * (n.x * 0.5f + 0.5f))));
+				color.g = max(0, min(255, int(255 * (n.y * 0.5f + 0.5f))));
+				color.b = max(0, min(255, int(255 * (n.z * 0.5f + 0.5f))));
+				color.a = 255;
+			}
+
+			dst.ptr(y)[x] = color;
+		}
+	};
+
+	__global__ void generateNormalKernel1(const NormalGenerator1 ig)
+	{
+		ig();
+	}
+
 	void generateNormalMap(const MapArr& nmap, ColorMap& dst, Mat33 R)
 	{
 		NormalGenerator ig;
@@ -251,6 +291,20 @@ namespace dfusion
 		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
 
 		generateNormalKernel << <grid, block >> >(ig);
+		cudaSafeCall(cudaGetLastError(), "generateNormal");
+	}
+
+	void generateNormalMap(const DeviceArray2D<float4>& nmap, ColorMap& dst)
+	{
+		NormalGenerator1 ig;
+		ig.nmap = nmap;
+		ig.dst = dst;
+
+
+		dim3 block(NormalGenerator1::CTA_SIZE_X, NormalGenerator1::CTA_SIZE_Y);
+		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
+
+		generateNormalKernel1 << <grid, block >> >(ig);
 		cudaSafeCall(cudaGetLastError(), "generateNormal");
 	}
 
