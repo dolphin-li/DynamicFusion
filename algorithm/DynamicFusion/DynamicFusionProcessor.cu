@@ -4,32 +4,96 @@
 #include "device_utils.h"
 namespace dfusion
 {
-	texture<depthtype, cudaTextureType2D, cudaReadModeElementType> g_depth_tex;
-	__global__ void tsdf23(
-		const PtrStepSz<depthtype> depth, 
-		cudaSurfaceObject_t volumeTex,
-		const int3 volume_resolution, 
-		const float tranc_dist, 
-		float max_weight, 
-		const Mat33 Rv2c, 
-		const float3 tv2c, 
-		const Intr intr,
-		const float voxel_size)
+//// could not understand it in sec. 3.2 of the paper; just ignore it currently.
+//#define ENABLE_ADAPTIVE_FUSION_WEIGHT
+
+	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
+		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
+		int x, int y, int z, float3 origion, float voxelSize,
+		float& fusion_weight)
 	{
-		int x = threadIdx.x + blockIdx.x * blockDim.x;
-		int y = threadIdx.y + blockIdx.y * blockDim.y;
-		int z = threadIdx.z + blockIdx.z * (blockDim.z<<3);
+		Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+		fusion_weight = 0.f;
+#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
+		int numK = 0;
+#endif
 
-		if (x >= volume_resolution.x || y >= volume_resolution.y)
-			return;
-
-#pragma unroll
-		for (int block_iter = 0; block_iter < 8; block_iter++, z += blockDim.z)
+		float3 p = make_float3(x*voxelSize, y*voxelSize, z*voxelSize) + origion;
+		WarpField::KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
+		tex3D(&knnIdx, knnTex, x, y, z);
+		if (knnIdx.x >= WarpField::MaxNodeNum)
 		{
-			if (z >= volume_resolution.z)
-				break;
+			dq_blend = Tbx::Dual_quat_cu::identity();
+			fusion_weight = 1.f;
+		}
+		else
+		{
+#pragma unroll
+			for (int k = 0; k < WarpField::KnnK; k++)
+			{
+				int idk = WarpField::get_by_arrayid(knnIdx, k);
+				if (idk < WarpField::MaxNodeNum)
+				{
+					WarpField::IdxType nn3 = idk * 3;
+					float4 q0, q1, vw;
+					tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
+					tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
+					tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
 
-			float3 cxyz = Rv2c*make_float3(x*voxel_size, y*voxel_size, z*voxel_size) + tv2c;
+					// note: we store 1.f/radius in vw.w
+					float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
+					float w = __expf(-dist2 * 2 * (vw.w*vw.w));
+					Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
+					dq_blend = dq_blend + dq*w;
+#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
+					fusion_weight += sqrt(dist2);
+					numK++;
+#endif
+				}
+			}
+			dq_blend.normalize();
+#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
+			fusion_weight /= float(numK);
+#else
+			fusion_weight = 1.f;
+#endif
+		}
+
+		return dq_blend;
+	}
+
+
+	texture<depthtype, cudaTextureType2D, cudaReadModeElementType> g_depth_tex;
+	struct Fusioner
+	{
+		PtrStepSz<depthtype> depth;
+
+		cudaSurfaceObject_t volumeTex;
+		int3 volume_resolution;
+		float3 origion;
+		float voxel_size;
+		float tranc_dist;
+		float max_weight;
+		Intr intr;
+
+		cudaTextureObject_t knnTex;
+		cudaTextureObject_t nodesDqVwTex;
+		Tbx::Quat_cu Rv2c;
+		Tbx::Point3 tv2c;
+
+		__device__ __forceinline__ void operator()(int x, int y, int z)
+		{
+			float fusion_weight = 0;
+			Tbx::Dual_quat_cu dq = calc_dual_quat_blend_on_voxel(
+				knnTex, nodesDqVwTex, x, y, z, origion, voxel_size, fusion_weight);
+
+#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
+			fusion_weight /= tranc_dist;
+#endif
+
+			float3 cxyz = convert(Rv2c.rotate(dq.transform(Tbx::Point3(x*voxel_size + origion.x,
+				y*voxel_size+origion.y, z*voxel_size+origion.z))) + tv2c);
+
 			float3 uvd = intr.xyz2uvd(cxyz);
 			int2 coo = make_int2(__float2int_rn(uvd.x), __float2int_rn(uvd.y));
 
@@ -44,14 +108,32 @@ namespace dfusion
 					float2 tsdf_weight_prev = unpack_tsdf(read_tsdf_surface(volumeTex, x, y, z));
 
 					float tsdf = min(1.0f, sdf / tranc_dist);
-					float Wrk = 1;
-					float tsdf_new = (tsdf_weight_prev.x * tsdf_weight_prev.y + Wrk * tsdf)
-						/ (tsdf_weight_prev.y + Wrk);
-					float weight_new = min(tsdf_weight_prev.y + Wrk, max_weight);
+					float tsdf_new = (tsdf_weight_prev.x * tsdf_weight_prev.y + fusion_weight * tsdf)
+						/ (tsdf_weight_prev.y + fusion_weight);
+					float weight_new = min(tsdf_weight_prev.y + fusion_weight, max_weight);
 
 					write_tsdf_surface(volumeTex, pack_tsdf(tsdf_new, weight_new), x, y, z);
 				}
 			}
+		}
+	};
+
+	__global__ void tsdf23( Fusioner fs)
+	{
+		int x = threadIdx.x + blockIdx.x * blockDim.x;
+		int y = threadIdx.y + blockIdx.y * blockDim.y;
+		int z = threadIdx.z + blockIdx.z * (blockDim.z<<3);
+
+		if (x >= fs.volume_resolution.x || y >= fs.volume_resolution.y)
+			return;
+
+#pragma unroll
+		for (int block_iter = 0; block_iter < 8; block_iter++, z += blockDim.z)
+		{
+			if (z >= fs.volume_resolution.z)
+				break;
+
+			fs(x, y, z);
 		}// end for block_iter
 	}      // __global__
 
@@ -68,24 +150,28 @@ namespace dfusion
 		cudaBindTexture2D(&offset, &g_depth_tex, m_depth_input.ptr(), &desc, 
 			m_depth_input.cols(), m_depth_input.rows(), m_depth_input.step());
 		assert(offset == 0);
-		cudaSurfaceObject_t surf = m_volume->bindSurface();
-		
+
+		Fusioner fs;
+		fs.depth = m_depth_input;
+		fs.volumeTex = m_volume->bindSurface();
+		fs.volume_resolution = m_volume->getResolution();
+		fs.origion = m_volume->getOrigion();
+		fs.voxel_size = m_volume->getVoxelSize();
+		fs.tranc_dist = m_volume->getTsdfTruncDist();
+		fs.max_weight = m_param.fusion_max_weight;
+		fs.intr = m_kinect_intr;
+
+		fs.knnTex = m_warpField->bindKnnFieldTexture();
+		fs.nodesDqVwTex = m_warpField->bindNodesDqVwTexture();	
 		Tbx::Transfo tr = m_warpField->get_rigidTransform();
-		Tbx::Mat3 Rv2c = tr.get_mat3();
-		Tbx::Vec3 tv2c = tr.get_translation() + Rv2c*convert(m_volume->getOrigion());
+		fs.Rv2c = tr;
+		fs.tv2c = Tbx::Point3(tr.get_translation());
 
-		tsdf23 << <grid, block >> >(
-			m_depth_input, 
-			surf, 
-			m_volume->getResolution(),
-			m_volume->getTsdfTruncDist(),
-			m_param.fusion_max_weight,
-			convert(Rv2c), 
-			convert(tv2c), 
-			m_kinect_intr, 
-			m_volume->getVoxelSize());
+		tsdf23 << <grid, block >> >(fs);
 
-		m_volume->unbindSurface(surf);
+		m_warpField->unBindNodesDqVwTexture(fs.nodesDqVwTex);
+		m_warpField->unBindKnnFieldTexture(fs.knnTex);
+		m_volume->unbindSurface(fs.volumeTex);
 		cudaUnbindTexture(&g_depth_tex);
 
 		cudaSafeCall(cudaGetLastError());

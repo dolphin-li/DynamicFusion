@@ -88,6 +88,42 @@ namespace dfusion
 			}
 			return dq_blend;
 		}
+		__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
+			cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
+			int x, int y, int z, float3 origion, float voxelSize)
+		{
+			Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+
+			float3 p = make_float3(x*voxelSize, y*voxelSize, z*voxelSize) + origion;
+			KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
+			tex3D(&knnIdx, knnTex, x, y, z);
+
+			if (get_by_arrayid(knnIdx, 0) >= MaxNodeNum)
+			{
+				dq_blend = Tbx::Dual_quat_cu::identity();
+			}
+			else
+			{
+				for (int k = 0; k < KnnK; k++)
+				{
+					if (get_by_arrayid(knnIdx, k) < MaxNodeNum)
+					{
+						IdxType nn3 = get_by_arrayid(knnIdx, k) * 3;
+						float4 q0, q1, vw;
+						tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
+						tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
+						tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
+						// note: we store 1.f/radius in vw.w
+						float w = __expf(-norm2(make_float3(vw.x - p.x, vw.y - p.y,
+							vw.z - p.z)) * 2 * (vw.w*vw.w));
+						Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
+						dq_blend = dq_blend + dq*w;
+					}
+				}
+				dq_blend.normalize();
+			}
+			return dq_blend;
+		}
 #endif
 	public:
 		WarpField();
