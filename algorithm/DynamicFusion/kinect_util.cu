@@ -3,6 +3,11 @@
 #include <set>
 namespace dfusion
 {
+	__device__ __forceinline__ float3 read_float3_4(float4 a)
+	{
+		return make_float3(a.x, a.y, a.z);
+	}
+
 #pragma region --uniqe id
 	bool is_cuda_pbo_vbo_id_used_push_new(unsigned int id)
 	{
@@ -91,42 +96,12 @@ namespace dfusion
 			CTA_SIZE_X = 32, CTA_SIZE_Y = 8
 		};
 
-		PtrStep<float> vmap;
-		PtrStep<float> nmap;
+		PtrStep<float4> vmap;
+		PtrStep<float4> nmap;
 
 		LightSource light;
 
 		mutable PtrStepSz<PixelRGBA> dst;
-
-		__device__ __forceinline__ void convertToColorHSV(float rgb[3], float value, float min_value, float max_value) const{
-			if (value < min_value)
-				value = min_value;
-			else if (value > max_value)
-				value = max_value;
-
-			float lamda = (value - min_value) / (max_value - min_value);
-
-			float coef = lamda * 6.0f;
-
-			if (coef <= 1.0f)
-				rgb[0] = 1.0f, rgb[1] = coef, rgb[2] = 0.0f;
-			else if (coef <= 2.0f)
-				rgb[0] = 1.0f - (coef - 1.0f), rgb[1] = 1.0f, rgb[2] = 0.0f;
-			else if (coef <= 3.0f)
-				rgb[0] = 0.0f, rgb[1] = 1.0f, rgb[2] = coef - 2.0f;
-			else if (coef <= 4.0f)
-				rgb[0] = 0.0f, rgb[1] = 1.0f - (coef - 3.0f), rgb[2] = 1.0f;
-			else if (coef <= 5.0f)
-				rgb[0] = coef - 4.0f, rgb[1] = 0.0f, rgb[2] = 1.0f;
-			else
-				rgb[0] = 1.0f, rgb[2] = 0.0f, rgb[2] = 1.0f - (coef - 5.0f);
-		}
-
-		__device__ __forceinline__ float int2float(int value) const
-		{
-			value = (value * 179426549 + 1300997) & 15487469;
-			return float(value) / 15487469;
-		}
 
 		__device__ __forceinline__ void operator () () const
 		{
@@ -136,25 +111,18 @@ namespace dfusion
 			if (x >= dst.cols || y >= dst.rows)
 				return;
 
-			float3 v, n;
-			v.x = vmap.ptr(y)[x];
-			n.x = nmap.ptr(y)[x];
+			float4 v = vmap(y, x);
+			float4 n = nmap(y, x);
 
 			PixelRGBA color;
 			color.a = color.r = color.g = color.b = 0;
 
 			if (!isnan(v.x) && !isnan(n.x))
 			{
-				v.y = vmap.ptr(y + dst.rows)[x];
-				v.z = vmap.ptr(y + 2 * dst.rows)[x];
-
-				n.y = nmap.ptr(y + dst.rows)[x];
-				n.z = nmap.ptr(y + 2 * dst.rows)[x];
-
 				float3 acc_vec = make_float3(0.f, 0.f, 0.f);
 				{
-					float3 vec = normalized(light.pos - v);
-					float w = max(0.f, dot(vec, n));
+					float3 vec = normalized(light.pos - make_float3(v.x, v.y, v.z));
+					float w = max(0.f, dot(vec, make_float3(n.x, n.y, n.z)));
 					acc_vec.x += w * light.diffuse.x;
 					acc_vec.y += w * light.diffuse.y;
 					acc_vec.z += w * light.diffuse.z;
@@ -182,7 +150,7 @@ namespace dfusion
 		ig.light = light;
 		ig.dst = dst;
 
-		dst.create(vmap.rows() / 3, vmap.cols());
+		dst.create(vmap.rows(), vmap.cols());
 		dim3 block(ImageGenerator::CTA_SIZE_X, ImageGenerator::CTA_SIZE_Y);
 		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
 
@@ -201,7 +169,7 @@ namespace dfusion
 			CTA_SIZE_X = 32, CTA_SIZE_Y = 8
 		};
 
-		PtrStep<float> nmap;
+		PtrStep<float4> nmap;
 		Mat33 R;
 		mutable PtrStepSz<PixelRGBA> dst;
 
@@ -213,16 +181,14 @@ namespace dfusion
 			if (x >= dst.cols || y >= dst.rows)
 				return;
 
-			float3 n;
-			n.x = nmap.ptr(y)[x];
+			float4 n4 = nmap(y, x);
+			float3 n = make_float3(n4.x, n4.y, n4.z);
 
 			PixelRGBA color;
 			color.a = color.r = color.g = color.b = 0;
 
 			if (!isnan(n.x))
 			{
-				n.y = nmap.ptr(y + dst.rows)[x];
-				n.z = nmap.ptr(y + 2 * dst.rows)[x];
 				n = normalized(R*n);
 				color.r = max(0, min(255, int(255 * (n.x * 0.5f + 0.5f))));
 				color.g = max(0, min(255, int(255 * (n.y * 0.5f + 0.5f))));
@@ -286,6 +252,7 @@ namespace dfusion
 		ig.dst = dst;
 		ig.R = R;
 
+		dst.create(nmap.rows(), nmap.cols());
 
 		dim3 block(NormalGenerator::CTA_SIZE_X, NormalGenerator::CTA_SIZE_Y);
 		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
@@ -294,12 +261,13 @@ namespace dfusion
 		cudaSafeCall(cudaGetLastError(), "generateNormal");
 	}
 
-	void generateNormalMap(const DeviceArray2D<float4>& nmap, ColorMap& dst)
+	void generateNormalMap(const MapArr& nmap, ColorMap& dst)
 	{
 		NormalGenerator1 ig;
 		ig.nmap = nmap;
 		ig.dst = dst;
 
+		dst.create(nmap.rows(), nmap.cols());
 
 		dim3 block(NormalGenerator1::CTA_SIZE_X, NormalGenerator1::CTA_SIZE_Y);
 		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
@@ -372,7 +340,7 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --compute vmap, nmap
-	__global__ void computeVmapKernel(const PtrStepSz<depthtype> depth, PtrStep<float> vmap, Intr intr)
+	__global__ void computeVmapKernel(const PtrStepSz<depthtype> depth, PtrStep<float4> vmap, Intr intr)
 	{
 		int u = threadIdx.x + blockIdx.x * blockDim.x;
 		int v = threadIdx.y + blockIdx.y * blockDim.y;
@@ -385,17 +353,14 @@ namespace dfusion
 			{
 				float3 xyz = intr.uvd2xyz((float)u, (float)v, z);
 
-				vmap.ptr(v)[u] = xyz.x;
-				vmap.ptr(v + depth.rows)[u] = xyz.y;
-				vmap.ptr(v + depth.rows * 2)[u] = xyz.z;
+				vmap(v, u) = make_float4(xyz.x, xyz.y, xyz.z, 1.f);
 			}
 			else
-				vmap.ptr(v)[u] = numeric_limits<float>::quiet_NaN();
-
+				vmap(v,u).x = numeric_limits<float>::quiet_NaN();
 		}
 	}
 
-	__global__ void computeNmapKernel(int rows, int cols, const PtrStep<float> vmap, PtrStep<float> nmap)
+	__global__ void computeNmapKernel(int rows, int cols, const PtrStep<float4> vmap, PtrStep<float4> nmap)
 	{
 		int u = threadIdx.x + blockIdx.x * blockDim.x;
 		int v = threadIdx.y + blockIdx.y * blockDim.y;
@@ -405,38 +370,28 @@ namespace dfusion
 
 		if (u == cols - 1 || u == 0 || v == rows - 1 || v == 0)
 		{
-			nmap.ptr(v)[u] = numeric_limits<float>::quiet_NaN();
+			nmap(v, u).x = numeric_limits<float>::quiet_NaN();
 			return;
 		}
 
 		float3 v00, v01, v10;
-		v00.x = vmap.ptr(v)[u];
-		v01.x = vmap.ptr(v)[u + 1];
-		v10.x = vmap.ptr(v - 1)[u];
+		v00 = read_float3_4(vmap(v, u));
+		v01 = read_float3_4(vmap(v, u + 1));
+		v10 = read_float3_4(vmap(v - 1, u));
 
 		if (!isnan(v00.x) && !isnan(v01.x) && !isnan(v10.x))
 		{
-			v00.y = vmap.ptr(v + rows)[u];
-			v01.y = vmap.ptr(v + rows)[u + 1];
-			v10.y = vmap.ptr(v - 1 + rows)[u];
-
-			v00.z = vmap.ptr(v + 2 * rows)[u];
-			v01.z = vmap.ptr(v + 2 * rows)[u + 1];
-			v10.z = vmap.ptr(v - 1 + 2 * rows)[u];
-
 			float3 r = normalized(cross(v01 - v00, v10 - v00));
 
-			nmap.ptr(v)[u] = r.x;
-			nmap.ptr(v + rows)[u] = r.y;
-			nmap.ptr(v + 2 * rows)[u] = r.z;
+			nmap(v, u) = make_float4(r.x, r.y, r.z, 0);
 		}
 		else
-			nmap.ptr(v)[u] = numeric_limits<float>::quiet_NaN();
+			nmap(v,u).x = numeric_limits<float>::quiet_NaN();
 	}
 
 	void createVMap(const Intr& intr, const DepthMap& depth, MapArr& vmap)
 	{
-		vmap.create(depth.rows() * 3, depth.cols());
+		vmap.create(depth.rows(), depth.cols());
 
 		dim3 block(32, 8);
 		dim3 grid(1, 1, 1);
@@ -451,7 +406,7 @@ namespace dfusion
 	{
 		nmap.create(vmap.rows(), vmap.cols());
 
-		int rows = vmap.rows() / 3;
+		int rows = vmap.rows();
 		int cols = vmap.cols();
 
 		dim3 block(32, 8);
@@ -523,7 +478,8 @@ namespace dfusion
 
 #pragma region --resize map
 	template<bool normalize>
-	__global__ void resizeMapKernel(int drows, int dcols, int srows, const PtrStep<float> input, PtrStep<float> output)
+	__global__ void resizeMapKernel(int drows, int dcols, int srows, 
+		const PtrStep<float4> input, PtrStep<float4> output)
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
 		int y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -536,42 +492,24 @@ namespace dfusion
 		int xs = x * 2;
 		int ys = y * 2;
 
-		float x00 = input.ptr(ys + 0)[xs + 0];
-		float x01 = input.ptr(ys + 0)[xs + 1];
-		float x10 = input.ptr(ys + 1)[xs + 0];
-		float x11 = input.ptr(ys + 1)[xs + 1];
+		float3 v00 = read_float3_4(input(ys + 0, xs + 0));
+		float3 v01 = read_float3_4(input(ys + 0, xs + 1));
+		float3 v10 = read_float3_4(input(ys + 1, xs + 0));
+		float3 v11 = read_float3_4(input(ys + 1, xs + 1));
 
-		if (isnan(x00) || isnan(x01) || isnan(x10) || isnan(x11))
+		if (isnan(v00.x) || isnan(v01.x) || isnan(v10.x) || isnan(v11.x))
 		{
-			output.ptr(y)[x] = qnan;
+			output.ptr(y)[x].x = qnan;
 			return;
 		}
 		else
 		{
-			float3 n;
-
-			n.x = (x00 + x01 + x10 + x11) / 4;
-
-			float y00 = input.ptr(ys + srows + 0)[xs + 0];
-			float y01 = input.ptr(ys + srows + 0)[xs + 1];
-			float y10 = input.ptr(ys + srows + 1)[xs + 0];
-			float y11 = input.ptr(ys + srows + 1)[xs + 1];
-
-			n.y = (y00 + y01 + y10 + y11) / 4;
-
-			float z00 = input.ptr(ys + 2 * srows + 0)[xs + 0];
-			float z01 = input.ptr(ys + 2 * srows + 0)[xs + 1];
-			float z10 = input.ptr(ys + 2 * srows + 1)[xs + 0];
-			float z11 = input.ptr(ys + 2 * srows + 1)[xs + 1];
-
-			n.z = (z00 + z01 + z10 + z11) / 4;
+			float3 n = (v00 + v01 + v10 + v11) * 0.25f;
 
 			if (normalize)
 				n = normalized(n);
 
-			output.ptr(y)[x] = n.x;
-			output.ptr(y + drows)[x] = n.y;
-			output.ptr(y + 2 * drows)[x] = n.z;
+			output(y,x) = make_float4(n.x, n.y, n.z, 0);
 		}
 	}
 
@@ -579,12 +517,12 @@ namespace dfusion
 	void resizeMap(const MapArr& input, MapArr& output)
 	{
 		int in_cols = input.cols();
-		int in_rows = input.rows() / 3;
+		int in_rows = input.rows();
 
 		int out_cols = in_cols / 2;
 		int out_rows = in_rows / 2;
 
-		output.create(out_rows * 3, out_cols);
+		output.create(out_rows, out_cols);
 
 		dim3 block(32, 8);
 		dim3 grid(divUp(out_cols, block.x), divUp(out_rows, block.y));
@@ -605,7 +543,7 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --rigid transform
-	__global__ void rigidTransformKernel(PtrStep<float> vmap, PtrStep<float> nmap, 
+	__global__ void rigidTransformKernel(PtrStep<float4> vmap, PtrStep<float4> nmap, 
 		Mat33 R, float3 t, int rows, int cols)
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
@@ -613,19 +551,16 @@ namespace dfusion
 
 		if (x < cols && y < rows)
 		{
-			float3 v = make_float3(vmap(y, x), vmap(y + rows, x), vmap(y + rows * 2, x));
-			float3 n = make_float3(nmap(y, x), nmap(y + rows, x), nmap(y + rows * 2, x));
+			float3 v = read_float3_4(vmap(y, x));
+			float3 n = read_float3_4(nmap(y, x));
 			if (isnan(v.x) || isnan(n.x))
 				return;
 
 			v = R*v + t;
 			n = R*n;
-			vmap(y, x) = v.x;
-			vmap(y + rows, x) = v.y;
-			vmap(y + rows * 2, x) = v.z;
-			nmap(y, x) = n.x;
-			nmap(y + rows, x) = n.y;
-			nmap(y + rows * 2, x) = n.z;
+
+			vmap(y, x) = make_float4(v.x, v.y, v.z, 1.f);
+			nmap(y, x) = make_float4(n.x, n.y, n.z, 0.f);
 		}
 	}
 
@@ -634,7 +569,7 @@ namespace dfusion
 		dim3 block(32, 8);
 		dim3 grid(1, 1, 1);
 		int cols = vmap.cols();
-		int rows = vmap.rows() / 3;
+		int rows = vmap.rows();
 		grid.x = divUp(cols, block.x);
 		grid.y = divUp(rows, block.y);
 		rigidTransformKernel << <grid, block >> >(vmap, nmap, convert(T.get_mat3()), 
@@ -680,8 +615,8 @@ namespace dfusion
 		Mat33 Rcurr;
 		float3 tcurr;
 
-		PtrStep<float> vmap_curr;
-		PtrStep<float> nmap_curr;
+		PtrStep<float4> vmap_curr;
+		PtrStep<float4> nmap_curr;
 
 		Mat33 Rprev;
 		Mat33 Rprev_inv;
@@ -689,8 +624,8 @@ namespace dfusion
 
 		Intr intr;
 
-		PtrStep<float> vmap_prev;
-		PtrStep<float> nmap_prev;
+		PtrStep<float4> vmap_prev;
+		PtrStep<float4> nmap_prev;
 
 		float distThres;
 		float angleThres;
@@ -702,19 +637,12 @@ namespace dfusion
 
 		__device__ __forceinline__ bool search(int x, int y, float3& n, float3& d, float3& s) const
 		{
-			float3 ncurr;
-			ncurr.x = nmap_curr.ptr(y)[x];
-			ncurr.y = nmap_curr.ptr(y + rows)[x];
-			ncurr.z = nmap_curr.ptr(y + 2 * rows)[x];
+			float3 ncurr = read_float3_4(nmap_curr(y, x));
 
 			if (isnan(ncurr.x))
 				return (false);
 
-			float3 vcurr;
-			vcurr.x = vmap_curr.ptr(y)[x];
-			vcurr.y = vmap_curr.ptr(y + rows)[x];
-			vcurr.z = vmap_curr.ptr(y + 2 * rows)[x];
-
+			float3 vcurr = read_float3_4(vmap_curr(y, x));
 			float3 vcurr_g = Rcurr * vcurr + tcurr;
 			float3 ncurr_g = Rcurr * ncurr;
 			float3 vcurr_cp = Rprev_inv * (vcurr_g - tprev);	// prev camera coo space
@@ -727,18 +655,12 @@ namespace dfusion
 			if (ukr.x < 0 || ukr.y < 0 || ukr.x >= cols || ukr.y >= rows || vcurr_cp.z >= 0)
 				return (false);
 
-			float3 nprev;
-			nprev.x = nmap_prev.ptr(ukr.y)[ukr.x];
-			nprev.y = nmap_prev.ptr(ukr.y + rows)[ukr.x];
-			nprev.z = nmap_prev.ptr(ukr.y + 2 * rows)[ukr.x];
+			float3 nprev = read_float3_4(nmap_prev(ukr.y, ukr.x));
 
 			if (isnan(nprev.x))
 				return (false);
 
-			float3 vprev;
-			vprev.x = vmap_prev.ptr(ukr.y)[ukr.x];
-			vprev.y = vmap_prev.ptr(ukr.y + rows)[ukr.x];
-			vprev.z = vmap_prev.ptr(ukr.y + 2 * rows)[ukr.x];
+			float3 vprev = read_float3_4(vmap_prev(ukr.y, ukr.x));
 
 			float dist = norm(vprev - vcurr_cp);
 			if (dist > distThres)
@@ -858,7 +780,7 @@ namespace dfusion
 		float_type* matrixA_host, float_type* vectorB_host)
 	{
 		int cols = vmap_curr.cols();
-		int rows = vmap_curr.rows() / 3;
+		int rows = vmap_curr.rows();
 
 		Combined cs;
 

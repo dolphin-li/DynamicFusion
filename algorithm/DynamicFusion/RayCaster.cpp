@@ -62,7 +62,7 @@ namespace dfusion
 		m_tc2v.z = camera2volume(2, 3);
 
 		// allocate 2d buffers
-		m_vmap.create(std::lroundf(b - t) * 3, std::lroundf(r - l));
+		m_vmap.create(std::lroundf(b - t), std::lroundf(r - l));
 		m_nmap.create(m_vmap.rows(), m_vmap.cols());	
 	}
 
@@ -71,7 +71,7 @@ namespace dfusion
 	{
 		release_assert(m_volume);
 
-		colorMap.create(m_vmap.rows() / 3, m_vmap.cols());
+		colorMap.create(m_vmap.rows(), m_vmap.cols());
 
 		// 1. ray casting
 		raycast();

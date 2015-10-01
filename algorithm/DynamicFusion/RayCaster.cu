@@ -237,7 +237,7 @@ namespace dfusion
 		rc.volume_size.z = rc.volume_resolution.z * rc.voxel_size;
 		rc.time_step = m_volume->getTsdfTruncDist() * RAY_CASTING_TIME_STEP;
 		rc.cols = m_vmap.cols();
-		rc.rows = m_vmap.rows() / 3;
+		rc.rows = m_vmap.rows();
 		rc.intr = m_intr;
 		rc.vmap = m_vmap;
 		rc.nmap = m_nmap;

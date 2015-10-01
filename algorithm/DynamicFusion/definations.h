@@ -93,7 +93,7 @@ namespace dfusion
 
 	typedef unsigned short ushort;
 	typedef float depthtype;
-	typedef DeviceArray2D<float> MapArr;
+	typedef DeviceArray2D<float4> MapArr;
 	typedef DeviceArray2D<depthtype> DepthMap;
 	typedef DeviceArray2D<PixelRGBA> ColorMap;
 #ifdef USE_FLOAT_TSDF_VOLUME

@@ -5,11 +5,11 @@ namespace dfusion
 	void mapsToObj(ObjMesh& mesh, const dfusion::MapArr& vmap, const dfusion::MapArr& nmap)
 	{
 		int w = vmap.cols();
-		int h = vmap.rows() / 3;
+		int h = vmap.rows();
 		int n = w*h;
-		std::vector<float> vhost(n * 3), nhost(n * 3);
-		vmap.download(vhost.data(), w*sizeof(float));
-		nmap.download(nhost.data(), w*sizeof(float));
+		std::vector<float4> vhost(n), nhost(n);
+		vmap.download(vhost.data(), w*sizeof(float4));
+		nmap.download(nhost.data(), w*sizeof(float4));
 
 		mesh.clear();
 		mesh.vertex_list.resize(n);
@@ -17,12 +17,12 @@ namespace dfusion
 
 		for (int i = 0; i < n; i++)
 		{
-			mesh.vertex_list[i][0] = vhost[i];
-			mesh.vertex_list[i][1] = vhost[i + n];
-			mesh.vertex_list[i][2] = vhost[i + n * 2];
-			mesh.vertex_normal_list[i][0] = nhost[i];
-			mesh.vertex_normal_list[i][1] = nhost[i + n];
-			mesh.vertex_normal_list[i][2] = nhost[i + n * 2];
+			mesh.vertex_list[i][0] = vhost[i].x;
+			mesh.vertex_list[i][1] = vhost[i].y;
+			mesh.vertex_list[i][2] = vhost[i].z;
+			mesh.vertex_normal_list[i][0] = nhost[i].x;
+			mesh.vertex_normal_list[i][1] = vhost[i].y;
+			mesh.vertex_normal_list[i][2] = vhost[i].z;
 		}
 	}
 }
