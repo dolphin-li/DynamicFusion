@@ -598,10 +598,11 @@ namespace dfusion
 			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id_warpnodes));
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
 
-			glBufferData(GL_ARRAY_BUFFER, WarpField::MaxNodeNum*
-				WarpField::GraphLevelNum*(sizeof(float4)
-				+WarpField::KnnK*sizeof(int)*2), 
-				0, GL_DYNAMIC_DRAW);
+			int bytes_warp = WarpField::MaxNodeNum*WarpField::GraphLevelNum*(sizeof(float4)
+								+WarpField::KnnK*sizeof(int)* 2);
+			int bytes_corr = KINECT_WIDTH*KINECT_HEIGHT*(4*sizeof(float4)+2*sizeof(int));
+			int bytes = max(bytes_warp, bytes_corr);
+			glBufferData(GL_ARRAY_BUFFER, bytes, 0, GL_DYNAMIC_DRAW);
 			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res_warp, m_vbo_id_warpnodes,
 					cudaGraphicsMapFlagsNone));
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -638,15 +639,28 @@ namespace dfusion
 	}
 
 	void GpuMesh::renderToImg(const Camera& camera, LightSource light, ColorMap& img, 
-		const Param& param, const WarpField* warpField)
+		const Param& param, const WarpField* warpField, 
+		const MapArr* vmap_live, const MapArr* vmap_warp,
+		const MapArr* nmap_live, const MapArr* nmap_warp)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
+		if (vmap_live || vmap_warp)
+		{
+			if (vmap_warp == nullptr || vmap_live == nullptr)
+				throw std::exception("A pair of vmap must be provided in GpuMesh::renderToImg()");
+			if (vmap_live->cols() != KINECT_WIDTH || vmap_live->rows() != KINECT_HEIGHT
+				|| vmap_warp->cols() != KINECT_WIDTH || vmap_warp->rows() != KINECT_HEIGHT)
+				throw std::exception("not supported vmap size in GpuMesh::renderToImg()");
+		}
 		const int width = std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft()));
 		const int height = std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop()));
 
-		createRenderer(width, height);
-		createRendererForWarpField(warpField);
+		if (param.view_show_mesh)
+			createRenderer(width, height);
+		if (param.view_show_nodes || param.view_show_graph || param.view_show_corr)
+			createRendererForWarpField(warpField);
+
 		img.create(height, width);
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
@@ -747,6 +761,35 @@ namespace dfusion
 			}
 			glDisableClientState(GL_VERTEX_ARRAY);
 		}
+
+		// show correspondence
+		if (vmap_live && param.view_show_corr)
+		{
+			glEnableClientState(GL_VERTEX_ARRAY);
+			glEnableClientState(GL_NORMAL_ARRAY);
+			float4* gldata = nullptr;
+			size_t num_bytes = 0;
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0));
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
+			copy_maps_to_gl_buffer(*vmap_live, *vmap_warp, *nmap_live, *nmap_warp, gldata, param);
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0));
+
+			const int n = vmap_live->rows() * vmap_live->cols();
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
+			glVertexPointer(3, GL_FLOAT, sizeof(float4), (void*)0);
+			glNormalPointer(GL_FLOAT, sizeof(float4), (void*)(n * 2 * sizeof(float4)));
+			glEnable(GL_COLOR_MATERIAL);
+			glEnable(GL_LIGHTING);
+			glColor3f(0.6, 0, 0);
+			glDrawArrays(GL_POINTS, 0, n);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_vbo_id_warpnodes);
+			glColor3f(0.0, 0.6, 0.0);
+			glDrawElements(GL_LINES, n*2, GL_UNSIGNED_INT, (void*)(n * 4 * sizeof(float4)));
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			glDisableClientState(GL_NORMAL_ARRAY);
+			glDisableClientState(GL_VERTEX_ARRAY);
+		}// end if vmap_live
 
 		glPopAttrib();
 		// do not use it:

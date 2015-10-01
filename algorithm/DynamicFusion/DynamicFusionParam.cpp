@@ -38,6 +38,8 @@ namespace dfusion
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_nonRigidICP_maxIter = 3;
+		fusion_nonRigid_distThre = 0.1f; // meter
+		fusion_nonRigid_angleThreSin = sin(20.f*3.14159254f / 180.f);
 
 		/** *****************************************************
 		* visualization related
@@ -45,6 +47,7 @@ namespace dfusion
 		view_show_mesh = true;
 		view_show_nodes = true;
 		view_show_graph = true;
+		view_show_corr = false;
 		view_show_graph_level = 0;
 	}
 }

@@ -58,6 +58,8 @@ namespace dfusion
 		float fusion_psi_data;
 		float fusion_psi_reg;
 		int fusion_nonRigidICP_maxIter;
+		float fusion_nonRigid_distThre;
+		float fusion_nonRigid_angleThreSin;
 
 		/** *****************************************************
 		* visualization related
@@ -65,6 +67,7 @@ namespace dfusion
 		bool view_show_mesh;
 		bool view_show_nodes;
 		bool view_show_graph;
+		bool view_show_corr;
 		int view_show_graph_level;
 	};
 }

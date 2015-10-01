@@ -56,7 +56,9 @@ namespace dfusion
 
 		// unlockVertsNormals is performed insided
 		void renderToImg(const Camera& camera, LightSource light, ColorMap& img, 
-			const Param& param, const WarpField* warpField = nullptr);
+			const Param& param, const WarpField* warpField = nullptr,
+			const MapArr* vmap_live = nullptr, const MapArr* vmap_warp = nullptr,
+			const MapArr* nmap_live = nullptr, const MapArr* nmap_warp = nullptr);
 		void renderToDepth(const Camera& camera, DepthMap& img);
 
 		// we assume self is warped by the warpField,
@@ -75,6 +77,9 @@ namespace dfusion
 			float s1, float s2, float camNear);
 		void copy_canoview(const float4* gldata, DeviceArray2D<float4>& map);
 		void copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField);
+		void copy_maps_to_gl_buffer(const MapArr& vmap_live, const MapArr& vmap_warp,
+			const MapArr& nmap_live, const MapArr& nmap_warp,
+			float4* gldata, const Param& param);
 	private:
 		PointType* m_verts_d;
 		PointType* m_normals_d;

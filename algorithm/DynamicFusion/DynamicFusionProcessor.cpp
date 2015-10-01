@@ -201,7 +201,9 @@ namespace dfusion
 		}
 		else
 		{
-			m_warpedMesh->renderToImg(userCam, light, img, m_param, m_warpField);
+			m_warpedMesh->renderToImg(userCam, light, img, m_param, m_warpField,
+				&m_vmap_curr_pyd[0], &m_vmap_prev_pyd[0], &m_nmap_curr_pyd[0],
+				&m_nmap_prev_pyd[0]);
 			//img.create(m_nmap_cano.rows(), m_nmap_cano.cols());
 			//generateNormalMap(m_vmap_cano, img);
 		}
@@ -221,10 +223,14 @@ namespace dfusion
 		if (m_frame_id == 0)
 			return;
 
+		// 0. create visibility map of the current warp view
+		m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
+
+		// icp iteration
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{
 			// 1. find correspondence
-			m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
+			// m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
 
 			// 2. Gauss-Newton Optimization
 
