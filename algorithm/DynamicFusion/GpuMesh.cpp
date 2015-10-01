@@ -780,7 +780,7 @@ namespace dfusion
 			glNormalPointer(GL_FLOAT, sizeof(float4), (void*)(n * 2 * sizeof(float4)));
 			glEnable(GL_COLOR_MATERIAL);
 			glEnable(GL_LIGHTING);
-			glColor3f(0.6, 0, 0);
+			glColor3f(0.4, 0, 0);
 			glDrawArrays(GL_POINTS, 0, n);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_vbo_id_warpnodes);
 			glColor3f(0.0, 0.6, 0.0);
