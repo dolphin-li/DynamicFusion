@@ -8,6 +8,7 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	setAcceptDrops(true);
 	m_frameIndex = 0;
 	m_view_normalmap = false;
+	m_lastState = DynamicFusionUI::Live;
 	m_state = DynamicFusionUI::Live;
 	m_renderType = RenderRayCasting;
 	updateUiFromParam();
@@ -57,6 +58,7 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 			break;
 		case DynamicFusionUI::Live:
 		case DynamicFusionUI::Loading:
+		case DynamicFusionUI::Pause:
 			updateDynamicFusion();
 			break;
 		default:
@@ -97,7 +99,7 @@ void DynamicFusionUI::dropEvent(QDropEvent *ev)
 	if (info.isDir())
 	{
 		m_currentPath = path;
-		m_state = DynamicFusionUI::Loading;
+		setState(DynamicFusionUI::Loading);
 		m_frameIndex = 0;
 	}
 	// if dropped a file, then we load as a dumpped volume.
@@ -162,7 +164,7 @@ void DynamicFusionUI::frameLoading()
 	catch (std::exception e)
 	{
 		std::cout << e.what() << std::endl;
-		m_state = DynamicFusionUI::Pause;
+		setState(DynamicFusionUI::Pause);
 	}
 }
 
@@ -214,16 +216,23 @@ void DynamicFusionUI::updateLoadedStaticVolume()
 
 void DynamicFusionUI::updateDynamicFusion()
 {
-	g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
+	if (m_state != DynamicFusionUI::Pause)
+		g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
 
 	Camera cam;
 	ui.widgetWarpedView->getCameraInfo(cam);
-	cam.setViewPort(0, dfusion::KINECT_WIDTH, 0, dfusion::KINECT_HEIGHT);
-	cam.setPerspective(KINECT_DEPTH_V_FOV, float(dfusion::KINECT_WIDTH) / dfusion::KINECT_HEIGHT,
-		KINECT_NEAREST_METER, 30.f);
+	cam.setViewPort(0, ui.widgetWarpedView->width(), 0, ui.widgetWarpedView->height());
 	g_dataholder.m_processor.shading(cam, g_dataholder.m_lights, 
 		g_dataholder.m_warpedview_shading, false);
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
+}
+
+void DynamicFusionUI::on_actionPause_triggered()
+{
+	if (ui.actionPause->isChecked())
+		setState(DynamicFusionUI::Pause);
+	else
+		restoreState();
 }
 
 void DynamicFusionUI::on_pbReset_clicked()
@@ -241,48 +250,46 @@ void DynamicFusionUI::on_actionLoad_triggered()
 }
 void DynamicFusionUI::on_actionLoad_frames_triggered()
 {
-	State lastState = m_state;
-	m_state = DynamicFusionUI::Pause;
+	setState(DynamicFusionUI::Pause);
 	m_currentPath = QFileDialog::getExistingDirectory(this, "load folder");
 	if (m_currentPath != "")
 	{
 		m_frameIndex = 0;
-		m_state = DynamicFusionUI::Loading;
+		setState(DynamicFusionUI::Loading);
 	}
 	else
-		m_state = lastState;
+		restoreState();
 }
 void DynamicFusionUI::on_actionRecord_frames_triggered()
 {
 	if (ui.actionRecord_frames->isChecked())
 	{
-		m_state = DynamicFusionUI::Pause;
+		setState(DynamicFusionUI::Pause);
 		m_currentPath = QFileDialog::getExistingDirectory(this, "record folder");
 		if (m_currentPath != "")
 		{
 			m_frameIndex = 0;
-			m_state = DynamicFusionUI::Saving;
+			setState(DynamicFusionUI::Saving);
 		}
 		else
 		{
-			m_state = DynamicFusionUI::Live;
+			setState(DynamicFusionUI::Live);
 		}
 	}
 	else
 	{
-		m_state = DynamicFusionUI::Live;
+		setState(DynamicFusionUI::Live);
 	}
 }
 void DynamicFusionUI::on_actionLoad_volume_triggered()
 {
 	try
 	{
-		State lastState = m_state;
-		m_state = DynamicFusionUI::Pause;
+		setState(DynamicFusionUI::Pause);
 		QString name = QFileDialog::getOpenFileName(this, "load volume", "");
 		if (!name.isEmpty())
 		{
-			m_state = DynamicFusionUI::ShowLoadedStaticVolume;
+			setState(DynamicFusionUI::ShowLoadedStaticVolume);
 			try
 			{
 				mpu::VolumeData volume;
@@ -290,13 +297,13 @@ void DynamicFusionUI::on_actionLoad_volume_triggered()
 				g_dataholder.m_volume.initFromHost(&volume);
 
 				g_dataholder.m_rayCaster.init(g_dataholder.m_volume);
-				g_dataholder.m_marchCube.init(&g_dataholder.m_volume, 
+				g_dataholder.m_marchCube.init(&g_dataholder.m_volume,
 					g_dataholder.m_dparam);
 
 				g_dataholder.m_dparam.volume_resolution[0] = volume.getResolution()[0];
 				g_dataholder.m_dparam.volume_resolution[1] = volume.getResolution()[1];
 				g_dataholder.m_dparam.volume_resolution[2] = volume.getResolution()[2];
-				g_dataholder.m_dparam.voxels_per_meter = std::lroundf(1.f/volume.getVoxelSize());
+				g_dataholder.m_dparam.voxels_per_meter = std::lroundf(1.f / volume.getVoxelSize());
 				updateUiFromParam();
 			}
 			catch (std::exception e)
@@ -305,7 +312,7 @@ void DynamicFusionUI::on_actionLoad_volume_triggered()
 			}
 		}
 		else
-			m_state = lastState;
+			restoreState();
 	}
 	catch (std::exception e)
 	{

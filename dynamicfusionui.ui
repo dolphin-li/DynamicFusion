@@ -53,6 +53,7 @@
     <addaction name="actionRecord_frames"/>
     <addaction name="actionLoad_volume"/>
     <addaction name="actionSave_current_mesh"/>
+    <addaction name="actionPause"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuOp"/>
@@ -372,6 +373,17 @@
   <action name="actionSave_current_mesh">
    <property name="text">
     <string>save current mesh</string>
+   </property>
+  </action>
+  <action name="actionPause">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>pause</string>
+   </property>
+   <property name="shortcut">
+    <string>Space</string>
    </property>
   </action>
  </widget>

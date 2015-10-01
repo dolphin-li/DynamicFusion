@@ -23,6 +23,7 @@ public:
 	void on_actionRecord_frames_triggered();
 	void on_actionLoad_volume_triggered();
 	void on_actionSave_current_mesh_triggered();
+	void on_actionPause_triggered();
 	void on_rbRayCasting_clicked();
 	void on_rbMarchCube_clicked();
 	void on_pbReset_clicked();
@@ -54,6 +55,7 @@ protected:
 
 	void updateLoadedStaticVolume();
 	void updateDynamicFusion();
+
 private:
 	Ui::DynamicFusionUIClass ui;
 
@@ -71,10 +73,15 @@ private:
 		RenderMarchCube,
 	};
 	State m_state;
+	State m_lastState;
 	RenderType m_renderType;
 	QString m_currentPath;
 	bool m_view_normalmap;
 	int m_frameIndex;
+private:
+
+	void setState(State s){ m_lastState = m_state;  m_state = s; }
+	void restoreState(){ m_state = m_lastState; }
 };
 
 #endif // DYNAMICFUSIONUI_H

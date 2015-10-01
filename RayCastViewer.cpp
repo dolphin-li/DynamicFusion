@@ -84,9 +84,9 @@ void RayCastViewer::initializeGL()
 void RayCastViewer::resizeGL(int w, int h)
 {
 	float aspect = w / (float)(h ? h : 1);
-	float scale = std::min(float(w) / float(dfusion::KINECT_WIDTH), float(h) / float(dfusion::KINECT_HEIGHT));
-	float w1 = float(dfusion::KINECT_WIDTH * scale);
-	float h1 = float(dfusion::KINECT_HEIGHT * scale);
+	float scale = std::min(float(w) / float(m_pbo_buffer.cols), float(h) / float(m_pbo_buffer.rows));
+	float w1 = float(m_pbo_buffer.cols * scale);
+	float h1 = float(m_pbo_buffer.rows * scale);
 	m_camera.setViewPort((w - w1) / 2, (w - w1) / 2 + w1, (h - h1) / 2, (h - h1) / 2 + h1);
 	m_camera.setPerspective(KINECT_DEPTH_V_FOV, aspect, KINECT_NEAREST_METER, 30.f);
 }
@@ -154,10 +154,34 @@ void RayCastViewer::setCameraInfo(const Camera& cam)
 
 void RayCastViewer::setRayCastingShadingImage(const dfusion::ColorMap& img)
 {
-	if (img.rows() != dfusion::KINECT_HEIGHT || img.cols() != dfusion::KINECT_WIDTH)
-		throw std::exception("setRayCastingShadingImage: size not matched!");
-
 	makeCurrent();
+
+	// dynamic resize
+	if (img.cols() != m_pbo_buffer.cols || img.rows() != m_pbo_buffer.rows)
+	{
+		// resize pbo
+		m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);		m_gl_func->glBufferData(GL_PIXEL_UNPACK_BUFFER,
+			img.cols() * img.rows() * 4,
+			NULL, GL_DYNAMIC_COPY);
+		cudaSafeCall(cudaGraphicsUnregisterResource(m_pbo_cuda_res));
+		cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_pbo_cuda_res, m_pbo_id,
+			cudaGraphicsMapFlagsWriteDiscard));
+		m_pbo_buffer.rows = img.rows();
+		m_pbo_buffer.cols = img.cols();
+		m_pbo_buffer.step = img.cols() * sizeof(uchar4);
+		m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+		// resize texture
+		glBindTexture(GL_TEXTURE_2D, m_texture_id);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.cols(), img.rows(),
+			0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		resizeGL(width(), height());
+	}
+
 	size_t num_bytes = 0;
 	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0));
 	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res));	dfusion::copyColorMapToPbo(img, m_pbo_buffer);
