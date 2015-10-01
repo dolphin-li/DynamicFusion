@@ -73,9 +73,11 @@ namespace dfusion
 		* for non-rigid align
 		* **********************/
 
-		// map of verts in canonical view
+		// map of verts in canonical/warped view
 		DeviceArray2D<float4> m_vmap_cano;
-		// map of normals in canonical view
+		DeviceArray2D<float4> m_vmap_warp;
+		// map of normals in canonical/warped view
 		DeviceArray2D<float4> m_nmap_cano;
+		DeviceArray2D<float4> m_nmap_warp;
 	};
 }

@@ -54,6 +54,7 @@ void RayCastViewer::initializeGL()
 
 	m_camera.lookAt(m_defaultCameraLocation, m_defaultCameraLocation + 
 		m_defaultCameraDirection, m_defaultCameraUp);
+	m_camera.setPerspective(KINECT_DEPTH_V_FOV, 1, KINECT_NEAREST_METER, 30.f);
 
 	// generate texture
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -88,7 +89,7 @@ void RayCastViewer::resizeGL(int w, int h)
 	float w1 = float(m_pbo_buffer.cols * scale);
 	float h1 = float(m_pbo_buffer.rows * scale);
 	m_camera.setViewPort((w - w1) / 2, (w - w1) / 2 + w1, (h - h1) / 2, (h - h1) / 2 + h1);
-	m_camera.setPerspective(KINECT_DEPTH_V_FOV, aspect, KINECT_NEAREST_METER, 30.f);
+	m_camera.setPerspective(m_camera.getFov(), aspect, KINECT_NEAREST_METER, 30.f);
 }
 
 void RayCastViewer::setSameView(const RayCastViewer* other)
@@ -252,6 +253,8 @@ void RayCastViewer::mousePressEvent(QMouseEvent *ev)
 			m_camera.lookAt(m_defaultCameraLocation, m_defaultCameraLocation + m_defaultCameraDirection, m_defaultCameraUp);
 			m_camera.setScalar(1);
 			m_rootTrans = m_defaultRootTrans;
+			m_camera.setPerspective(KINECT_DEPTH_V_FOV, m_camera.getAspect(),
+				m_camera.getFrustumNear(), m_camera.getFrustumFar());
 		}
 	}
 }
@@ -304,9 +307,17 @@ void RayCastViewer::mouseMoveEvent(QMouseEvent*ev)
 
 void RayCastViewer::wheelEvent(QWheelEvent*ev)
 {
+#if 0
 	float s = 1.2;
 	if (ev->delta() < 0)
 		s = 1 / s;
 
 	m_camera.scale(s);
+#else
+	float s = 1.2;
+	if (ev->delta() < 0)
+		s = 1 / s;
+	m_camera.setPerspective(m_camera.getFov()*s, m_camera.getAspect(), 
+		m_camera.getFrustumNear(), m_camera.getFrustumFar());
+#endif
 }

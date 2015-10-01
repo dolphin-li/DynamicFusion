@@ -108,8 +108,10 @@ namespace dfusion
 		m_depth_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
 		m_vmap_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
 		m_nmap_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
-		m_vmap_cano.create(KINECT_HEIGHT, KINECT_WIDTH); // xxx...yyy...zzz...
-		m_nmap_cano.create(KINECT_HEIGHT, KINECT_WIDTH); // xxx...yyy...zzz...
+		m_vmap_cano.create(KINECT_HEIGHT, KINECT_WIDTH);
+		m_nmap_cano.create(KINECT_HEIGHT, KINECT_WIDTH);
+		m_vmap_warp.create(KINECT_HEIGHT, KINECT_WIDTH);
+		m_nmap_warp.create(KINECT_HEIGHT, KINECT_WIDTH);
 
 		// finally reset----------------------
 		reset();
@@ -133,6 +135,8 @@ namespace dfusion
 		m_nmap_prev_pyd.clear();
 		m_vmap_cano.release();
 		m_nmap_cano.release();
+		m_vmap_warp.release();
+		m_nmap_warp.release();
 	}
 
 	void DynamicFusionProcessor::updateParam(const Param& param)
@@ -235,7 +239,7 @@ namespace dfusion
 			// 2. Gauss-Newton Optimization
 
 			// 3. update warped mesh and render for visiblity
-			m_warpField->warp(*m_canoMesh, *m_warpedMesh);
+			m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
 		}// end for icp_iter
 
 		// finally, re-factor out the rigid part across all nodes

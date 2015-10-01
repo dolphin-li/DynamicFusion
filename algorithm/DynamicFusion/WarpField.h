@@ -136,6 +136,8 @@ namespace dfusion
 
 		// warp src to dst
 		void warp(GpuMesh& src, GpuMesh& dst);
+		void warp(const MapArr& srcVmap, const MapArr& srcNmap,
+			MapArr& dstVmap, MapArr& dstNmap);
 
 		Tbx::Transfo get_rigidTransform()const{ return m_rigidTransform; }
 		void set_rigidTransform(Tbx::Transfo T){ m_rigidTransform = T; }

@@ -55,6 +55,49 @@ namespace dfusion
 			i += blockDim.x;
 		}
 	}
+
+	struct MapWarper
+	{
+		PtrStep<float4> vsrc;
+		PtrStep<float4> nsrc;
+		cudaTextureObject_t knnTex;
+		cudaTextureObject_t nodesDqVwTex;
+		PtrStep<float4> vdst;
+		PtrStep<float4> ndst;
+		int w;
+		int h;
+
+		Tbx::Quat_cu R;
+		float3 t;
+
+		float3 origion;
+		float invVoxelSize;
+
+		__device__ __forceinline__ void operator()(int x, int y)
+		{
+			float3 p = GpuMesh::from_point(vsrc(y,x));
+			float3 n = GpuMesh::from_point(nsrc(y,x));
+
+			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
+				nodesDqVwTex, p, origion, invVoxelSize);
+
+			Tbx::Point3 dq_p = dq_blend.transform(Tbx::Point3(convert(p)));
+			Tbx::Vec3 dq_n = dq_blend.rotate(convert(n));
+
+			vdst(y, x) = GpuMesh::to_point(convert(R.rotate(dq_p)) + t);
+			ndst(y, x) = GpuMesh::to_point(convert(R.rotate(dq_n)));
+		}
+	};
+
+	__global__ void warp_map_kernel(MapWarper warper)
+	{
+		int x = blockIdx.x * blockDim.x + threadIdx.x;
+		int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+		if (x < warper.w && y < warper.h)
+			warper(x, y);
+	}
+
 	void WarpField::warp(GpuMesh& src, GpuMesh& dst)
 	{
 		if (src.num() == 0)
@@ -82,12 +125,44 @@ namespace dfusion
 		dim3 grid(1, 1, 1);
 		grid.x = divUp(dst.num(), block.x << 3);
 		warp_mesh_kernel << <grid, block >> >(warper);
-		cudaSafeCall(cudaGetLastError(), "warp");
+		cudaSafeCall(cudaGetLastError(), "warp mesh");
 
 		unBindKnnFieldTexture(warper.knnTex);
 		unBindNodesDqVwTexture(warper.nodesDqVwTex);
 		dst.unlockVertsNormals();
 		src.unlockVertsNormals();
+	}
+
+	void WarpField::warp(const MapArr& srcVmap, const MapArr& srcNmap,
+		MapArr& dstVmap, MapArr& dstNmap)
+	{
+		const int w = srcVmap.cols();
+		const int h = srcNmap.cols();
+
+		dstVmap.create(h, w);
+		dstNmap.create(h, w);
+
+		MapWarper warper;
+		warper.t = convert(m_rigidTransform.get_translation());
+		warper.R = Tbx::Quat_cu(m_rigidTransform);
+		warper.knnTex = bindKnnFieldTexture();
+		warper.nodesDqVwTex = bindNodesDqVwTexture();
+		warper.vsrc = srcVmap;
+		warper.nsrc = srcNmap;
+		warper.vdst = dstVmap;
+		warper.ndst = dstNmap;
+		warper.w = w;
+		warper.h = h;
+		warper.origion = m_volume->getOrigion();
+		warper.invVoxelSize = 1.f / m_volume->getVoxelSize();
+
+		dim3 block(32, 8);
+		dim3 grid(divUp(w, block.x), divUp(h, block.y), 1);
+		warp_map_kernel << <grid, block >> >(warper);
+		cudaSafeCall(cudaGetLastError(), "warp map");
+
+		unBindKnnFieldTexture(warper.knnTex);
+		unBindNodesDqVwTexture(warper.nodesDqVwTex);
 	}
 #pragma endregion
 

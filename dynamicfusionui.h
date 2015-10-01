@@ -45,6 +45,7 @@ public:
 	void on_cbShowMesh_clicked();
 	void on_cbShowNodes_clicked();
 	void on_cbShowGraph_clicked();
+	void on_cbShowCorr_clicked();
 	void on_sbShowGraphLevel_valueChanged(int);
 protected:
 	void updateUiFromParam();
