@@ -14,12 +14,22 @@ namespace dfusion
 		return p;
 	}
 
+	__device__ __forceinline__ PixelRGBA copy_float4_pixelRGBA(float4 a)
+	{
+		PixelRGBA p;
+		p.r = a.x * 255;
+		p.g = a.y * 255;
+		p.b = a.z * 255;
+		p.a = a.w * 255;
+		return p;
+	}
+
 	__device__ __forceinline__ WarpField::IdxType get_by_arrayid(WarpField::KnnIdx knn, int i)
 	{
 		return ((WarpField::IdxType*)(&knn))[i];
 	}
 
-	__global__ void copy_invert_y_kernel(PtrStepSz<uchar4> gldata,
+	__global__ void copy_invert_y_kernel(PtrStepSz<float4> gldata,
 		PtrStepSz<PixelRGBA> img)
 	{
 		int u = threadIdx.x + blockIdx.x * blockDim.x;
@@ -28,28 +38,28 @@ namespace dfusion
 		if (u >= img.cols || v >= img.rows)
 			return;
 
-		img(v, u) = copy_uchar4_pixelRGBA(gldata(img.rows-1-v, u));
+		img(v, u) = copy_float4_pixelRGBA(gldata(img.rows-1-v, u));
 	}
 
-	void GpuMesh::copy_invert_y(const uchar4* gldata, ColorMap& img)
+	void GpuMesh::copy_invert_y(const float4* gldata, ColorMap& img)
 	{
 		dim3 block(32, 8);
 		dim3 grid(1, 1, 1);
 		grid.x = divUp(img.cols(), block.x);
 		grid.y = divUp(img.rows(), block.y);
 
-		PtrStepSz<uchar4> gldataptr;
-		gldataptr.data = (uchar4*)gldata;
+		PtrStepSz<float4> gldataptr;
+		gldataptr.data = (float4*)gldata;
 		gldataptr.rows = img.rows();
 		gldataptr.cols = img.cols();
-		gldataptr.step = img.cols()*sizeof(uchar4);
+		gldataptr.step = img.cols()*sizeof(float4);
 
 		copy_invert_y_kernel << <grid, block >> >(gldataptr, img);
 		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_invert_y");
 		cudaThreadSynchronize();
 	}
 
-	__global__ void copy_gldepth_to_depthmap_kernel(PtrStepSz<uchar4> gldata,
+	__global__ void copy_gldepth_to_depthmap_kernel(PtrStepSz<float4> gldata,
 		PtrStepSz<depthtype> img, float s1, float s2, float camNear)
 	{
 		int u = threadIdx.x + blockIdx.x * blockDim.x;
@@ -58,15 +68,15 @@ namespace dfusion
 		if (u >= img.cols || v >= img.rows)
 			return;
 
-		uchar4 p = gldata(img.rows - 1 - v, u);
-		float val = (p.x + (p.y << 8) + p.z / 255.f) / 65525.f;
+		float4 p = gldata(img.rows - 1 - v, u);
+		float val = p.x;
 		val = s1 / (2 * val - 1 + s2) * 1000.f;
 		if (val <= camNear*1000.f)
 			val = 0;
 		img(v, u) = val;
 	}
 
-	void GpuMesh::copy_gldepth_to_depthmap(const uchar4* gldata, DepthMap& depth, 
+	void GpuMesh::copy_gldepth_to_depthmap(const float4* gldata, DepthMap& depth, 
 		float s1, float s2, float camNear)
 	{
 		dim3 block(32, 8);
@@ -74,11 +84,11 @@ namespace dfusion
 		grid.x = divUp(depth.cols(), block.x);
 		grid.y = divUp(depth.rows(), block.y);
 
-		PtrStepSz<uchar4> gldataptr;
-		gldataptr.data = (uchar4*)gldata;
+		PtrStepSz<float4> gldataptr;
+		gldataptr.data = (float4*)gldata;
 		gldataptr.rows = depth.rows();
 		gldataptr.cols = depth.cols();
-		gldataptr.step = depth.cols()*sizeof(uchar4);
+		gldataptr.step = depth.cols()*sizeof(float4);
 
 		copy_gldepth_to_depthmap_kernel << <grid, block >> >(gldataptr, depth, s1, s2, camNear);
 		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_gldepth_to_depthmap");

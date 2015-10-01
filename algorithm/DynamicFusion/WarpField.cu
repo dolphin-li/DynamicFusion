@@ -57,6 +57,9 @@ namespace dfusion
 	}
 	void WarpField::warp(GpuMesh& src, GpuMesh& dst)
 	{
+		if (src.num() == 0)
+			return;
+
 		dst.create(src.num());
 
 		src.lockVertsNormals();
@@ -394,6 +397,10 @@ namespace dfusion
 		// make a larger buffer to prevent allocation each time
 		int step = m_param.warp_point_step_before_update_node;
 		int num_points = src.num() / step;
+
+		if (num_points == 0)
+			return;
+
 		if (num_points > m_current_point_buffer_size)
 		{
 			m_current_point_buffer_size = num_points * 1.5;

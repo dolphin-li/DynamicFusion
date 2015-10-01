@@ -37,6 +37,7 @@ namespace dfusion
 		fusion_lambda = 200;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
+		fusion_nonRigidICP_maxIter = 3;
 
 		/** *****************************************************
 		* visualization related

@@ -51,7 +51,9 @@ namespace dfusion
 
 		int m_frame_id;
 
-		// for rigid align
+		/** *********************
+		* for rigid align
+		* **********************/
 		enum{
 			RIGID_ALIGN_PYD_LEVELS = 3
 		};
@@ -66,5 +68,14 @@ namespace dfusion
 		DeviceArray<float> m_rigid_sumbuf;
 		float m_rigid_distThre;
 		float m_rigid_angleThre_sin;
+
+		/** *********************
+		* for non-rigid align
+		* **********************/
+
+		// map of verts in canonical view
+		MapArr m_vmap_cano;
+		// map of normals in canonical view
+		MapArr m_nmap_cano;
 	};
 }

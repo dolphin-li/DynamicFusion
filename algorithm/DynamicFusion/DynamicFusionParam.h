@@ -57,6 +57,7 @@ namespace dfusion
 		float fusion_lambda;
 		float fusion_psi_data;
 		float fusion_psi_reg;
+		int fusion_nonRigidICP_maxIter;
 
 		/** *****************************************************
 		* visualization related

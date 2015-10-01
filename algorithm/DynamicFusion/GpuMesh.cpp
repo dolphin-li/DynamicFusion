@@ -32,6 +32,9 @@ namespace dfusion
 	cwc::glShader* g_shader_node;
 	cwc::glShaderObject* g_node_vshader;
 	cwc::glShaderObject* g_node_fshader;
+	cwc::glShader* g_shader_cano;
+	cwc::glShaderObject* g_cano_vshader;
+	cwc::glShaderObject* g_cano_fshader;
 	
 #pragma region --shaders
 #define STRCPY(x) #x
@@ -40,7 +43,7 @@ namespace dfusion
 		varying vec4 pos;
 		void main()
 		{
-			gl_Position = gl_ModelViewProjectionMatrix  * gl_Vertex;\n\
+			gl_Position = gl_ModelViewProjectionMatrix  * gl_Vertex;
 			pos = gl_Position;
 		}
 	);
@@ -49,14 +52,11 @@ namespace dfusion
 		void main()
 		{
 			float depth = (pos.z / pos.w + 1.0) * 0.5;
-			gl_FragColor.r = float(int(depth*65525.0)&0xff)/255.0;
-			gl_FragColor.g = float((int(depth*65525.0)&0xff00)>>8)/255.0;
-			gl_FragColor.b = depth*65525.0 - float(int(depth*65525.0));
-			gl_FragColor.a = 0.0;
+			gl_FragColor.r = depth;
 		}
 	);	
 
-	// vertex shader
+	// vertex shader for rendering points as shaded spheres
 	const char *g_vshader_node_src = STRCPY(
 		uniform float pointRadius;  // point size in world space
 		uniform float pointScale;   // scale to calculate size in pixels
@@ -93,6 +93,22 @@ namespace dfusion
 			float diffuse = max(0.0, dot(lightDir, N));
 
 			gl_FragColor = gl_Color *diffuse;
+		}
+	);
+
+	// vertex shader for rendering cano view
+	const char *g_vshader_cano_src = STRCPY(
+		void main()
+		{
+			gl_Position = gl_ModelViewProjectionMatrix  * gl_Vertex;
+		}
+	);
+
+	// pixel shader for rendering cano view
+	const char *g_fshader_cano_src = STRCPY(
+		void main()
+		{
+			gl_FragColor = gl_Color;
 		}
 	);
 #pragma endregion
@@ -323,6 +339,19 @@ namespace dfusion
 		g_shader_node->addShader(g_node_fshader);
 		g_shader_node->link();
 		printf("[node shader log]: %s\n", g_shader_node->getLinkerLog());
+
+		// create canonical view shader
+		g_cano_fshader = new cwc::aFragmentShader();
+		g_cano_vshader = new cwc::aVertexShader();
+		g_shader_cano = new cwc::glShader();
+		g_cano_fshader->loadFromMemory(g_fshader_cano_src);
+		g_cano_vshader->loadFromMemory(g_vshader_cano_src);
+		g_cano_fshader->compile();
+		g_cano_vshader->compile();
+		g_shader_cano->addShader(g_cano_vshader);
+		g_shader_cano->addShader(g_cano_fshader);
+		g_shader_cano->link();
+		printf("[cano shader log]: %s\n", g_shader_cano->getLinkerLog());
 	}
 #pragma endregion
 
@@ -511,7 +540,7 @@ namespace dfusion
 
 			// the render texture
 			glBindTextureEXT(GL_TEXTURE_2D, m_render_texture_id);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h,
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, w, h,
 				0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -723,10 +752,10 @@ namespace dfusion
 		// swap buffers seems quite slow.
 		//SwapBuffers(g_hdc);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
-		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
-		uchar4* gldata = nullptr;
+		float4* gldata = nullptr;
 		size_t num_bytes = 0;
 		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
 		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
@@ -767,10 +796,10 @@ namespace dfusion
 		glPopAttrib();
 		g_shader_depth->end();
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
-		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
-		uchar4* gldata = nullptr;
+		float4* gldata = nullptr;
 		size_t num_bytes = 0;
 		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
 		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
@@ -783,5 +812,18 @@ namespace dfusion
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 		CHECK_GL_ERROR("renderToDepth");
+	}
+
+	void GpuMesh::renderToCanonicalMaps(const Camera& camera,
+		const GpuMesh* canoMesh, MapArr& vmap, MapArr& nmap)
+	{
+		if (!wglMakeCurrent(g_hdc, g_glrc))
+			throw std::exception("wglMakeCurrent error");
+		const int width = std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft()));
+		const int height = std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop()));
+
+		createRenderer(width, height);
+		vmap.create(height * 3, width);
+		nmap.create(height * 3, width);
 	}
 }

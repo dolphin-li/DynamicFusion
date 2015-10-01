@@ -108,6 +108,8 @@ namespace dfusion
 		m_depth_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
 		m_vmap_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
 		m_nmap_prev_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
+		m_vmap_cano.create(KINECT_HEIGHT * 3, KINECT_WIDTH); // xxx...yyy...zzz...
+		m_nmap_cano.create(KINECT_HEIGHT * 3, KINECT_WIDTH); // xxx...yyy...zzz...
 
 		// finally reset----------------------
 		reset();
@@ -129,6 +131,8 @@ namespace dfusion
 		m_depth_prev_pyd.clear();
 		m_vmap_prev_pyd.clear();
 		m_nmap_prev_pyd.clear();
+		m_vmap_cano.release();
+		m_nmap_cano.release();
 	}
 
 	void DynamicFusionProcessor::updateParam(const Param& param)
@@ -211,6 +215,22 @@ namespace dfusion
 		Tbx::Transfo rigid = rigid_align();
 
 		m_warpField->set_rigidTransform(rigid);
+
+		if (m_frame_id == 0)
+			return;
+
+		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
+		{
+			// 1. find correspondence
+
+			// 2. Gauss-Newton Optimization
+
+			// 3. update warped mesh and render for visiblity
+			m_warpField->warp(*m_canoMesh, *m_warpedMesh);
+		}// end for icp_iter
+
+		// finally, re-factor out the rigid part across all nodes
+
 	}
 
 	void DynamicFusionProcessor::nonRigidTsdfFusion()
@@ -239,12 +259,12 @@ namespace dfusion
 
 	void DynamicFusionProcessor::updateRegularizationGraph()
 	{
-
+		// done in insertNewDeformNodes()
 	}
 
 	void DynamicFusionProcessor::updateKNNField()
 	{
-
+		// done in insertNewDeformNodes()
 	}
 
 	Tbx::Transfo DynamicFusionProcessor::rigid_align()

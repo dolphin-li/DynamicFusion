@@ -58,13 +58,19 @@ namespace dfusion
 		void renderToImg(const Camera& camera, LightSource light, ColorMap& img, 
 			const Param& param, const WarpField* warpField = nullptr);
 		void renderToDepth(const Camera& camera, DepthMap& img);
+
+		// we assume self is warped by the warpField,
+		// then the mesh is rendered with each pixel storing the canonical mesh verts/normals
+		// given by canoMesh
+		void renderToCanonicalMaps(const Camera& camera, 
+			const GpuMesh* canoMesh, MapArr& vmap, MapArr& nmap);
 	protected:
 		void createRendererForWarpField(const WarpField* warpField);
 		void releaseRendererForWarpField();
 		void createRenderer(int w, int h);
 		void releaseRenderer();
-		void copy_invert_y(const uchar4* gldata, ColorMap& img);
-		void copy_gldepth_to_depthmap(const uchar4* gldata, DepthMap& depth, 
+		void copy_invert_y(const float4* gldata, ColorMap& img);
+		void copy_gldepth_to_depthmap(const float4* gldata, DepthMap& depth, 
 			float s1, float s2, float camNear);
 		void copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField);
 	private:
