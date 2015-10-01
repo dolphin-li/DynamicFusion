@@ -483,7 +483,8 @@ namespace dfusion
 
 	void GpuMesh::createRenderer(int w, int h)
 	{
-		if (w != m_width || h != m_height)
+		// to prevent dynamic allocation, we maintain a larger and larger render size.
+		if (w > m_width || h > m_height)
 			releaseRenderer();
 
 		if (m_render_fbo_id == 0)
@@ -611,8 +612,10 @@ namespace dfusion
 			throw std::exception("wglMakeCurrent error");
 		const int width = std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft()));
 		const int height = std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop()));
+
 		createRenderer(width, height);
 		createRendererForWarpField(warpField);
+		img.create(height, width);
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -720,7 +723,7 @@ namespace dfusion
 		// swap buffers seems quite slow.
 		//SwapBuffers(g_hdc);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
-		glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
 		uchar4* gldata = nullptr;
@@ -738,8 +741,11 @@ namespace dfusion
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
-		createRenderer(std::lroundf(abs(camera.getViewPortRight()-camera.getViewPortLeft())), 
-			std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop())));
+		const int width = std::lroundf(abs(camera.getViewPortRight() - camera.getViewPortLeft()));
+		const int height = std::lroundf(abs(camera.getViewPortBottom() - camera.getViewPortTop()));
+
+		createRenderer(width, height);
+		img.create(height, width);
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
 
@@ -761,7 +767,7 @@ namespace dfusion
 		glPopAttrib();
 		g_shader_depth->end();
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_render_fbo_pbo_id);
-		glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
 		uchar4* gldata = nullptr;

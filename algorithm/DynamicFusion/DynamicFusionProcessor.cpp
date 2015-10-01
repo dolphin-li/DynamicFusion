@@ -197,9 +197,7 @@ namespace dfusion
 		}
 		else
 		{
-			Camera cam = *m_camera;
-			cam.setModelViewMatrix(userCam.getModelViewMatrix());
-			m_warpedMesh->renderToImg(cam, light, img, m_param, m_warpField);
+			m_warpedMesh->renderToImg(userCam, light, img, m_param, m_warpField);
 		}
 	}
 

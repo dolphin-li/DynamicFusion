@@ -35,16 +35,14 @@ namespace dfusion
 	{
 		dim3 block(32, 8);
 		dim3 grid(1, 1, 1);
-		grid.x = divUp(m_width, block.x);
-		grid.y = divUp(m_height, block.y);
+		grid.x = divUp(img.cols(), block.x);
+		grid.y = divUp(img.rows(), block.y);
 
 		PtrStepSz<uchar4> gldataptr;
 		gldataptr.data = (uchar4*)gldata;
-		gldataptr.rows = m_height;
-		gldataptr.cols = m_width;
-		gldataptr.step = m_width*sizeof(uchar4);
-
-		img.create(m_height, m_width);
+		gldataptr.rows = img.rows();
+		gldataptr.cols = img.cols();
+		gldataptr.step = img.cols()*sizeof(uchar4);
 
 		copy_invert_y_kernel << <grid, block >> >(gldataptr, img);
 		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_invert_y");
@@ -73,16 +71,14 @@ namespace dfusion
 	{
 		dim3 block(32, 8);
 		dim3 grid(1, 1, 1);
-		grid.x = divUp(m_width, block.x);
-		grid.y = divUp(m_height, block.y);
+		grid.x = divUp(depth.cols(), block.x);
+		grid.y = divUp(depth.rows(), block.y);
 
 		PtrStepSz<uchar4> gldataptr;
 		gldataptr.data = (uchar4*)gldata;
-		gldataptr.rows = m_height;
-		gldataptr.cols = m_width;
-		gldataptr.step = m_width*sizeof(uchar4);
-
-		depth.create(m_height, m_width);
+		gldataptr.rows = depth.rows();
+		gldataptr.cols = depth.cols();
+		gldataptr.step = depth.cols()*sizeof(uchar4);
 
 		copy_gldepth_to_depthmap_kernel << <grid, block >> >(gldataptr, depth, s1, s2, camNear);
 		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_gldepth_to_depthmap");
