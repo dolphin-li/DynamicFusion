@@ -22,7 +22,7 @@
      <widget class="RayCastViewer" name="widgetWarpedView" native="true"/>
     </item>
     <item row="1" column="0">
-     <widget class="QWidget" name="widgetCanoView" native="true"/>
+     <widget class="RayCastViewer" name="widgetCanoView" native="true"/>
     </item>
     <item row="2" column="0">
      <widget class="QWidget" name="widgetDebug" native="true"/>

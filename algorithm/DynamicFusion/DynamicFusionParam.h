@@ -58,6 +58,8 @@ namespace dfusion
 		float fusion_psi_data;
 		float fusion_psi_reg;
 		int fusion_nonRigidICP_maxIter;
+		float fusion_rigid_distThre;
+		float fusion_rigid_angleThreSin;
 		float fusion_nonRigid_distThre;
 		float fusion_nonRigid_angleThreSin;
 

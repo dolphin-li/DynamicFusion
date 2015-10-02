@@ -137,7 +137,7 @@ namespace dfusion
 		MapArr& dstVmap, MapArr& dstNmap)
 	{
 		const int w = srcVmap.cols();
-		const int h = srcNmap.cols();
+		const int h = srcNmap.rows();
 
 		dstVmap.create(h, w);
 		dstNmap.create(h, w);

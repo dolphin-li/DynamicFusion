@@ -226,6 +226,12 @@ void DynamicFusionUI::updateDynamicFusion()
 	g_dataholder.m_processor.shading(cam, g_dataholder.m_lights, 
 		g_dataholder.m_warpedview_shading, false);
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
+
+	ui.widgetCanoView->getCameraInfo(cam);
+	cam.setViewPort(0, ui.widgetCanoView->width(), 0, ui.widgetCanoView->height());
+	g_dataholder.m_processor.shadingCanonical(cam, g_dataholder.m_lights,
+		g_dataholder.m_warpedview_shading, false);
+	ui.widgetCanoView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
 }
 
 void DynamicFusionUI::on_actionPause_triggered()

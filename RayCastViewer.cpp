@@ -317,7 +317,8 @@ void RayCastViewer::wheelEvent(QWheelEvent*ev)
 	float s = 1.2;
 	if (ev->delta() < 0)
 		s = 1 / s;
-	m_camera.setPerspective(m_camera.getFov()*s, m_camera.getAspect(), 
+	float fov = std::min(m_camera.getFov()*s, 89.999f);
+	m_camera.setPerspective(fov, m_camera.getAspect(), 
 		m_camera.getFrustumNear(), m_camera.getFrustumFar());
 #endif
 }

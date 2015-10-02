@@ -24,6 +24,7 @@ namespace dfusion
 
 		// if not use_ray_casting, then use marching_cube
 		void shading(const Camera& userCam, LightSource light, ColorMap& img, bool use_ray_casting);
+		void shadingCanonical(const Camera& userCam, LightSource light, ColorMap& img, bool use_ray_casting);
 
 		const WarpField* getWarpField()const;
 
@@ -66,8 +67,6 @@ namespace dfusion
 		std::vector<MapArr> m_nmap_prev_pyd;
 		DeviceArray2D<float> m_rigid_gbuf;
 		DeviceArray<float> m_rigid_sumbuf;
-		float m_rigid_distThre;
-		float m_rigid_angleThre_sin;
 
 		/** *********************
 		* for non-rigid align

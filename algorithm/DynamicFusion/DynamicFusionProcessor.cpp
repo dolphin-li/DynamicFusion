@@ -70,8 +70,6 @@ namespace dfusion
 		const float b = m_camera->getViewPortBottom();
 		const float	f = (b - t) * 0.5f / tanf(m_camera->getFov() * fmath::DEG_TO_RAD * 0.5f);
 		m_kinect_intr = Intr(f, f, (l + r) / 2, (t + b) / 2);
-		m_rigid_distThre = 0.10f;							//	meter
-		m_rigid_angleThre_sin = sin(20.f*3.14159254f / 180.f);	//	sin of angle
 
 		// volume
 		m_volume = new TsdfVolume();
@@ -206,10 +204,27 @@ namespace dfusion
 		else
 		{
 			m_warpedMesh->renderToImg(userCam, light, img, m_param, m_warpField,
-				&m_vmap_curr_pyd[0], &m_vmap_prev_pyd[0], &m_nmap_curr_pyd[0],
-				&m_nmap_prev_pyd[0]);
+				&m_vmap_curr_pyd[0], &m_vmap_warp, &m_nmap_curr_pyd[0],
+				&m_nmap_warp);
 			//img.create(m_nmap_cano.rows(), m_nmap_cano.cols());
 			//generateNormalMap(m_vmap_cano, img);
+		}
+	}
+
+	void DynamicFusionProcessor::shadingCanonical(const Camera& userCam, LightSource light, 
+		ColorMap& img, bool use_ray_casting)
+	{
+		if (use_ray_casting)
+		{
+			Camera cam = *m_camera;
+			cam.setModelViewMatrix(userCam.getModelViewMatrix());
+			m_rayCaster->setCamera(cam);
+			m_rayCaster->shading(light, img);
+		}
+		else
+		{
+			m_canoMesh->renderToImg(userCam, light, img, m_param, nullptr, 
+				nullptr, nullptr, nullptr, nullptr);
 		}
 	}
 
@@ -326,7 +341,7 @@ namespace dfusion
 
 				estimateCombined(convert(c2v_Rcurr), convert(c2v_tcurr), vmap_curr, nmap_curr,
 					convert(c2v_Rprev), convert(c2v_tprev), m_kinect_intr(level_index),
-					vmap_prev, nmap_prev, m_rigid_distThre, m_rigid_angleThre_sin, 
+					vmap_prev, nmap_prev, m_param.fusion_rigid_distThre, m_param.fusion_rigid_angleThreSin, 
 					m_rigid_gbuf, m_rigid_sumbuf, A.data(), b.data());
 
 				//checking nullspace
