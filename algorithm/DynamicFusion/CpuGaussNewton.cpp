@@ -513,7 +513,7 @@ namespace dfusion
 	}
 
 	void CpuGaussNewton::init(WarpField* pWarpField, const MapArr& vmap_cano, const MapArr& nmap_cano,
-		const MapArr& vmap_warp, const MapArr& nmap_warp, Param param, Intr intr)
+		Param param, Intr intr)
 	{
 		m_pWarpField = pWarpField;
 		m_egc->imgWidth_ = vmap_cano.cols();
@@ -527,10 +527,6 @@ namespace dfusion
 		m_egc->nmap_cano_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
 		vmap_cano.download(m_egc->vmap_cano_.data(), m_egc->imgWidth_*sizeof(float4));
 		nmap_cano.download(m_egc->nmap_cano_.data(), m_egc->imgWidth_*sizeof(float4));
-		m_egc->vmap_warp_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
-		m_egc->nmap_warp_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
-		vmap_warp.download(m_egc->vmap_warp_.data(), m_egc->imgWidth_*sizeof(float4));
-		nmap_warp.download(m_egc->nmap_warp_.data(), m_egc->imgWidth_*sizeof(float4));
 
 		// extract knn map and copy to cpu
 		m_pWarpField->extract_knn_for_vmap(vmap_cano, m_vmapKnn);
@@ -547,16 +543,22 @@ namespace dfusion
 		m_vw.download(m_egc->nodesVw_.data());
 	}
 
-	void CpuGaussNewton::solve(const MapArr& vmap_live, const MapArr& nmap_live)
+	void CpuGaussNewton::findCorr(const MapArr& vmap_live, const MapArr& nmap_live,
+		const MapArr& vmap_warp, const MapArr& nmap_warp)
 	{
-		// copy maps to cpu
 		m_egc->vmap_live_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
 		m_egc->nmap_live_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
 		vmap_live.download(m_egc->vmap_live_.data(), m_egc->imgWidth_*sizeof(float4));
 		nmap_live.download(m_egc->nmap_live_.data(), m_egc->imgWidth_*sizeof(float4));
-
-		// solve
+		m_egc->vmap_warp_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
+		m_egc->nmap_warp_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
+		vmap_warp.download(m_egc->vmap_warp_.data(), m_egc->imgWidth_*sizeof(float4));
+		nmap_warp.download(m_egc->nmap_warp_.data(), m_egc->imgWidth_*sizeof(float4));
 		m_egc->CalcCorr();
+	}
+
+	void CpuGaussNewton::solve()
+	{
 		m_egc->Optimize(m_egc->x_, m_egc->param_.fusion_GaussNewton_maxIter);
 
 		m_twist.upload(m_egc->x_.data(), m_egc->x_.size());

@@ -12,9 +12,12 @@ namespace dfusion
 		~CpuGaussNewton();
 
 		void init(WarpField* pWarpField, const MapArr& vmap_cano, const MapArr& nmap_cano,
-			const MapArr& vmap_warp, const MapArr& nmap_warp, Param param, Intr intr);
+			Param param, Intr intr);
 
-		void solve(const MapArr& vmap_live, const MapArr& nmap_live);
+		void findCorr(const MapArr& vmap_live, const MapArr& nmap_live, 
+			const MapArr& vmap_warp, const MapArr& nmap_warp);
+
+		void solve();
 	protected:
 	private:
 		WarpField* m_pWarpField;

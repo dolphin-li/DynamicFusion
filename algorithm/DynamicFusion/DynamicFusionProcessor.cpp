@@ -266,9 +266,9 @@ namespace dfusion
 
 			// 2. Gauss-Newton Optimization
 #if 1
-			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_vmap_warp, 
-				m_nmap_warp, m_param, m_kinect_intr);
-			solver.solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
+			solver.init(m_warpField, m_vmap_cano, m_nmap_cano,  m_param, m_kinect_intr);
+			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
+			solver.solve();
 #endif
 
 			// 3. update warped mesh and render for visiblity
