@@ -151,6 +151,7 @@
     <ClCompile Include="algorithm\BFGS\program.cpp" />
     <ClCompile Include="algorithm\BFGS\solver.cpp" />
     <ClCompile Include="algorithm\camera\Camera.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\CpuGaussNewton.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mgpuutil.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mmio.cpp" />
@@ -267,6 +268,7 @@
     <ClInclude Include="algorithm\BFGS\solver.h" />
     <ClInclude Include="algorithm\camera\Camera.h" />
     <ClInclude Include="algorithm\camera\fmath.h" />
+    <ClInclude Include="algorithm\DynamicFusion\CpuGaussNewton.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_config.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_hash.h" />

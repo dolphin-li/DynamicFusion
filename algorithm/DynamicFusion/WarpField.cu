@@ -803,4 +803,170 @@ namespace dfusion
 			(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
 	}
 #pragma endregion
+
+#pragma region --extract_for_vmap
+	struct IdxContainter
+	{
+		int id[WarpField::GraphLevelNum+1];
+		__device__ __host__ int& operator [](int i)
+		{
+			return id[i];
+		}
+	};
+
+	__device__ __host__ __forceinline__ WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
+	{
+		return ((WarpField::IdxType*)(&knn))[k];
+	}
+
+	__global__ void extract_knn_for_vmap_kernel(PtrStepSz<float4> vmap, PtrStepSz<WarpField::KnnIdx> vmapKnn,
+		float3 origion, float invVoxelSize, cudaTextureObject_t knnTex, IdxContainter ic)
+	{
+		int u = blockIdx.x * blockDim.x + threadIdx.x;
+		int v = blockIdx.y * blockDim.y + threadIdx.y;
+
+		if (u < vmap.cols && v < vmap.rows)
+		{
+			float3 p = GpuMesh::from_point(vmap(v, u));
+			WarpField::KnnIdx knnIdx = make_ushort4(ic[WarpField::GraphLevelNum], 
+				ic[WarpField::GraphLevelNum], ic[WarpField::GraphLevelNum], ic[WarpField::GraphLevelNum]);
+
+			if (!isnan(p.x))
+			{
+				float3 p1 = (p - origion)*invVoxelSize;
+				int x = int(p1.x);
+				int y = int(p1.y);
+				int z = int(p1.z);
+				tex3D(&knnIdx, knnTex, x, y, z);
+				for (int k = 0; k < WarpField::KnnK; k++)
+				if (knn_k(knnIdx, k) >= WarpField::MaxNodeNum)
+					knn_k(knnIdx, k) = ic[WarpField::GraphLevelNum];
+			}
+
+			vmapKnn(v, u) = knnIdx;
+		}
+	}
+
+	void WarpField::extract_knn_for_vmap(const MapArr& vmap, DeviceArray2D<KnnIdx>& vmapKnn)const
+	{
+		IdxContainter ic;
+		ic[0] = 0;
+		for (int k = 0; k < GraphLevelNum; k++)
+			ic[k + 1] = ic[k] + m_numNodes[k];
+
+		vmapKnn.create(vmap.rows(), vmap.cols());
+
+		dim3 block(32, 8);
+		dim3 grid(divUp(vmap.cols(), block.x), divUp(vmap.rows(), block.y));
+
+		cudaTextureObject_t knnTex = bindKnnFieldTexture();
+		extract_knn_for_vmap_kernel << <grid, block >> >(vmap, vmapKnn, m_volume->getOrigion(),
+			1.f / m_volume->getVoxelSize(), knnTex, ic);
+		cudaSafeCall(cudaGetLastError(), "extract_knn_for_vmap_kernel");
+		unBindKnnFieldTexture(knnTex);
+	}
+
+	__global__ void extract_nodes_info_kernel(const float4* nodesDqVw, float* twist, float4* vw,
+		const WarpField::KnnIdx* nodesKnnIn, WarpField::KnnIdx* nodesKnnOut, IdxContainter ic)
+	{
+		int iout = blockIdx.x * blockDim.x + threadIdx.x;
+
+		int level = 0;
+		for (int k = 0; k < WarpField::GraphLevelNum; k++)
+		if (iout >= ic[k] && iout < ic[k + 1])
+		{
+			level = k;
+			break;
+		}
+
+		int iin = level*WarpField::MaxNodeNum + iout - ic[level];
+
+		// write twist
+		Tbx::Dual_quat_cu dq = pack_dual_quat(nodesDqVw[iin * 3], nodesDqVw[iin * 3 + 1]);
+		Tbx::Vec3 r, t;
+		dq.to_twist(r, t);
+		twist[iout * 6 + 0] = r.x;
+		twist[iout * 6 + 1] = r.y;
+		twist[iout * 6 + 2] = r.z;
+		twist[iout * 6 + 3] = t.x;
+		twist[iout * 6 + 4] = t.y;
+		twist[iout * 6 + 5] = t.z;
+		vw[iout] = nodesDqVw[iin * 3 + 2];
+
+		// write knn
+		WarpField::KnnIdx kid = nodesKnnIn[iin];
+		for (int k = 0; k < WarpField::KnnK; k++)
+		{
+			knn_k(kid, k) = (knn_k(kid, k) < ic[level + 1] - ic[level] ? 
+				knn_k(kid, k) + ic[level + 1] : ic[WarpField::GraphLevelNum]);
+		}
+		nodesKnnOut[iout] = kid;
+	}
+
+	void WarpField::extract_nodes_info(DeviceArray<KnnIdx>& nodesKnn, DeviceArray<float>& twist,
+		DeviceArray<float4>& vw)const
+	{
+		IdxContainter ic;
+		ic[0] = 0;
+		for (int k = 0; k < GraphLevelNum; k++)
+			ic[k + 1] = ic[k] + m_numNodes[k];
+
+		nodesKnn.create(ic[GraphLevelNum]);
+		twist.create(ic[GraphLevelNum] * 6);
+		vw.create(ic[GraphLevelNum]);
+
+		dim3 block(256);
+		dim3 grid(divUp(ic[GraphLevelNum], block.x));
+
+		extract_nodes_info_kernel << <grid, block >> >(getNodesDqVwPtr(0),
+			twist.ptr(), vw.ptr(), getNodesEdgesPtr(0), nodesKnn.ptr(), ic);
+		cudaSafeCall(cudaGetLastError(), "extract_nodes_info_kernel");
+	}
+
+	__global__ void update_nodes_via_twist_kernel(float4* nodesDqVw, const float* twist,
+		IdxContainter ic)
+	{
+		int iout = blockIdx.x * blockDim.x + threadIdx.x;
+
+		int level = 0;
+		for (int k = 0; k < WarpField::GraphLevelNum; k++)
+		if (iout >= ic[k] && iout < ic[k + 1])
+		{
+			level = k;
+			break;
+		}
+
+		int iin = level*WarpField::MaxNodeNum + iout - ic[level];
+
+		// write twist
+		Tbx::Vec3 r, t;
+		r.x = twist[iout * 6 + 0];
+		r.y = twist[iout * 6 + 1];
+		r.z = twist[iout * 6 + 2];
+		t.x = twist[iout * 6 + 3];
+		t.y = twist[iout * 6 + 4];
+		t.z = twist[iout * 6 + 5];
+		Tbx::Dual_quat_cu dq;
+		dq.from_twist(r, t);
+		unpack_dual_quat(dq, nodesDqVw[iin * 3], nodesDqVw[iin * 3 + 1]);
+	}
+
+	void WarpField::update_nodes_via_twist(const DeviceArray<float>& twist)
+	{
+		IdxContainter ic;
+		ic[0] = 0;
+		for (int k = 0; k < GraphLevelNum; k++)
+			ic[k + 1] = ic[k] + m_numNodes[k];
+
+		if (twist.size() != ic[GraphLevelNum]*6)
+			throw std::exception("size not matched in WarpField::update_nodes_via_twist()");
+
+		dim3 block(256);
+		dim3 grid(divUp(ic[GraphLevelNum], block.x));
+
+		update_nodes_via_twist_kernel << <grid, block >> >(getNodesDqVwPtr(0),
+			twist.ptr(), ic);
+		cudaSafeCall(cudaGetLastError(), "update_nodes_via_twist");
+	}
+#pragma endregion
 }

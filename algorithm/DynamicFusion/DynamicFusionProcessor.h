@@ -29,6 +29,8 @@ namespace dfusion
 		const WarpField* getWarpField()const;
 
 		void updateParam(const Param& param);
+
+		int getFrameId()const{ return m_frame_id; }
 	protected:
 		void estimateWarpField();
 		void nonRigidTsdfFusion();

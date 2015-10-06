@@ -42,6 +42,7 @@ namespace dfusion
 		fusion_rigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
 		fusion_nonRigid_distThre = 0.1f; // meter
 		fusion_nonRigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
+		fusion_GaussNewton_maxIter = 3;
 
 		/** *****************************************************
 		* visualization related

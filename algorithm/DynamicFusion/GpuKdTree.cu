@@ -560,7 +560,7 @@ namespace dfusion
 				nAllocatedPoints_ * sizeof(int) * 12 +
 				4
 				);
-			printf("GpuKdTree: re-allocate\n");
+			printf("GpuKdTree: re-allocate %d\n", nInputPoints);
 
 			// assigne buffers
 			input_points_ptr_ = (float4*)mempool_.ptr();

@@ -9,7 +9,7 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	m_frameIndex = 0;
 	m_view_normalmap = false;
 	m_lastState = DynamicFusionUI::Live;
-	m_state = DynamicFusionUI::Live;
+	m_state = DynamicFusionUI::Pause;
 	m_renderType = RenderRayCasting;
 	updateUiFromParam();
 
@@ -221,17 +221,43 @@ void DynamicFusionUI::updateDynamicFusion()
 		g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
 
 	Camera cam;
+
+	// warped view
 	ui.widgetWarpedView->getCameraInfo(cam);
 	cam.setViewPort(0, ui.widgetWarpedView->width(), 0, ui.widgetWarpedView->height());
 	g_dataholder.m_processor.shading(cam, g_dataholder.m_lights, 
 		g_dataholder.m_warpedview_shading, false);
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
 
+	// debug, save rendered image
+#if 1
+	std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
+		*g_dataholder.m_warpedview_shading.cols());
+	g_dataholder.m_warpedview_shading.download(tmpMap.data(),
+		g_dataholder.m_warpedview_shading.cols()*sizeof(uchar4));
+	QImage img = QImage(g_dataholder.m_warpedview_shading.cols(),
+		g_dataholder.m_warpedview_shading.rows(), QImage::Format::Format_ARGB32);
+	for (int y = 0; y < g_dataholder.m_warpedview_shading.rows(); y++)
+	for (int x = 0; x < g_dataholder.m_warpedview_shading.cols(); x++)
+	{
+		uchar4 v = tmpMap[y*g_dataholder.m_warpedview_shading.cols() + x];
+		img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+	}
+	int fid = g_dataholder.m_processor.getFrameId();
+	QString name;
+	name.sprintf("data/screenshots/%06d.png", fid);
+	img.save(name);
+#endif
+	// end debug
+
+
+	// cano view
 	ui.widgetCanoView->getCameraInfo(cam);
 	cam.setViewPort(0, ui.widgetCanoView->width(), 0, ui.widgetCanoView->height());
 	g_dataholder.m_processor.shadingCanonical(cam, g_dataholder.m_lights,
 		g_dataholder.m_warpedview_shading, false);
 	ui.widgetCanoView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
+
 }
 
 void DynamicFusionUI::on_actionPause_triggered()
@@ -258,11 +284,12 @@ void DynamicFusionUI::on_actionLoad_triggered()
 void DynamicFusionUI::on_actionLoad_frames_triggered()
 {
 	setState(DynamicFusionUI::Pause);
-	m_currentPath = QFileDialog::getExistingDirectory(this, "load folder");
+	m_currentPath = QFileDialog::getExistingDirectory(this, "load folder", "data/frames/");
 	if (m_currentPath != "")
 	{
 		m_frameIndex = 0;
 		setState(DynamicFusionUI::Loading);
+		g_dataholder.m_processor.reset();
 	}
 	else
 		restoreState();

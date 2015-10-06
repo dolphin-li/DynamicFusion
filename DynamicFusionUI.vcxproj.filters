@@ -214,6 +214,9 @@
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\sparsematrix.cpp">
       <Filter>algorithm\DynamicFusion\cudpp\MordernGpu</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\CpuGaussNewton.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -558,6 +561,9 @@
       <Filter>algorithm\DynamicFusion\cudpp</Filter>
     </ClInclude>
     <ClInclude Include="algorithm\DynamicFusion\GpuHeap.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\CpuGaussNewton.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
   </ItemGroup>

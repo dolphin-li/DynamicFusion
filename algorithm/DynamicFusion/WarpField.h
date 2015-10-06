@@ -161,6 +161,26 @@ namespace dfusion
 		void unBindNodesDqVwTexture(cudaTextureObject_t t)const;
 
 		const TsdfVolume* getVolume()const;
+
+		// given a vertex map in volume coordinate, 
+		// we extract the knn for vmap-2-level0-node,
+		// NOTE: INVALID index is marked as the number of all nodes : getNumAllNodes()
+		void extract_knn_for_vmap(const MapArr& vmap, DeviceArray2D<KnnIdx>& vmapKnn)const;
+
+		// extract the knn among nodes
+		// twist is the 6-tuple (\alpha,\beta,\gamma, t_x, t_y, t_z) from nodes dual-quaternions.
+		// NOTE: INVALID index is marked as the number of all nodes: getNumAllNodes()
+		void extract_nodes_info(DeviceArray<KnnIdx>& nodesKnn, DeviceArray<float>& twist,
+			DeviceArray<float4>& vw)const;
+
+		void update_nodes_via_twist(const DeviceArray<float>& twist);
+
+		int getNumAllNodes()const{
+			int n = 0;
+			for (int k = 0; k < GraphLevelNum; k++)
+				n += getNumNodesInLevel(k);
+			return n;
+		}
 	protected:
 		void initKnnField();
 		void insertNewNodes(GpuMesh& src);

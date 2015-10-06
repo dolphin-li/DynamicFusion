@@ -138,7 +138,7 @@ class __align__(16) Dual_quat_cu{
 #endif
     }
 
-	__device__ __host__ Dual_quat_cu dual_quat_from(const Quat_cu& q, const Vec3& t) const
+	__device__ __host__ static Dual_quat_cu dual_quat_from(const Quat_cu& q, const Vec3& t)
     {
         float w = -0.5f*( t.x * q.i() + t.y * q.j() + t.z * q.k());
         float i =  0.5f*( t.x * q.w() + t.y * q.k() - t.z * q.j());
@@ -186,6 +186,39 @@ class __align__(16) Dual_quat_cu{
         return Dual_quat_cu(Quat_cu(1.f, 0.f, 0.f, 0.f),
                             Vec3(0.f, 0.f, 0.f) );
     }
+
+	// assume self-normalized.
+	__device__ __host__ void to_twist(Vec3& r, Vec3& t)const
+	{
+		float norm = acos(_quat_0.w());
+		if (norm > 1e-8)
+		{
+			float inv_sinNorm_norm = norm / sin(norm);
+			r.x = _quat_0.i() * inv_sinNorm_norm;
+			r.y = _quat_0.j() * inv_sinNorm_norm;
+			r.z = _quat_0.k() * inv_sinNorm_norm;
+		}
+		else
+			r.x = r.y = r.z = 0;
+
+		t.x = 2.f*(-_quat_e.w()*_quat_0.i() + _quat_e.i()*_quat_0.w() - _quat_e.j()*_quat_0.k() + _quat_e.k()*_quat_0.j());
+		t.y = 2.f*(-_quat_e.w()*_quat_0.j() + _quat_e.i()*_quat_0.k() + _quat_e.j()*_quat_0.w() - _quat_e.k()*_quat_0.i());
+		t.z = 2.f*(-_quat_e.w()*_quat_0.k() - _quat_e.i()*_quat_0.j() + _quat_e.j()*_quat_0.i() + _quat_e.k()*_quat_0.w());
+	}
+
+	__device__ __host__ void from_twist(Vec3 r, Vec3 t)
+	{
+		float norm = r.norm();
+		if (norm > 1e-8)
+		{
+			float cosNorm = cos(norm);
+			float sinNorm_norm = sin(norm) / norm;
+			_quat_0 = Quat_cu(cosNorm, r.x*sinNorm_norm, r.y*sinNorm_norm, r.z*sinNorm_norm);
+		}
+		else
+			_quat_0 = Quat_cu();
+		*this = dual_quat_from(_quat_0, t);
+	}
 
     // -------------------------------------------------------------------------
     /// @name Getters

@@ -10,7 +10,7 @@
 #include <eigen\Geometry>
 #include "ObjMesh.h"
 #include "VolumeData.h"
-
+#include "CpuGaussNewton.h"
 namespace dfusion
 {
 #define DFUSION_SAFE_DELETE(buffer)\
@@ -237,6 +237,13 @@ namespace dfusion
 	{
 		Tbx::Transfo rigid = rigid_align();
 
+		//debug
+		Tbx::Dual_quat_cu dq(rigid);
+		Tbx::Vec3 r, t;
+		dq.to_twist(r, t);
+		rigid = Tbx::Transfo::identity();
+		printf("rigid: %f %f %f, %f %f %f\n", r.x, r.y, r.z, t.x, t.y, t.z);
+
 		m_warpField->set_rigidTransform(rigid);
 
 		if (m_frame_id == 0)
@@ -244,6 +251,9 @@ namespace dfusion
 
 		// 0. create visibility map of the current warp view
 		m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
+		m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
+
+		CpuGaussNewton solver;
 
 		// icp iteration
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
@@ -252,6 +262,9 @@ namespace dfusion
 			// m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
 
 			// 2. Gauss-Newton Optimization
+			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_vmap_warp, 
+				m_nmap_warp, m_param, m_kinect_intr);
+			solver.solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
 
 			// 3. update warped mesh and render for visiblity
 			m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
