@@ -299,7 +299,7 @@ void DynamicFusionUI::on_actionRecord_frames_triggered()
 	if (ui.actionRecord_frames->isChecked())
 	{
 		setState(DynamicFusionUI::Pause);
-		m_currentPath = QFileDialog::getExistingDirectory(this, "record folder");
+		m_currentPath = QFileDialog::getExistingDirectory(this, "record folder", "data/frames/");
 		if (m_currentPath != "")
 		{
 			m_frameIndex = 0;

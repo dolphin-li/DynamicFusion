@@ -797,10 +797,13 @@ namespace dfusion
 		}
 
 		// build graph
-		m_nodeTree[level]->buildTree(getNodesDqVwPtr(level) + 2, m_numNodes[level], 3);
+		if (m_numNodes[level] > 0)
+		{
+			m_nodeTree[level]->buildTree(getNodesDqVwPtr(level) + 2, m_numNodes[level], 3);
 
-		m_nodeTree[level]->knnSearchGpu(getNodesDqVwPtr(level - 1) + 2, 3,
-			(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
+			m_nodeTree[level]->knnSearchGpu(getNodesDqVwPtr(level - 1) + 2, 3,
+				(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
+		}
 	}
 #pragma endregion
 
@@ -870,6 +873,8 @@ namespace dfusion
 		const WarpField::KnnIdx* nodesKnnIn, WarpField::KnnIdx* nodesKnnOut, IdxContainter ic)
 	{
 		int iout = blockIdx.x * blockDim.x + threadIdx.x;
+		if (iout >= ic[WarpField::GraphLevelNum])
+			return;
 
 		int level = 0;
 		for (int k = 0; k < WarpField::GraphLevelNum; k++)
@@ -927,6 +932,8 @@ namespace dfusion
 		IdxContainter ic)
 	{
 		int iout = blockIdx.x * blockDim.x + threadIdx.x;
+		if (iout >= ic[WarpField::GraphLevelNum])
+			return;
 
 		int level = 0;
 		for (int k = 0; k < WarpField::GraphLevelNum; k++)

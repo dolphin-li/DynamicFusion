@@ -23,7 +23,7 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.05;
+		warp_radius_search_epsilon = 0.15;
 		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
