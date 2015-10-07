@@ -19,6 +19,9 @@ namespace dfusion
 	typedef WarpField::KnnIdx KnnIdx;
 	struct EigenContainter
 	{
+		enum{
+			KnnK = WarpField::KnnK
+		};
 		typedef float real;
 		typedef Eigen::Matrix<real, -1, 1> Vec;
 		typedef Eigen::SparseMatrix<real, Eigen::ColMajor> SpMat;
@@ -378,7 +381,7 @@ namespace dfusion
 
 				bool valid = false;
 				KnnIdx knn = vmapKnn_[iPixel];
-				for (int k = 0; k < WarpField::KnnK; k++)
+				for (int k = 0; k < KnnK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
 					if (knnNodeId < nNodes)
@@ -401,7 +404,7 @@ namespace dfusion
 			for (int iNode = 0; iNode < nNodes; iNode++)
 			{
 				KnnIdx knn = nodesKnn_[iNode];
-				for (int k = 0; k < WarpField::KnnK; k++)
+				for (int k = 0; k < KnnK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
 					if (knnNodeId < nNodes)
@@ -436,13 +439,13 @@ namespace dfusion
 
 				int corrPixel = map_c2l_corr_[iPixel];
 
-				Tbx::Vec3 v = convert(read_float3_from_4(vmap_cano_[iPixel]));
+				Tbx::Point3 v(convert(read_float3_from_4(vmap_cano_[iPixel])));
 				Tbx::Vec3 n = convert(read_float3_from_4(nmap_cano_[iPixel]));
-				Tbx::Vec3 vl = convert(read_float3_from_4(vmap_live_[corrPixel]));
+				Tbx::Point3 vl(convert(read_float3_from_4(vmap_live_[corrPixel])));
 
 				KnnIdx knn = vmapKnn_[iPixel];
 				Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
-				for (int k = 0; k < WarpField::KnnK; k++)
+				for (int k = 0; k < KnnK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
 					if (knnNodeId < nNodes)
@@ -450,16 +453,20 @@ namespace dfusion
 						Tbx::Dual_quat_cu dq;
 						Tbx::Vec3 r(x[knnNodeId * 6], x[knnNodeId * 6 + 1], x[knnNodeId * 6 + 2]);
 						Tbx::Vec3 t(x[knnNodeId * 6 + 3], x[knnNodeId * 6 + 4], x[knnNodeId * 6 + 5]);
-						Tbx::Vec3 nodesV = convert(read_float3_from_4(nodesVw_[knnNodeId]));
-						float nodesW = nodesVw_[knnNodeId].w; 
+						Tbx::Point3 nodesV(convert(read_float3_from_4(nodesVw_[knnNodeId])));
+						float invNodesW = nodesVw_[knnNodeId].w; 
 						dq.from_twist(r, t);
 						// note: we store inv radius as vw.w, thus using * instead of / here
-						dq_blend = dq_blend + dq*exp(-(v - nodesV).dot(v - nodesV)*(2 * nodesW*nodesW));
+						float wk = exp(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+						dq_blend = dq_blend + dq*wk;
 					}
 				}
 
+				if (dq_blend.get_non_dual_part().norm() == 0)
+					printf("warning: non-covered pixel: %d\n", iPixel);
+
 				dq_blend.normalize();
-				v = Tlw_*(dq_blend.transform(Tbx::Point3(v)));
+				v = Tlw_*(dq_blend.transform(v));
 				n = Tlw_*(dq_blend.rotate(n));
 				f[nRow] = data_term_penalty(n.dot(v - vl));
 			}// end for iPixel
@@ -475,7 +482,7 @@ namespace dfusion
 				Tbx::Vec3 ti(x[iNode * 6 + 3], x[iNode * 6 + 4], x[iNode * 6 + 5]);
 				dqi.from_twist(ri, ti);
 
-				for (int k = 0; k < WarpField::KnnK; k++)
+				for (int k = 0; k < KnnK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
 					if (knnNodeId < nNodes)
@@ -511,12 +518,9 @@ namespace dfusion
 
 		void CalcJacobiFunc(const Eigen::VectorXf& pTest, SpMat& jac, SpMat& jact)
 		{
-			ldp::tic();
-			CalcJacobiFuncNumeric(pTest, jac, jact);
-			//CalcJacobiFuncAnalytic(pTest, jac, jact);
-			ldp::toc("jacobi");
-
-#if 1
+			//CalcJacobiFuncNumeric(pTest, jac, jact);
+			CalcJacobiFuncAnalytic(pTest, jac, jact);
+#if 0
 			// debug
 			CalcJacobiFuncNumeric(pTest, jac, jact);
 			dumpSparseMatrix(jac_, "D:/num.txt");
@@ -534,7 +538,7 @@ namespace dfusion
 			const int nPixel = imgHeight_ * imgWidth_;
 
 			// data term    ========================================================
-//#pragma omp parallel for
+#pragma omp parallel for
 			for (int iPixel = 0; iPixel < nPixel; iPixel++)
 			{
 				int nRow = row_index_of_pixel_[iPixel];
@@ -548,16 +552,11 @@ namespace dfusion
 				Tbx::Vec3 n = convert(read_float3_from_4(nmap_cano_[iPixel]));
 				Tbx::Point3 vl(convert(read_float3_from_4(vmap_live_[corrPixel])));
 
-				// f
-				real f = n.dot(v - vl);
-
-				// partial_psi_partial_f
-				real p_psi_p_f = data_term_grad(f);
-
 				KnnIdx knn = vmapKnn_[iPixel];
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
-				Tbx::Dual_quat_cu dqk[WarpField::KnnK];
-				for (int knnK = 0; knnK < WarpField::KnnK; knnK++)
+				Tbx::Dual_quat_cu dqk[KnnK];
+				real wk[KnnK];
+				for (int knnK = 0; knnK < KnnK; knnK++)
 				{
 					int knnNodeId = knn_k(knn, knnK);
 					if (knnNodeId < nNodes)
@@ -568,33 +567,44 @@ namespace dfusion
 						float invNodesW = nodesVw_[knnNodeId].w;
 						dqk[knnK].from_twist(r, t);
 						// note: we store inv radius as vw.w, thus using * instead of / here
-						dq = dq + dqk[knnK] * exp(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+						wk[knnK] = exp(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+						dq = dq + dqk[knnK] * wk[knnK];
 					}// end if (knnNodeId < nNodes)
 				}// ebd fir knnK
+
+				if (dq.get_non_dual_part().norm() == 0)
+					printf("warning: non-covered pixel: %d\n", iPixel);
+
 				Tbx::Dual_quat_cu dq_bar = dq;
 				real norm_dq_bar = dq_bar.get_non_dual_part().norm();
 				real norm_dq_bar3 = norm_dq_bar*norm_dq_bar*norm_dq_bar;
 				dq.normalize();
+				Tbx::Transfo T = Tlw_*dq.to_transformation();
+
+				// f
+				Tbx::Point3 Tv = T*v;
+				Tbx::Vec3 Tn = T*n;
+				real f = data_term_penalty(Tn.dot(Tv - vl));
+
+				// partial_psi_partial_f
+				real p_psi_p_f = data_term_grad(f);
 
 				// paitial_f_partial_T
-				Tbx::Transfo T = Tlw_*dq.to_transformation();
 				Tbx::Transfo nvt = outer_product(n, v);
-				Tbx::Transfo vlnt = outer_product(n, v);
+				Tbx::Transfo vlnt = outer_product(n, vl).transpose();
 				Tbx::Transfo p_f_p_T = T*(nvt + nvt.transpose()) - vlnt;
 
-				for (int knnK = 0; knnK < WarpField::KnnK; knnK++)
+				for (int knnK = 0; knnK < KnnK; knnK++)
 				{
 					int knnNodeId = knn_k(knn, knnK);
 					if (knnNodeId < nNodes)
 					{
-						float p_psi_p_alphak[6];
-						Eigen::Triplet<real> coo[6];
 						// partial_T_partial_alphak
 						for (int ialpha = 0; ialpha < 6; ialpha++)
 						{
 							Tbx::Transfo p_T_p_alphak = Tbx::Transfo::empty();
 							Tbx::Dual_quat_cu p_qk_p_alpha = p_qk_p_alpha_func(dqk[knnK], ialpha);
-							for (int idq = 0; idq < 7; idq++)
+							for (int idq = 0; idq < 8; idq++)
 							{
 								// partial_SE3_partial_dqi
 								Tbx::Transfo p_SE3_p_dqi = p_SE3_p_dq_func(dq, idq);
@@ -602,14 +612,13 @@ namespace dfusion
 
 								// partial_dqi_partial_alphak
 								real p_dqi_p_alphak = 0;
-								real nodesW = 1 / nodesVw_[knnNodeId].w;
-								for (int j = 0; j < 7; j++)
+								for (int j = 0; j < 8; j++)
 								{
 									// partial_dqi_partial_qkj
 									real dq_bar_j = dq_bar[j];
-									real p_dqi_p_qkj = nodesW / norm_dq_bar;
-									if (j <= 3)
-										p_dqi_p_qkj -= nodesW / norm_dq_bar3*dq_bar_i*dq_bar_j;
+									real p_dqi_p_qkj = wk[knnK] / norm_dq_bar * (idq == j);
+									if (j < 4)
+										p_dqi_p_qkj -= wk[knnK] / norm_dq_bar3*dq_bar_i*dq_bar_j;
 
 									// partial_qkj_partial_alphak
 									real p_qkj_p_alphak = p_qk_p_alpha[j];
@@ -621,18 +630,11 @@ namespace dfusion
 							}// end for idq
 							p_T_p_alphak = Tlw_ * p_T_p_alphak;
 
-							p_psi_p_alphak[ialpha] = p_psi_p_f * trace_AtB(p_f_p_T, p_T_p_alphak);
+							real p_psi_p_alphak = p_psi_p_f * trace_AtB(p_f_p_T, p_T_p_alphak);
 
 							// write to jacobi
 							m_cooSys.at(cooPos++) = Eigen::Triplet<real>(nRow,
-								knnNodeId * VarPerNode + ialpha, p_psi_p_alphak[ialpha]);
-
-							//if (nRow == 0)
-							//{
-							//	printf("%d %f\n", nRow, p_f_p_T[0]);
-							//	dq_bar.to_transformation().print();
-							//	system("pause");
-							//}
+								knnNodeId * VarPerNode + ialpha, p_psi_p_alphak);
 						}// end for ialpha
 					}// end if knnNodeId < nNodes
 				}// end for knnK
@@ -650,7 +652,7 @@ namespace dfusion
 				Tbx::Vec3 ti(pTest[iNode * 6 + 3], pTest[iNode * 6 + 4], pTest[iNode * 6 + 5]);
 				dqi.from_twist(ri, ti);
 
-				for (int knnK = 0; knnK < WarpField::KnnK; knnK++)
+				for (int knnK = 0; knnK < KnnK; knnK++)
 				{
 					int knnNodeId = knn_k(knn, knnK);
 					if (knnNodeId < nNodes)
