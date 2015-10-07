@@ -710,6 +710,40 @@ class __align__(16) Quat_cu{
         return n;
     }
 
+	__device__ __host__ float& operator[](int i)
+	{
+		switch (i)
+		{
+		case 0:
+			return coeff0;
+		case 1:
+			return coeff1;
+		case 2:
+			return coeff2;
+		case 3:
+			return coeff3;
+		default:
+			return coeff3;
+		}
+	}
+
+	__device__ __host__ const float& operator[](int i)const
+	{
+		switch (i)
+		{
+		case 0:
+			return coeff0;
+		case 1:
+			return coeff1;
+		case 2:
+			return coeff2;
+		case 3:
+			return coeff3;
+		default:
+			return coeff3;
+		}
+	}
+
 	__device__ __host__ float dot(const Quat_cu& q){
         return w() * q.w() + i() * q.i() + j() * q.j() + k() * q.k();
     }

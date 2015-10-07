@@ -169,7 +169,13 @@ class __align__(16) Dual_quat_cu{
     // -------------------------------------------------------------------------
     /// @name Operators
     // -------------------------------------------------------------------------
-
+	__device__ __host__ float& operator[](int i)
+	{
+		if (i < 4)
+			return _quat_0[i];
+		else
+			return _quat_e[i-4];
+	}
 	__device__ __host__ Dual_quat_cu operator+(const Dual_quat_cu& dq) const
     {
         return Dual_quat_cu(_quat_0 + dq._quat_0, _quat_e + dq._quat_e);

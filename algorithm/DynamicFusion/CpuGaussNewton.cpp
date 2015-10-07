@@ -37,6 +37,10 @@ namespace dfusion
 		std::vector<float4> vmap_live_;
 		std::vector<float4> nmap_live_;
 		std::vector<int> map_c2l_corr_;
+		std::vector<int> row_index_of_pixel_;
+		std::vector<int> coo_pos_of_pixel_;
+		int nPixel_rows_;
+		int nPixel_cooPos_;
 		int imgWidth_;
 		int imgHeight_;
 		Param param_;
@@ -89,7 +93,6 @@ namespace dfusion
 			//define jacobi structure
 			DefineJacobiStructure(jac_, jact_);
 
-
 			SpMat JacTJac;
 			Vec fx(jac_.rows()), h(jac_.cols()), g(jac_.cols()), fx1(jac_.rows());
 
@@ -103,12 +106,6 @@ namespace dfusion
 			{
 				CalcJacobiFunc(xStart, jac_, jact_);	//J
 				JacTJac = jact_ * jac_;//J'J
-
-				// debug
-				//dumpSparseMatrix(jac_, "D:/1.txt");
-				//system("pause");
-				// end debug
-
 				CalcEnergyFunc(xStart, fx);	//f
 
 				//solve: J'J h =  - J' f(x)
@@ -146,13 +143,27 @@ namespace dfusion
 
 		inline real data_term_penalty(real v)const
 		{
+			// the penalty function is ||v||^2, thus a single term is v.
 			return v;
 		}
-		inline real reg_term_penalty(real v)const
+		
+		inline real data_term_grad(real f)const
+		{
+			// the penalty function single term is f, thus the gradient is 2f
+			return 1;
+		}
+		
+		inline Tbx::Vec3 reg_term_penalty(Tbx::Vec3 v)const
 		{
 			return v;
 		}
-		inline Tbx::Transfo outter_product(Tbx::Vec3 n, Tbx::Point3 v)const
+		
+		inline Tbx::Mat3 reg_term_grad(Tbx::Vec3 f)const
+		{
+			return Tbx::Mat3::identity();
+		}
+		
+		inline Tbx::Transfo outer_product(Tbx::Vec3 n, Tbx::Point3 v)const
 		{
 			return Tbx::Transfo(
 				n.x*v.x, n.x*v.y, n.x*v.z, n.x,
@@ -160,6 +171,182 @@ namespace dfusion
 				n.z*v.x, n.z*v.y, n.z*v.z, n.z,
 				0, 0, 0, 0
 				);
+		}
+
+		inline Tbx::Dual_quat_cu p_qk_p_alpha_func(Tbx::Dual_quat_cu dq, int i)
+		{
+			Tbx::Vec3 t, r;
+			float b, c, n;
+			Tbx::Quat_cu q0(0,0,0,0), q1=dq.get_non_dual_part();
+			switch (i)
+			{
+			case 0:
+				dq.to_twist(r, t);
+				n = r.norm();
+				if (n > std::numeric_limits<real>::epsilon())
+				{
+					b = sin(n) / n;
+					c = (cos(n) - b) / (n*n);
+					q0.coeff0 = -r.x * b;
+					q0.coeff1 = b + r.x*r.x*c;
+					q0.coeff2 = r.x*r.y*c;
+					q0.coeff3 = r.x*r.z*c;
+				}
+				else
+				{
+					q0.coeff0 = 0;
+					q0.coeff1 = 1;
+					q0.coeff2 = 0;
+					q0.coeff3 = 0;
+				}
+
+				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
+				q1.coeff1 = (t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
+				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
+				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
+				return Tbx::Dual_quat_cu(q0, q1);
+			case 1:
+				dq.to_twist(r, t);
+				n = r.norm(); 
+				if (n > std::numeric_limits<real>::epsilon())
+				{
+					b = sin(n) / n;
+					c = (cos(n) - b) / (n*n);
+					q0.coeff0 = -r.y * b;
+					q0.coeff1 = r.y*r.x*c;
+					q0.coeff2 = b + r.y*r.y*c;
+					q0.coeff3 = r.y*r.z*c;
+				}
+				else
+				{
+					q0.coeff0 = 0;
+					q0.coeff1 = 0;
+					q0.coeff2 = 1;
+					q0.coeff3 = 0;
+				}
+
+				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
+				q1.coeff1 = (t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
+				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
+				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
+				return Tbx::Dual_quat_cu(q0, q1);
+			case 2:
+				dq.to_twist(r, t);
+				n = r.norm();
+				if (n > std::numeric_limits<real>::epsilon())
+				{
+					b = sin(n) / n;
+					c = (cos(n) - b) / (n*n);
+
+					q0.coeff0 = -r.z * b;
+					q0.coeff1 = r.z*r.x*c;
+					q0.coeff2 = r.z*r.y*c;
+					q0.coeff3 = b + r.z*r.z*c;
+				}
+				else
+				{
+					q0.coeff0 = 0;
+					q0.coeff1 = 0;
+					q0.coeff2 = 0;
+					q0.coeff3 = 1;
+				}
+
+				q1.coeff0 = ( t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
+				q1.coeff1 = ( t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
+				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
+				q1.coeff3 = ( t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
+				return Tbx::Dual_quat_cu(q0, q1);
+			case 3:
+				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff1, q1.coeff0, -q1.coeff3, q1.coeff2))*0.5;
+			case 4:
+				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff2, q1.coeff3, q1.coeff0, -q1.coeff1))*0.5;
+			case 5:
+				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff3, -q1.coeff2, q1.coeff1, q1.coeff0))*0.5;
+			default:
+				throw std::exception("p_qk_p_alpha_func: out of range");
+				break;
+			}
+		}
+
+		inline float trace_AtB(Tbx::Transfo A, Tbx::Transfo B)
+		{
+			float sum = 0;
+			for (int i = 0; i < 16; i++)
+				sum += A[i] * B[i];
+			return sum;
+		}
+
+		inline Tbx::Transfo p_SE3_p_dq_func(Tbx::Dual_quat_cu dq, int i)
+		{
+			Tbx::Quat_cu q0 = dq.get_non_dual_part();
+			Tbx::Quat_cu q1 = dq.get_dual_part();
+			real x0 = q0.i(), y0 = q0.j(), z0 = q0.k(), w0 = q0.w();
+			real x1 = q1.i(), y1 = q1.j(), z1 = q1.k(), w1 = q1.w();
+			switch (i)
+			{
+			case 0:
+				return Tbx::Transfo(
+					0, -z0, y0, x1,
+					z0, 0, -x0, y1,
+					-y0, x0, 0, z1,
+					0, 0, 0, 0) * 2;
+			case 1:
+				return Tbx::Transfo(
+					0, y0, z0, -w1,
+					y0, -2*x0, -w0, -z1,
+					z0, w0, -2*x0, y1,
+					0, 0, 0, 0) * 2;
+			case 2:
+				return Tbx::Transfo(
+					-2*y0, x0, w0, z1,
+					x0, 0, z0, -w1,
+					-w0, z0, -2*y0, -x1,
+					0, 0, 0, 0) * 2;
+			case 3:
+				return Tbx::Transfo(
+					-2*z0, -w0, x0, -y1,
+					w0, -2*z0, y0, x1,
+					x0, y0, 0, -w1,
+					0, 0, 0, 0) * 2;
+			case 4:
+				return Tbx::Transfo(
+					0, 0, 0, -x0,
+					0, 0, 0, -y0,
+					0, 0, 0, -z0,
+					0, 0, 0, 0) * 2;
+			case 5:
+				return Tbx::Transfo(
+					0, 0, 0, w0,
+					0, 0, 0, z0,
+					0, 0, 0, -y0,
+					0, 0, 0, 0) * 2;
+			case 6:
+				return Tbx::Transfo(
+					0, 0, 0, -z0,
+					0, 0, 0, w0,
+					0, 0, 0, x0,
+					0, 0, 0, 0) * 2;
+			case 7:
+				return Tbx::Transfo(
+					0, 0, 0, y0,
+					0, 0, 0, -x0,
+					0, 0, 0, w0,
+					0, 0, 0, 0) * 2;
+			default:
+				throw std::exception("index out of range");
+				return Tbx::Transfo::identity();
+			}
+		}
+
+		inline Tbx::Transfo p_SE3_p_alpha_func(Tbx::Dual_quat_cu dq, int i)
+		{
+			Tbx::Transfo T = Tbx::Transfo::empty();
+			Tbx::Dual_quat_cu p_dq_p_alphai = p_qk_p_alpha_func(dq, i);
+			for (int j = 0; j < 8; j++)
+			{
+				T = T + p_SE3_p_dq_func(dq, j)*p_dq_p_alphai[j];
+			}
+			return T;
 		}
 
 		inline WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)const
@@ -174,6 +361,10 @@ namespace dfusion
 			const int nPixel = imgHeight_ * imgWidth_;
 
 			m_cooSys.clear();
+			coo_pos_of_pixel_.resize(nPixel);
+			row_index_of_pixel_.resize(nPixel);
+			std::fill(row_index_of_pixel_.begin(), row_index_of_pixel_.end(), -1);
+			std::fill(coo_pos_of_pixel_.begin(), coo_pos_of_pixel_.end(), -1);
 
 			// data term
 			int nRow = 0;
@@ -182,6 +373,8 @@ namespace dfusion
 				int corrPixel = map_c2l_corr_[iPixel];
 				if (corrPixel < 0)
 					continue;
+
+				coo_pos_of_pixel_[iPixel] = m_cooSys.size();
 
 				bool valid = false;
 				KnnIdx knn = vmapKnn_[iPixel];
@@ -192,13 +385,17 @@ namespace dfusion
 					{
 						valid = true;
 						for (int t = 0; t < VarPerNode; t++)
+						{
 							m_cooSys.push_back(Eigen::Triplet<real>(nRow, 
 							knnNodeId * VarPerNode + t, 0));
+						}
 					}
 				}
 				if (valid)
-					nRow++;
+					row_index_of_pixel_[iPixel] = nRow++;
 			}// end for iPixel
+			nPixel_rows_ = nRow;
+			nPixel_cooPos_ = m_cooSys.size();
 
 			// reg term
 			for (int iNode = 0; iNode < nNodes; iNode++)
@@ -230,18 +427,19 @@ namespace dfusion
 			int nNodes = x.size() / 6;
 
 			// data term
-			int nRow = 0;
+#pragma omp parallel for
 			for (int iPixel = 0; iPixel < map_c2l_corr_.size(); iPixel++)
 			{
-				int corrPixel = map_c2l_corr_[iPixel];
-				if (corrPixel < 0)
+				int nRow = row_index_of_pixel_[iPixel];
+				if (nRow < 0)
 					continue;
+
+				int corrPixel = map_c2l_corr_[iPixel];
 
 				Tbx::Vec3 v = convert(read_float3_from_4(vmap_cano_[iPixel]));
 				Tbx::Vec3 n = convert(read_float3_from_4(nmap_cano_[iPixel]));
 				Tbx::Vec3 vl = convert(read_float3_from_4(vmap_live_[corrPixel]));
 
-				bool valid = false;
 				KnnIdx knn = vmapKnn_[iPixel];
 				Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 				for (int k = 0; k < WarpField::KnnK; k++)
@@ -249,7 +447,6 @@ namespace dfusion
 					int knnNodeId = knn_k(knn, k);
 					if (knnNodeId < nNodes)
 					{
-						valid = true;
 						Tbx::Dual_quat_cu dq;
 						Tbx::Vec3 r(x[knnNodeId * 6], x[knnNodeId * 6 + 1], x[knnNodeId * 6 + 2]);
 						Tbx::Vec3 t(x[knnNodeId * 6 + 3], x[knnNodeId * 6 + 4], x[knnNodeId * 6 + 5]);
@@ -260,17 +457,15 @@ namespace dfusion
 						dq_blend = dq_blend + dq*exp(-(v - nodesV).dot(v - nodesV)*(2 * nodesW*nodesW));
 					}
 				}
-				if (valid)
-				{
-					dq_blend.normalize();
-					v = Tlw_*(dq_blend.transform(Tbx::Point3(v)));
-					n = Tlw_*(dq_blend.rotate(n));
-					f[nRow] = data_term_penalty(n.dot(v - vl));
-					nRow++;
-				}
+
+				dq_blend.normalize();
+				v = Tlw_*(dq_blend.transform(Tbx::Point3(v)));
+				n = Tlw_*(dq_blend.rotate(n));
+				f[nRow] = data_term_penalty(n.dot(v - vl));
 			}// end for iPixel
 
 			// reg term
+			int nRow = nPixel_rows_;
 			const float lambda = sqrt(param_.fusion_lambda);
 			for (int iNode = 0; iNode < nNodes; iNode++)
 			{
@@ -293,9 +488,10 @@ namespace dfusion
 						dqj.from_twist(rj, tj);
 						Tbx::Vec3 vj = convert(read_float3_from_4(nodesVw_[knnNodeId]));
 						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
-						f[nRow++] = reg_term_penalty(val.x) * lambda * alpha_ij;
-						f[nRow++] = reg_term_penalty(val.y) * lambda * alpha_ij;
-						f[nRow++] = reg_term_penalty(val.z) * lambda * alpha_ij;
+						val = reg_term_penalty(val);
+						f[nRow++] = val.x * lambda * alpha_ij;
+						f[nRow++] = val.y * lambda * alpha_ij;
+						f[nRow++] = val.z * lambda * alpha_ij;
 					}
 				}
 			}// end for iNode
@@ -315,7 +511,20 @@ namespace dfusion
 
 		void CalcJacobiFunc(const Eigen::VectorXf& pTest, SpMat& jac, SpMat& jact)
 		{
+			ldp::tic();
 			CalcJacobiFuncNumeric(pTest, jac, jact);
+			//CalcJacobiFuncAnalytic(pTest, jac, jact);
+			ldp::toc("jacobi");
+
+#if 1
+			// debug
+			CalcJacobiFuncNumeric(pTest, jac, jact);
+			dumpSparseMatrix(jac_, "D:/num.txt");
+			CalcJacobiFuncAnalytic(pTest, jac, jact);
+			dumpSparseMatrix(jac_, "D:/ana.txt");
+			system("pause");
+			// end debug
+#endif
 		}
 
 		void CalcJacobiFuncAnalytic(const Eigen::VectorXf& pTest, SpMat& jac, SpMat& jact)
@@ -324,47 +533,176 @@ namespace dfusion
 			const int nNodes = x_.size() / 6;
 			const int nPixel = imgHeight_ * imgWidth_;
 
-			// data term
-			int nRow = 0;
+			// data term    ========================================================
+//#pragma omp parallel for
 			for (int iPixel = 0; iPixel < nPixel; iPixel++)
 			{
-				int corrPixel = map_c2l_corr_[iPixel];
-				if (corrPixel < 0)
+				int nRow = row_index_of_pixel_[iPixel];
+				if (nRow < 0)
 					continue;
 
-				Tbx::Vec3 v = convert(read_float3_from_4(vmap_cano_[iPixel]));
-				Tbx::Vec3 n = convert(read_float3_from_4(nmap_cano_[iPixel]));
-				Tbx::Vec3 vl = convert(read_float3_from_4(vmap_live_[corrPixel]));
-				real f = n.dot(v - vl);
-				real p_psi_p_f = f; // corr. to ||.||^2 penalty
+				int cooPos = coo_pos_of_pixel_[iPixel];
 
-				bool valid = false;
+				int corrPixel = map_c2l_corr_[iPixel];
+				Tbx::Point3 v(convert(read_float3_from_4(vmap_cano_[iPixel])));
+				Tbx::Vec3 n = convert(read_float3_from_4(nmap_cano_[iPixel]));
+				Tbx::Point3 vl(convert(read_float3_from_4(vmap_live_[corrPixel])));
+
+				// f
+				real f = n.dot(v - vl);
+
+				// partial_psi_partial_f
+				real p_psi_p_f = data_term_grad(f);
+
 				KnnIdx knn = vmapKnn_[iPixel];
-				Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+				Tbx::Dual_quat_cu dqk[WarpField::KnnK];
 				for (int knnK = 0; knnK < WarpField::KnnK; knnK++)
 				{
 					int knnNodeId = knn_k(knn, knnK);
 					if (knnNodeId < nNodes)
 					{
-						valid = true;
-						Tbx::Dual_quat_cu dq;
 						Tbx::Vec3 r(pTest[knnNodeId * 6], pTest[knnNodeId * 6 + 1], pTest[knnNodeId * 6 + 2]);
 						Tbx::Vec3 t(pTest[knnNodeId * 6 + 3], pTest[knnNodeId * 6 + 4], pTest[knnNodeId * 6 + 5]);
-						Tbx::Vec3 nodesV = convert(read_float3_from_4(nodesVw_[knnNodeId]));
-						float nodesW = nodesVw_[knnNodeId].w;
-						dq.from_twist(r, t);
+						Tbx::Point3 nodesV(convert(read_float3_from_4(nodesVw_[knnNodeId])));
+						float invNodesW = nodesVw_[knnNodeId].w;
+						dqk[knnK].from_twist(r, t);
 						// note: we store inv radius as vw.w, thus using * instead of / here
-						dq_blend = dq_blend + dq*exp(-(v - nodesV).dot(v - nodesV)*(2 * nodesW*nodesW));
+						dq = dq + dqk[knnK] * exp(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
 					}// end if (knnNodeId < nNodes)
 				}// ebd fir knnK
+				Tbx::Dual_quat_cu dq_bar = dq;
+				real norm_dq_bar = dq_bar.get_non_dual_part().norm();
+				real norm_dq_bar3 = norm_dq_bar*norm_dq_bar*norm_dq_bar;
+				dq.normalize();
 
-				Tbx::Transfo T = Tlw_*dq_blend.to_transformation();
-				
+				// paitial_f_partial_T
+				Tbx::Transfo T = Tlw_*dq.to_transformation();
+				Tbx::Transfo nvt = outer_product(n, v);
+				Tbx::Transfo vlnt = outer_product(n, v);
+				Tbx::Transfo p_f_p_T = T*(nvt + nvt.transpose()) - vlnt;
 
-				// to the next row
-				if (valid)
-					nRow++;
+				for (int knnK = 0; knnK < WarpField::KnnK; knnK++)
+				{
+					int knnNodeId = knn_k(knn, knnK);
+					if (knnNodeId < nNodes)
+					{
+						float p_psi_p_alphak[6];
+						Eigen::Triplet<real> coo[6];
+						// partial_T_partial_alphak
+						for (int ialpha = 0; ialpha < 6; ialpha++)
+						{
+							Tbx::Transfo p_T_p_alphak = Tbx::Transfo::empty();
+							Tbx::Dual_quat_cu p_qk_p_alpha = p_qk_p_alpha_func(dqk[knnK], ialpha);
+							for (int idq = 0; idq < 7; idq++)
+							{
+								// partial_SE3_partial_dqi
+								Tbx::Transfo p_SE3_p_dqi = p_SE3_p_dq_func(dq, idq);
+								real dq_bar_i = dq_bar[idq];
+
+								// partial_dqi_partial_alphak
+								real p_dqi_p_alphak = 0;
+								real nodesW = 1 / nodesVw_[knnNodeId].w;
+								for (int j = 0; j < 7; j++)
+								{
+									// partial_dqi_partial_qkj
+									real dq_bar_j = dq_bar[j];
+									real p_dqi_p_qkj = nodesW / norm_dq_bar;
+									if (j <= 3)
+										p_dqi_p_qkj -= nodesW / norm_dq_bar3*dq_bar_i*dq_bar_j;
+
+									// partial_qkj_partial_alphak
+									real p_qkj_p_alphak = p_qk_p_alpha[j];
+
+									p_dqi_p_alphak += p_dqi_p_qkj * p_qkj_p_alphak;
+								}// end for j
+
+								p_T_p_alphak += p_SE3_p_dqi * p_dqi_p_alphak;
+							}// end for idq
+							p_T_p_alphak = Tlw_ * p_T_p_alphak;
+
+							p_psi_p_alphak[ialpha] = p_psi_p_f * trace_AtB(p_f_p_T, p_T_p_alphak);
+
+							// write to jacobi
+							m_cooSys.at(cooPos++) = Eigen::Triplet<real>(nRow,
+								knnNodeId * VarPerNode + ialpha, p_psi_p_alphak[ialpha]);
+
+							//if (nRow == 0)
+							//{
+							//	printf("%d %f\n", nRow, p_f_p_T[0]);
+							//	dq_bar.to_transformation().print();
+							//	system("pause");
+							//}
+						}// end for ialpha
+					}// end if knnNodeId < nNodes
+				}// end for knnK
 			}// end for iPixel
+			
+			// Reg term    ======================================================================
+			int nRow = nPixel_rows_;
+			int cooPos = nPixel_cooPos_;
+			const float lambda = sqrt(param_.fusion_lambda);
+			for (int iNode = 0; iNode < nNodes; iNode++)
+			{
+				KnnIdx knn = nodesKnn_[iNode];
+				Tbx::Dual_quat_cu dqi;
+				Tbx::Vec3 ri(pTest[iNode * 6], pTest[iNode * 6 + 1], pTest[iNode * 6 + 2]);
+				Tbx::Vec3 ti(pTest[iNode * 6 + 3], pTest[iNode * 6 + 4], pTest[iNode * 6 + 5]);
+				dqi.from_twist(ri, ti);
+
+				for (int knnK = 0; knnK < WarpField::KnnK; knnK++)
+				{
+					int knnNodeId = knn_k(knn, knnK);
+					if (knnNodeId < nNodes)
+					{
+						Tbx::Vec3 rj(pTest[knnNodeId * 6], pTest[knnNodeId * 6 + 1], pTest[knnNodeId * 6 + 2]);
+						Tbx::Vec3 tj(pTest[knnNodeId * 6 + 3], pTest[knnNodeId * 6 + 4], pTest[knnNodeId * 6 + 5]);
+						real alpha_ij = sqrt(max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w));
+						Tbx::Dual_quat_cu dqj;
+						dqj.from_twist(rj, tj);
+						Tbx::Point3 vj(convert(read_float3_from_4(nodesVw_[knnNodeId])));
+
+						Tbx::Vec3 h = dqi.transform(vj) - dqj.transform(vj);
+
+						// partial_psi_partial_h
+						Tbx::Mat3 p_psi_p_h = reg_term_grad(h) * lambda * alpha_ij;
+
+						for (int ialpha = 0; ialpha < VarPerNode; ialpha++)
+						{
+							Tbx::Transfo p_Ti_p_alpha = p_SE3_p_alpha_func(dqi, ialpha);
+							Tbx::Transfo p_Tj_p_alpha = p_SE3_p_alpha_func(dqj, ialpha);
+
+							// partial_h_partial_alpha
+							Tbx::Vec3 p_h_p_alphai, p_h_p_alphaj;
+							for (int ixyz = 0; ixyz < 3; ixyz++)
+							{
+								p_h_p_alphai[ixyz] = p_Ti_p_alpha(ixyz, 0) * vj.x + p_Ti_p_alpha(ixyz, 1) * vj.y
+									+ p_Ti_p_alpha(ixyz, 2) * vj.z + p_Ti_p_alpha(ixyz, 3);
+								p_h_p_alphaj[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vj.x + p_Tj_p_alpha(ixyz, 1) * vj.y
+									+ p_Tj_p_alpha(ixyz, 2) * vj.z + p_Tj_p_alpha(ixyz, 3));
+							}
+
+							// partial_psi_partial_alpha
+							Tbx::Vec3 p_psi_p_alphai = p_psi_p_h * p_h_p_alphai;
+							Tbx::Vec3 p_psi_p_alphaj = p_psi_p_h * p_h_p_alphaj;
+							for (int ixyz = 0; ixyz < 3; ixyz++)
+							{
+								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
+									iNode * VarPerNode + ialpha, 
+									p_psi_p_alphai[ixyz]);
+								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
+									knnNodeId * VarPerNode + ialpha,
+									p_psi_p_alphaj[ixyz]);
+							}
+						}// end for ialpha
+						nRow += 3;
+					}// end if knnNode valid
+				}// end for knnK
+			}// end for iNode
+	
+			if (m_cooSys.size())
+				jac.setFromTriplets(m_cooSys.begin(), m_cooSys.end());
+			jact = jac.transpose();
 		}
 
 		void CalcJacobiFuncNumeric(const Eigen::VectorXf& pTest, SpMat& jac, SpMat& jact)
@@ -378,12 +716,13 @@ namespace dfusion
 			int ii, m, *jcol, *varlist, *coldone, forw;
 			int *vidxs, *ridxs;
 			real *tmpd;
-			real delta;
+			real delta, delta_mul;
 
 			/* retrieve problem-specific information passed in *dat */
 			Vec hx(nobs), hxx(nobs);
 			forw = 1;
-			delta = real(1e-6);
+			delta_mul = real(1e-3);
+			delta = real(1e-5);
 
 			CalcEnergyFunc(p, hx);//hx = f(p)
 
@@ -431,7 +770,7 @@ namespace dfusion
 				for (k = 0; k<m; ++k)
 				{
 					/* determine d=max(SPLM_DELTA_SCALE*|p[varlist[k]]|, delta), see HZ */
-					d = real(1e-3)*p[varlist[k]]; // force evaluation
+					d = delta_mul*p[varlist[k]]; // force evaluation
 					d = fabs(d);
 					if (d<delta) d = delta;
 

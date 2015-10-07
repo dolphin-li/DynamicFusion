@@ -23,7 +23,7 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.15;
+		warp_radius_search_epsilon = 0.035;
 		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
@@ -34,7 +34,7 @@ namespace dfusion
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 128;
-		fusion_lambda = 200;
+		fusion_lambda = 20;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_nonRigidICP_maxIter = 3;
@@ -42,7 +42,7 @@ namespace dfusion
 		fusion_rigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
 		fusion_nonRigid_distThre = 0.1f; // meter
 		fusion_nonRigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
-		fusion_GaussNewton_maxIter = 3;
+		fusion_GaussNewton_maxIter = 10;
 
 		/** *****************************************************
 		* visualization related

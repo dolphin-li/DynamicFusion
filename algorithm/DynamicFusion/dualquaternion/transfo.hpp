@@ -297,6 +297,14 @@ struct Transfo {
         return m[i];
     }
 
+	__device__ __host__ inline float& operator()(int row, int col) {
+		return m[row * 4 + col];
+	}
+
+	__device__ __host__ inline const float& operator()(int row, int col) const{
+		return m[row * 4 + col];
+	}
+
     // -------------------------------------------------------------------------
     /// @name Getters
     // -------------------------------------------------------------------------
