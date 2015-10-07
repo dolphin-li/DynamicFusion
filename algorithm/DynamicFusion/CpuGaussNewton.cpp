@@ -6,6 +6,9 @@
 #include "ldpdef.h"
 namespace dfusion
 {
+#define USE_ROBUST_HUBER_PENALTY
+#define USE_ROBUST_TUKEY_PENALTY
+#define ENABLE_ANTIPODALITY
 	inline float3 read_float3_from_4(float4 p)
 	{
 		return make_float3(p.x, p.y, p.z);
@@ -117,53 +120,98 @@ namespace dfusion
 				h = solver.solve(g);
 
 				real normv = xStart.norm();
-				double old_energy = fx.dot(fx);
+				real old_energy = evaluateTotalEnergy(xStart);
+				real new_energy = 0;
 				for (real alpha = 1; alpha > 1e-15; alpha *= 0.5)
 				{
 					Vec x = xStart + h;
-					CalcEnergyFunc(x, fx1);	//f
-					double new_energy = fx1.dot(fx1);
+					new_energy = evaluateTotalEnergy(x);
 					if (new_energy > old_energy)
+					{
 						h = h * 0.5;
+					}
 					if (new_energy < old_energy)
 					{
 						xStart = x;
 						break;
 					}
+					else
+						new_energy = 0;
 				}
 				real normh = h.norm();
 
 				if (showInfo)
-					printf("Gauss-Newton: %d -- %f = %f/%f: %f\n", iter, normh / (1e-6+normv), 
-					normh, normv, old_energy);
+					printf("Gauss-Newton: %d %f: %f->%f [0]=%f\n", iter, normh / (1e-6+normv),
+					old_energy, new_energy, xStart[0]);
 
 				if (normh < (normv + real(1e-6)) * real(1e-6))
 					break;
 			}
 
-			return fx.dot(fx);
+			return evaluateTotalEnergy(xStart);
 		}
 
-		inline real data_term_penalty(real v)const
+		inline real data_term_energy(real f)const
 		{
-			// the penalty function is ||v||^2, thus a single term is v.
-			return v;
+#ifndef USE_ROBUST_TUKEY_PENALTY
+			// the penalty function is ||f||^2/2, thus a single term is the gradient f.
+			return 0.5f*f*f;
+#else
+			// the robust Tukey penelty gradient
+			real c = param_.fusion_psi_data;
+			if (abs(f) <= c)
+				return c*c / 6.f *(1 - pow(1 - ldp::sqr(f / param_.fusion_psi_data), 3));
+			else
+				return c*c / 6.f;
+#endif
+		}
+
+		inline real data_term_penalty(real f)const
+		{
+#ifndef USE_ROBUST_TUKEY_PENALTY
+			// the penalty function is ||f||^2/2, thus a single term is the gradient f.
+			return f;
+#else
+			// the robust Tukey penelty gradient
+			if (abs(f) <= param_.fusion_psi_data)
+				return f * ldp::sqr(1 - ldp::sqr(f / param_.fusion_psi_data));
+			else
+				return 0;
+#endif
+		}
+
+		inline real reg_term_energy(Tbx::Vec3 f)const
+		{
+#ifndef USE_ROBUST_HUBER_PENALTY
+			return f.dot(f)*0.5f;
+#else
+			// the robust Huber penelty gradient
+			real s = 0;
+			real norm = f.norm();
+			if (norm < param_.fusion_psi_reg)
+				s = norm * norm * 0.5f;
+			else
+			for (int k = 0; k < 3; k++)
+				s += param_.fusion_psi_reg*(abs(f[k])- param_.fusion_psi_reg*0.5f);
+			return s;
+#endif
 		}
 		
-		inline real data_term_grad(real f)const
+		inline Tbx::Vec3 reg_term_penalty(Tbx::Vec3 f)const
 		{
-			// the penalty function single term is f, thus the gradient is 2f
-			return 1;
-		}
-		
-		inline Tbx::Vec3 reg_term_penalty(Tbx::Vec3 v)const
-		{
-			return v;
-		}
-		
-		inline Tbx::Mat3 reg_term_grad(Tbx::Vec3 f)const
-		{
-			return Tbx::Mat3::identity();
+#ifndef USE_ROBUST_HUBER_PENALTY
+			return f;
+#else
+			// the robust Huber penelty gradient
+			Tbx::Vec3 df;
+			real norm = f.norm();
+			if (norm < param_.fusion_psi_reg)
+				df = f;
+			else
+			for (int k = 0; k < 3; k++)
+				df[k] = ldp::sign(f[k])*param_.fusion_psi_reg;
+			return df;
+#endif
 		}
 		
 		inline Tbx::Transfo outer_product(Tbx::Vec3 n, Tbx::Point3 v)const
@@ -445,6 +493,7 @@ namespace dfusion
 
 				KnnIdx knn = vmapKnn_[iPixel];
 				Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+				Tbx::Dual_quat_cu dq0;
 				for (int k = 0; k < KnnK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
@@ -458,6 +507,10 @@ namespace dfusion
 						dq.from_twist(r, t);
 						// note: we store inv radius as vw.w, thus using * instead of / here
 						float wk = exp(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+						if (k == 0)
+							dq0 = dq;
+						if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
+							wk = -wk;
 						dq_blend = dq_blend + dq*wk;
 					}
 				}
@@ -502,6 +555,93 @@ namespace dfusion
 					}
 				}
 			}// end for iNode
+		}
+
+		real evaluateTotalEnergy(const Eigen::VectorXf& x)const
+		{
+			int nNodes = x.size() / 6;
+
+			double total_energy = 0;
+
+			// data term
+#pragma omp parallel for
+			for (int iPixel = 0; iPixel < map_c2l_corr_.size(); iPixel++)
+			{
+				int nRow = row_index_of_pixel_[iPixel];
+				if (nRow < 0)
+					continue;
+
+				int corrPixel = map_c2l_corr_[iPixel];
+
+				Tbx::Point3 v(convert(read_float3_from_4(vmap_cano_[iPixel])));
+				Tbx::Vec3 n = convert(read_float3_from_4(nmap_cano_[iPixel]));
+				Tbx::Point3 vl(convert(read_float3_from_4(vmap_live_[corrPixel])));
+
+				KnnIdx knn = vmapKnn_[iPixel];
+				Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+				Tbx::Dual_quat_cu dq0;
+				for (int k = 0; k < KnnK; k++)
+				{
+					int knnNodeId = knn_k(knn, k);
+					if (knnNodeId < nNodes)
+					{
+						Tbx::Dual_quat_cu dq;
+						Tbx::Vec3 r(x[knnNodeId * 6], x[knnNodeId * 6 + 1], x[knnNodeId * 6 + 2]);
+						Tbx::Vec3 t(x[knnNodeId * 6 + 3], x[knnNodeId * 6 + 4], x[knnNodeId * 6 + 5]);
+						Tbx::Point3 nodesV(convert(read_float3_from_4(nodesVw_[knnNodeId])));
+						float invNodesW = nodesVw_[knnNodeId].w;
+						dq.from_twist(r, t);
+						// note: we store inv radius as vw.w, thus using * instead of / here
+						float wk = exp(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+#ifdef ENABLE_ANTIPODALITY
+						if (k == 0)
+							dq0 = dq;
+						if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
+							wk = -wk;
+#endif
+						dq_blend = dq_blend + dq*wk;
+					}
+				}
+
+				if (dq_blend.get_non_dual_part().norm() == 0)
+					printf("warning: non-covered pixel: %d\n", iPixel);
+
+				dq_blend.normalize();
+				v = Tlw_*(dq_blend.transform(v));
+				n = Tlw_*(dq_blend.rotate(n));
+				total_energy += data_term_energy(n.dot(v - vl));
+			}// end for iPixel
+
+			// reg term
+			int nRow = nPixel_rows_;
+			const float lambda = sqrt(param_.fusion_lambda);
+			for (int iNode = 0; iNode < nNodes; iNode++)
+			{
+				KnnIdx knn = nodesKnn_[iNode];
+				Tbx::Dual_quat_cu dqi;
+				Tbx::Vec3 ri(x[iNode * 6], x[iNode * 6 + 1], x[iNode * 6 + 2]);
+				Tbx::Vec3 ti(x[iNode * 6 + 3], x[iNode * 6 + 4], x[iNode * 6 + 5]);
+				dqi.from_twist(ri, ti);
+
+				for (int k = 0; k < KnnK; k++)
+				{
+					int knnNodeId = knn_k(knn, k);
+					if (knnNodeId < nNodes)
+					{
+						Tbx::Vec3 rj(x[knnNodeId * 6], x[knnNodeId * 6 + 1], x[knnNodeId * 6 + 2]);
+						Tbx::Vec3 tj(x[knnNodeId * 6 + 3], x[knnNodeId * 6 + 4], x[knnNodeId * 6 + 5]);
+						real alpha_ij = sqrt(max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w));
+
+						Tbx::Dual_quat_cu dqj;
+						dqj.from_twist(rj, tj);
+						Tbx::Vec3 vj = convert(read_float3_from_4(nodesVw_[knnNodeId]));
+						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+						total_energy += reg_term_energy(val) * lambda * alpha_ij;
+					}
+				}
+			}// end for iNode
+
+			return total_energy;
 		}
 
 		int FindColIndices(const SpMat& A, int cid, int* vidx, int* ridx)
@@ -568,6 +708,8 @@ namespace dfusion
 						dqk[knnK].from_twist(r, t);
 						// note: we store inv radius as vw.w, thus using * instead of / here
 						wk[knnK] = exp(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+						if (dqk[0].get_non_dual_part().dot(dqk[knnK].get_non_dual_part()) < 0)
+							wk[knnK] = -wk[knnK];
 						dq = dq + dqk[knnK] * wk[knnK];
 					}// end if (knnNodeId < nNodes)
 				}// ebd fir knnK
@@ -580,14 +722,6 @@ namespace dfusion
 				real norm_dq_bar3 = norm_dq_bar*norm_dq_bar*norm_dq_bar;
 				dq.normalize();
 				Tbx::Transfo T = Tlw_*dq.to_transformation();
-
-				// f
-				Tbx::Point3 Tv = T*v;
-				Tbx::Vec3 Tn = T*n;
-				real f = data_term_penalty(Tn.dot(Tv - vl));
-
-				// partial_psi_partial_f
-				real p_psi_p_f = data_term_grad(f);
 
 				// paitial_f_partial_T
 				Tbx::Transfo nvt = outer_product(n, v);
@@ -630,11 +764,11 @@ namespace dfusion
 							}// end for idq
 							p_T_p_alphak = Tlw_ * p_T_p_alphak;
 
-							real p_psi_p_alphak = p_psi_p_f * trace_AtB(p_f_p_T, p_T_p_alphak);
+							real p_f_p_alphak = trace_AtB(p_f_p_T, p_T_p_alphak);
 
 							// write to jacobi
 							m_cooSys.at(cooPos++) = Eigen::Triplet<real>(nRow,
-								knnNodeId * VarPerNode + ialpha, p_psi_p_alphak);
+								knnNodeId * VarPerNode + ialpha, p_f_p_alphak);
 						}// end for ialpha
 					}// end if knnNodeId < nNodes
 				}// end for knnK
@@ -664,11 +798,6 @@ namespace dfusion
 						dqj.from_twist(rj, tj);
 						Tbx::Point3 vj(convert(read_float3_from_4(nodesVw_[knnNodeId])));
 
-						Tbx::Vec3 h = dqi.transform(vj) - dqj.transform(vj);
-
-						// partial_psi_partial_h
-						Tbx::Mat3 p_psi_p_h = reg_term_grad(h) * lambda * alpha_ij;
-
 						for (int ialpha = 0; ialpha < VarPerNode; ialpha++)
 						{
 							Tbx::Transfo p_Ti_p_alpha = p_SE3_p_alpha_func(dqi, ialpha);
@@ -685,8 +814,8 @@ namespace dfusion
 							}
 
 							// partial_psi_partial_alpha
-							Tbx::Vec3 p_psi_p_alphai = p_psi_p_h * p_h_p_alphai;
-							Tbx::Vec3 p_psi_p_alphaj = p_psi_p_h * p_h_p_alphaj;
+							Tbx::Vec3 p_psi_p_alphai = p_h_p_alphai * lambda * alpha_ij;
+							Tbx::Vec3 p_psi_p_alphaj = p_h_p_alphaj * lambda * alpha_ij;
 							for (int ixyz = 0; ixyz < 3; ixyz++)
 							{
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
@@ -898,9 +1027,44 @@ namespace dfusion
 		m_egc->CalcCorr();
 	}
 
-	void CpuGaussNewton::solve()
+	void CpuGaussNewton::solve(bool factor_rigid_out)
 	{
 		m_egc->Optimize(m_egc->x_, m_egc->param_.fusion_GaussNewton_maxIter);
+
+		if (factor_rigid_out)
+		{
+			Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0,0,0,0), Tbx::Quat_cu(0,0,0,0));
+			for (int i = 0; i < m_egc->x_.size(); i += 6)
+			{
+				Tbx::Vec3 r(m_egc->x_[i + 0], m_egc->x_[i + 1], m_egc->x_[i + 2]);
+				Tbx::Vec3 t(m_egc->x_[i + 3], m_egc->x_[i + 4], m_egc->x_[i + 5]);
+				Tbx::Dual_quat_cu dq;
+				dq.from_twist(r, t);
+				dq_blend = dq_blend + dq;
+			}
+			dq_blend.normalize();
+
+			Tbx::Dual_quat_cu invDq_blend = dq_blend.conjugate();
+
+			for (int i = 0; i < m_egc->x_.size(); i += 6)
+			{
+				Tbx::Vec3 r(m_egc->x_[i + 0], m_egc->x_[i + 1], m_egc->x_[i + 2]);
+				Tbx::Vec3 t(m_egc->x_[i + 3], m_egc->x_[i + 4], m_egc->x_[i + 5]);
+				Tbx::Dual_quat_cu dq;
+				dq.from_twist(r, t);
+				dq = invDq_blend * dq;
+				dq.to_twist(r, t);
+
+				m_egc->x_[i + 0] = r.x;
+				m_egc->x_[i + 1] = r.y;
+				m_egc->x_[i + 2] = r.z;
+				m_egc->x_[i + 3] = t.x;
+				m_egc->x_[i + 4] = t.y;
+				m_egc->x_[i + 5] = t.z;
+			}
+			m_pWarpField->set_rigidTransform(m_pWarpField->get_rigidTransform()*dq_blend.to_transformation());
+		}
+
 
 		m_twist.upload(m_egc->x_.data(), m_egc->x_.size());
 		m_pWarpField->update_nodes_via_twist(m_twist);

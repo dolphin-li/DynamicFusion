@@ -68,6 +68,7 @@ namespace dfusion
 			}
 			else
 			{
+				Tbx::Dual_quat_cu dq0;
 				for (int k = 0; k < KnnK; k++)
 				{
 					if (get_by_arrayid(knnIdx, k) < MaxNodeNum)
@@ -81,6 +82,13 @@ namespace dfusion
 						float w = __expf(-norm2(make_float3(vw.x - p.x, vw.y - p.y,
 							vw.z - p.z)) * 2 * (vw.w*vw.w));
 						Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
+						if(k == 0)
+							dq0 = dq;
+						else
+						{
+							if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
+								w = -w;
+						}
 						dq_blend = dq_blend + dq*w;
 					}
 				}

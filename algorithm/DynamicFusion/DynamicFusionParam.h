@@ -72,5 +72,6 @@ namespace dfusion
 		bool view_show_graph;
 		bool view_show_corr;
 		int view_show_graph_level;
+		float view_errorMap_range; // in meters
 	};
 }

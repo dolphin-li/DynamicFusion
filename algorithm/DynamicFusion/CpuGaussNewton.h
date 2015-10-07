@@ -17,7 +17,7 @@ namespace dfusion
 		void findCorr(const MapArr& vmap_live, const MapArr& nmap_live, 
 			const MapArr& vmap_warp, const MapArr& nmap_warp);
 
-		void solve();
+		void solve(bool factor_rigid_out = true);
 	protected:
 	private:
 		WarpField* m_pWarpField;

@@ -16,14 +16,14 @@ namespace dfusion
 		* marching cube related
 		* ******************************************************/
 		marching_cube_level = 0;
-		marching_cube_tile_size = 256;
+		marching_cube_tile_size = 384;
 		marching_cube_max_activeVoxel_ratio = 0.2;
 		marching_cube_isoValue = 0.f;
 
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.035;
+		warp_radius_search_epsilon = 0.025;
 		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
@@ -34,7 +34,7 @@ namespace dfusion
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 128;
-		fusion_lambda = 20;
+		fusion_lambda = 200;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_nonRigidICP_maxIter = 3;
@@ -42,7 +42,7 @@ namespace dfusion
 		fusion_rigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
 		fusion_nonRigid_distThre = 0.1f; // meter
 		fusion_nonRigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
-		fusion_GaussNewton_maxIter = 10;
+		fusion_GaussNewton_maxIter = 5;
 
 		/** *****************************************************
 		* visualization related
@@ -52,5 +52,6 @@ namespace dfusion
 		view_show_graph = true;
 		view_show_corr = false;
 		view_show_graph_level = 0;
+		view_errorMap_range = 0.01;
 	}
 }

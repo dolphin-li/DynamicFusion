@@ -844,4 +844,62 @@ namespace dfusion
 		}
 	}
 #pragma endregion
+
+#pragma region --error map
+	__global__ void computeErrorMap_kernel(PtrStep<float4> vmap_live, PtrStep<float4> nmap_live, 
+		PtrStep<float4> vmap_warp, PtrStep<float4> nmap_warp, PtrStep<PixelRGBA> errMap, 
+		int cols, int rows, Intr intr, float range)
+	{
+		int x = threadIdx.x + blockIdx.x * blockDim.x;
+		int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+		if (x >= cols || y >= rows)
+			return;
+
+		float3 ncurr = read_float3_4(nmap_live(y, x));
+		float3 vcurr = read_float3_4(vmap_live(y, x));
+		float3 uvd = intr.xyz2uvd(vcurr);
+		int2 ukr = make_int2(__float2int_rn(uvd.x), __float2int_rn(uvd.y));
+		PixelRGBA color;
+		color.a = color.r = 255;
+		color.g = color.b = 0;
+
+		if (!isnan(ncurr.x) && ukr.x >= 0 && ukr.y >= 0 && ukr.x < cols && ukr.y < rows)
+		{
+			float3 nprev = read_float3_4(nmap_warp(y, x));
+			float3 vprev = read_float3_4(vmap_warp(y, x));
+			if (!isnan(nprev.x))
+			{
+				float err = abs(dot(nprev, vprev - vcurr));
+				err = min(1.f, err / range);
+				color.r = color.g = color.b = err * 255;
+			}
+		}
+
+		errMap(y, x) = color;
+	}
+
+	void computeErrorMap(const MapArr& vmap_live, const MapArr& nmap_live,
+		const MapArr& vmap_warp, const MapArr& nmap_warp, ColorMap& errMap, 
+		Intr intr, float errMap_range)
+	{
+		int r = vmap_live.rows(), c = vmap_live.cols();
+
+		if (r == 0 || c == 0)
+			return;
+
+		if (r != nmap_live.rows() || r != vmap_warp.rows() || r != nmap_warp.rows()
+			|| c != nmap_live.cols() || c != vmap_warp.cols() || c != nmap_warp.cols())
+			throw std::exception("error: size not matched in computeErrorMap()");
+
+		errMap.create(r, c);
+
+		dim3 block(32, 8);
+		dim3 grid(divUp(c, block.x), divUp(r, block.y));
+		
+		computeErrorMap_kernel << <grid, block >> >(vmap_live, nmap_live, 
+			vmap_warp, nmap_warp, errMap, c, r, intr, errMap_range);
+		cudaSafeCall(cudaGetLastError(), "computeErrorMap");
+	}
+#pragma endregion
 }

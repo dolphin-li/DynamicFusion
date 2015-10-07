@@ -47,4 +47,9 @@ namespace dfusion
 		float distThres, float angleThres,
 		DeviceArray2D<float>& gbuf, DeviceArray<float>& mbuf,
 		float* matrixA_host, float* vectorB_host);
+
+	//
+	void computeErrorMap(const MapArr& vmap_live, const MapArr& nmap_live,
+		const MapArr& vmap_warp, const MapArr& nmap_warp, ColorMap& errMap,
+		Intr intr, float errMap_range);
 }

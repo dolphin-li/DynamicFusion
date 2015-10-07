@@ -25,6 +25,7 @@ namespace dfusion
 		// if not use_ray_casting, then use marching_cube
 		void shading(const Camera& userCam, LightSource light, ColorMap& img, bool use_ray_casting);
 		void shadingCanonical(const Camera& userCam, LightSource light, ColorMap& img, bool use_ray_casting);
+		void shadingCurrentErrorMap(ColorMap& img, float errorMapRange);
 
 		const WarpField* getWarpField()const;
 

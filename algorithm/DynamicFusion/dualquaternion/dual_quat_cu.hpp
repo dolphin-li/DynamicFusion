@@ -95,6 +95,11 @@ class __align__(16) Dual_quat_cu{
         _quat_e = _quat_e / norm;
     }
 
+	__device__ __host__ Dual_quat_cu conjugate()
+	{
+		return Dual_quat_cu(_quat_0.conjugate(), _quat_e.conjugate());
+	}
+
     /// Transformation of point p with the dual quaternion
 	/// NOTE: perform normalize() before this if nedded
 	__device__ __host__ Point3 transform(const Point3& p) const
@@ -185,6 +190,14 @@ class __align__(16) Dual_quat_cu{
     {
         return Dual_quat_cu(_quat_0 * scalar, _quat_e * scalar);
     }
+
+	__device__ __host__ Dual_quat_cu operator * (const Dual_quat_cu& other)const
+	{
+		Dual_quat_cu r;
+		r._quat_0 = _quat_0 * other._quat_0;
+		r._quat_e = _quat_0 * other._quat_e + _quat_e * other._quat_0;
+		return r;
+	}
 
     /// Return a dual quaternion with no translation and no rotation
 	__device__ __host__ static Dual_quat_cu identity()

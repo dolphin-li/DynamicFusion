@@ -229,8 +229,21 @@ void DynamicFusionUI::updateDynamicFusion()
 		g_dataholder.m_warpedview_shading, false);
 	ui.widgetWarpedView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
 
+	// cano view
+	ui.widgetCanoView->getCameraInfo(cam);
+	cam.setViewPort(0, ui.widgetCanoView->width(), 0, ui.widgetCanoView->height());
+	g_dataholder.m_processor.shadingCanonical(cam, g_dataholder.m_lights,
+		g_dataholder.m_canoview_shading, false);
+	ui.widgetCanoView->setRayCastingShadingImage(g_dataholder.m_canoview_shading);
+
+	// err map
+	g_dataholder.m_processor.shadingCurrentErrorMap(g_dataholder.m_errorMap_shading,
+		g_dataholder.m_dparam.view_errorMap_range);
+	ui.widgetErrMap->setRayCastingShadingImage(g_dataholder.m_errorMap_shading);
+
 	// debug, save rendered image
 #if 1
+	// warp view
 	std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
 		*g_dataholder.m_warpedview_shading.cols());
 	g_dataholder.m_warpedview_shading.download(tmpMap.data(),
@@ -244,19 +257,29 @@ void DynamicFusionUI::updateDynamicFusion()
 		img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
 	}
 	int fid = g_dataholder.m_processor.getFrameId();
+
 	QString name;
 	name.sprintf("data/screenshots/%06d.png", fid);
 	img.save(name);
+
+	// error map
+	img = QImage(g_dataholder.m_errorMap_shading.cols(),
+		g_dataholder.m_errorMap_shading.rows(), QImage::Format::Format_ARGB32);
+	g_dataholder.m_errorMap_shading.download(tmpMap.data(),
+		g_dataholder.m_errorMap_shading.cols()*sizeof(uchar4));
+	for (int y = 0; y < g_dataholder.m_errorMap_shading.rows(); y++)
+	for (int x = 0; x < g_dataholder.m_errorMap_shading.cols(); x++)
+	{
+		uchar4 v = tmpMap[y*g_dataholder.m_errorMap_shading.cols() + x];
+		img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+	}
+
+	QString name1;
+	name1.sprintf("data/screenshots/e_%06d.png", fid);
+	img.save(name1);
 #endif
 	// end debug
 
-
-	// cano view
-	ui.widgetCanoView->getCameraInfo(cam);
-	cam.setViewPort(0, ui.widgetCanoView->width(), 0, ui.widgetCanoView->height());
-	g_dataholder.m_processor.shadingCanonical(cam, g_dataholder.m_lights,
-		g_dataholder.m_warpedview_shading, false);
-	ui.widgetCanoView->setRayCastingShadingImage(g_dataholder.m_warpedview_shading);
 
 }
 

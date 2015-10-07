@@ -28,6 +28,8 @@ public:
 	std::vector<dfusion::depthtype> m_depth_h;
 	dfusion::DepthMap m_depth_d;
 	dfusion::ColorMap m_warpedview_shading;
+	dfusion::ColorMap m_canoview_shading;
+	dfusion::ColorMap m_errorMap_shading;
 
 	// the following is used for debugging/visualizing loaded volumes.
 	dfusion::RayCaster m_rayCaster;

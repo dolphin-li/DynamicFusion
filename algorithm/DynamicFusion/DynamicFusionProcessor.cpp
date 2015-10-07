@@ -228,6 +228,12 @@ namespace dfusion
 		}
 	}
 
+	void DynamicFusionProcessor::shadingCurrentErrorMap(ColorMap& img, float errorMapRange)
+	{
+		computeErrorMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp,
+			img, m_kinect_intr, errorMapRange);
+	}
+
 	const WarpField* DynamicFusionProcessor::getWarpField()const
 	{
 		return m_warpField;
@@ -236,16 +242,6 @@ namespace dfusion
 	void DynamicFusionProcessor::estimateWarpField()
 	{
 		Tbx::Transfo rigid = rigid_align();
-
-		//debug
-#if 0
-		Tbx::Dual_quat_cu dq(rigid);
-		Tbx::Vec3 r, t;
-		dq.to_twist(r, t);
-		rigid = Tbx::Transfo::identity();
-		printf("rigid: %f %f %f, %f %f %f\n", r.x, r.y, r.z, t.x, t.y, t.z);
-#endif
-		// end debug
 
 		m_warpField->set_rigidTransform(rigid);
 

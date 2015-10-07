@@ -28,6 +28,7 @@ namespace dfusion
 		}
 		else
 		{
+			Tbx::Dual_quat_cu dq0;
 #pragma unroll
 			for (int k = 0; k < WarpField::KnnK; k++)
 			{
@@ -44,6 +45,13 @@ namespace dfusion
 					float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
 					float w = __expf(-dist2 * 2 * (vw.w*vw.w));
 					Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
+					if (k == 0)
+						dq0 = dq;
+					else
+					{
+						if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
+							w = -w;
+					}
 					dq_blend = dq_blend + dq*w;
 #ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
 					fusion_weight += sqrt(dist2);

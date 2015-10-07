@@ -25,7 +25,7 @@
      <widget class="RayCastViewer" name="widgetCanoView" native="true"/>
     </item>
     <item row="2" column="0">
-     <widget class="QWidget" name="widgetDebug" native="true"/>
+     <widget class="RayCastViewer" name="widgetErrMap" native="true"/>
     </item>
    </layout>
   </widget>
