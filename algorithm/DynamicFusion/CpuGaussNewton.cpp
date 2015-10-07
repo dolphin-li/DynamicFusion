@@ -54,6 +54,19 @@ namespace dfusion
 		Tbx::Transfo Tlw_;
 		std::vector<Eigen::Triplet<real>> m_cooSys;
 
+		void checkNanAndInf(const Vec& vec)
+		{
+			for (size_t i = 0; i < vec.size(); i++)
+			{
+				if (isnan(vec[i]) || isinf(vec[i]))
+				{
+					printf("warning: nan/inf found: %d=%f\n", i, vec[i]);
+					dumpSparseMatrix(jac_, "D:/ana.txt");
+					system("pause");
+				}
+			}
+		}
+
 		void CalcCorr()
 		{
 			map_c2l_corr_.resize(imgWidth_*imgHeight_);
@@ -82,11 +95,11 @@ namespace dfusion
 						continue;
 
 					float dist = norm(pwarp - plive);
-					if (dist > param_.fusion_nonRigid_distThre)
+					if (dist > param_.fusion_nonRigid_distThre || isnan(dist))
 						continue;
 
 					float sine = norm(cross(nwarp, nlive));
-					if (sine >= param_.fusion_nonRigid_angleThreSin)
+					if (sine >= param_.fusion_nonRigid_angleThreSin || isnan(sine))
 						continue;
 
 					map_c2l_corr_[y*imgWidth_ + x] = ukr.y*imgWidth_ + ukr.x;
@@ -106,12 +119,17 @@ namespace dfusion
 			JacTJac = jact_ * jac_;
 			Eigen::SimplicialCholesky<SpMat> solver;
 			solver.analyzePattern(JacTJac.triangularView<Eigen::Lower>());
+			Eigen::Diagonal<SpMat> diag(JacTJac);
 
 			//Gauss-Newton Optimization
 			for (int iter = 0; iter<nMaxIter; iter++)
 			{
 				CalcJacobiFunc(xStart, jac_, jact_);	//J
 				JacTJac = jact_ * jac_;//J'J
+
+				// ldp test: add small reg value to prevent singular
+				diag += Vec(diag.size()).setConstant(param_.fusion_GaussNewton_diag_regTerm);
+
 				CalcEnergyFunc(xStart, fx);	//f
 
 				//solve: J'J h =  - J' f(x)
@@ -119,9 +137,12 @@ namespace dfusion
 				solver.factorize(JacTJac.triangularView<Eigen::Lower>());
 				h = solver.solve(g);
 
+				checkNanAndInf(h);
+
 				real normv = xStart.norm();
 				real old_energy = evaluateTotalEnergy(xStart);
 				real new_energy = 0;
+				real h_0 = h[0];
 				for (real alpha = 1; alpha > 1e-15; alpha *= 0.5)
 				{
 					Vec x = xStart + h;
@@ -141,8 +162,8 @@ namespace dfusion
 				real normh = h.norm();
 
 				if (showInfo)
-					printf("Gauss-Newton: %d %f: %f->%f [0]=%f\n", iter, normh / (1e-6+normv),
-					old_energy, new_energy, xStart[0]);
+					printf("Gauss-Newton: %d %f: %f->%f [0]=%f, %f\n", iter, normh / (1e-6+normv),
+					old_energy, new_energy, xStart[0], h_0);
 
 				if (normh < (normv + real(1e-6)) * real(1e-6))
 					break;
@@ -234,7 +255,7 @@ namespace dfusion
 			case 0:
 				dq.to_twist(r, t);
 				n = r.norm();
-				if (n > std::numeric_limits<real>::epsilon())
+				if (n > Tbx::Dual_quat_cu::epsilon())
 				{
 					b = sin(n) / n;
 					c = (cos(n) - b) / (n*n);
@@ -259,7 +280,7 @@ namespace dfusion
 			case 1:
 				dq.to_twist(r, t);
 				n = r.norm(); 
-				if (n > std::numeric_limits<real>::epsilon())
+				if (n > Tbx::Dual_quat_cu::epsilon())
 				{
 					b = sin(n) / n;
 					c = (cos(n) - b) / (n*n);
@@ -284,7 +305,7 @@ namespace dfusion
 			case 2:
 				dq.to_twist(r, t);
 				n = r.norm();
-				if (n > std::numeric_limits<real>::epsilon())
+				if (n > Tbx::Dual_quat_cu::epsilon())
 				{
 					b = sin(n) / n;
 					c = (cos(n) - b) / (n*n);
@@ -1029,6 +1050,9 @@ namespace dfusion
 
 	void CpuGaussNewton::solve(bool factor_rigid_out)
 	{
+		if (m_egc->x_.size() == 0)
+			return;
+
 		m_egc->Optimize(m_egc->x_, m_egc->param_.fusion_GaussNewton_maxIter);
 
 		if (factor_rigid_out)

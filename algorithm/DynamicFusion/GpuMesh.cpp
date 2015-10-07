@@ -705,14 +705,16 @@ namespace dfusion
 		}
 
 		// draw wrap field nodes
-		if (warpField)
+		if (warpField && (param.view_show_nodes || param.view_show_graph))
 		{
 			float4* gldata = nullptr;
 			size_t num_bytes = 0;
-			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0));
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0),
+				"GpuMesh::renderToImg::mapWarpFieldRes");
 			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
 			copy_warp_node_to_gl_buffer(gldata, warpField);
-			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0));
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0), 
+				"GpuMesh::renderToImg::unMapWarpFieldRes");
 
 			glDisable(GL_LIGHTING);
 			glEnableClientState(GL_VERTEX_ARRAY);

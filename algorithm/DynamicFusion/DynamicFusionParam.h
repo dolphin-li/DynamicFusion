@@ -63,6 +63,7 @@ namespace dfusion
 		float fusion_nonRigid_distThre;
 		float fusion_nonRigid_angleThreSin;
 		int fusion_GaussNewton_maxIter;
+		float fusion_GaussNewton_diag_regTerm;
 
 		/** *****************************************************
 		* visualization related

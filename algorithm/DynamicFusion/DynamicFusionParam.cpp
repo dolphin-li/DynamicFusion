@@ -10,13 +10,13 @@ namespace dfusion
 		volume_resolution[0] = 256;
 		volume_resolution[1] = 256;
 		volume_resolution[2] = 256;
-		voxels_per_meter = 256;
+		voxels_per_meter = 384;
 
 		/** *****************************************************
 		* marching cube related
 		* ******************************************************/
 		marching_cube_level = 0;
-		marching_cube_tile_size = 384;
+		marching_cube_tile_size = 256;
 		marching_cube_max_activeVoxel_ratio = 0.2;
 		marching_cube_isoValue = 0.f;
 
@@ -43,13 +43,14 @@ namespace dfusion
 		fusion_nonRigid_distThre = 0.1f; // meter
 		fusion_nonRigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
 		fusion_GaussNewton_maxIter = 5;
+		fusion_GaussNewton_diag_regTerm = 1e-3;
 
 		/** *****************************************************
 		* visualization related
 		* ******************************************************/
 		view_show_mesh = true;
-		view_show_nodes = true;
-		view_show_graph = true;
+		view_show_nodes = false;
+		view_show_graph = false;
 		view_show_corr = false;
 		view_show_graph_level = 0;
 		view_errorMap_range = 0.01;

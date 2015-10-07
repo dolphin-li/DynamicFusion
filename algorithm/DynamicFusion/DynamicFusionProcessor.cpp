@@ -80,7 +80,7 @@ namespace dfusion
 			1.f/m_param.voxels_per_meter, 
 			make_float3(-m_param.volume_resolution[0]*0.5f/m_param.voxels_per_meter, 
 			-m_param.volume_resolution[1] * 0.5f / m_param.voxels_per_meter, 
-			-KINECT_NEAREST_METER - m_param.volume_resolution[2] / m_param.voxels_per_meter)
+			-KINECT_NEAREST_METER - float(m_param.volume_resolution[2]) / m_param.voxels_per_meter)
 			);
 
 		// mesh
@@ -262,7 +262,7 @@ namespace dfusion
 
 			// 2. Gauss-Newton Optimization
 #if 1
-			solver.init(m_warpField, m_vmap_cano, m_nmap_cano,  m_param, m_kinect_intr);
+			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
 			solver.solve();
 #endif

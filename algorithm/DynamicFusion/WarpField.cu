@@ -916,6 +916,9 @@ namespace dfusion
 		for (int k = 0; k < GraphLevelNum; k++)
 			ic[k + 1] = ic[k] + m_numNodes[k];
 
+		if (ic[GraphLevelNum] == 0)
+			return;
+
 		nodesKnn.create(ic[GraphLevelNum]);
 		twist.create(ic[GraphLevelNum] * 6);
 		vw.create(ic[GraphLevelNum]);

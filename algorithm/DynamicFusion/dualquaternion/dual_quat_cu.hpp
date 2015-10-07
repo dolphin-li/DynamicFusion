@@ -44,7 +44,7 @@ namespace Tbx {
  */
 class __align__(16) Dual_quat_cu{
     public:
-
+		__device__ __host__ static float epsilon(){ return 1e-5; }
     // -------------------------------------------------------------------------
     /// @name Constructors
     // -------------------------------------------------------------------------
@@ -210,7 +210,7 @@ class __align__(16) Dual_quat_cu{
 	__device__ __host__ void to_twist(Vec3& r, Vec3& t)const
 	{
 		float norm = acos(_quat_0.w());
-		if (norm > 1e-8)
+		if (norm > epsilon())
 		{
 			float inv_sinNorm_norm = norm / sin(norm);
 			r.x = _quat_0.i() * inv_sinNorm_norm;
@@ -228,7 +228,7 @@ class __align__(16) Dual_quat_cu{
 	__device__ __host__ void from_twist(Vec3 r, Vec3 t)
 	{
 		float norm = r.norm();
-		if (norm > 1e-8)
+		if (norm > epsilon())
 		{
 			float cosNorm = cos(norm);
 			float sinNorm_norm = sin(norm) / norm;
