@@ -189,6 +189,9 @@ namespace dfusion
 				n += getNumNodesInLevel(k);
 			return n;
 		}
+
+		void setActiveVisualizeNodeId(int id);
+		int getActiveVisualizeNodeId()const;
 	protected:
 		void initKnnField();
 		void insertNewNodes(GpuMesh& src);
@@ -198,6 +201,7 @@ namespace dfusion
 		Param m_param;
 		TsdfVolume* m_volume;
 		Tbx::Transfo m_rigidTransform;
+		int m_activeVisualizeNodeId;
 
 		int m_lastNumNodes[GraphLevelNum];
 		int m_numNodes[GraphLevelNum];

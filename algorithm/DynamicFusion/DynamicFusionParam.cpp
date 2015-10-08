@@ -23,7 +23,7 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.025;
+		warp_radius_search_epsilon = 0.035;
 		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
@@ -49,10 +49,12 @@ namespace dfusion
 		* visualization related
 		* ******************************************************/
 		view_show_mesh = true;
-		view_show_nodes = false;
-		view_show_graph = false;
+		view_show_nodes = true;
+		view_show_graph = true;
 		view_show_corr = false;
 		view_show_graph_level = 0;
 		view_errorMap_range = 0.01;
+		view_activeNode_id = -1;
+		view_click_vert_xy[0] = view_click_vert_xy[1] = -1;
 	}
 }

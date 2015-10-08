@@ -9,10 +9,11 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	m_frameIndex = 0;
 	m_view_normalmap = false;
 	m_lastState = DynamicFusionUI::Live;
-	m_state = DynamicFusionUI::Pause;
+	m_state = DynamicFusionUI::Live;
 	m_renderType = RenderRayCasting;
 	updateUiFromParam();
 
+	
 	g_dataholder.init();
 
 	startTimer(30);
@@ -113,7 +114,7 @@ void DynamicFusionUI::updateUiFromParam()
 {
 	ui.rbMarchCube->setChecked(m_renderType == RenderMarchCube);
 	ui.rbRayCasting->setChecked(m_renderType == RenderRayCasting);
-
+	
 	if (g_dataholder.m_dparam.volume_resolution[0] == 128)
 		ui.rbResX128->setChecked(true);
 	if (g_dataholder.m_dparam.volume_resolution[0] == 256)
@@ -147,6 +148,7 @@ void DynamicFusionUI::updateUiFromParam()
 
 	ui.sbShowGraphLevel->setMaximum(dfusion::WarpField::GraphLevelNum);
 	ui.sbShowGraphLevel->setValue(g_dataholder.m_dparam.view_show_graph_level);
+	ui.sbActiveNode->setValue(g_dataholder.m_dparam.view_activeNode_id);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -242,7 +244,7 @@ void DynamicFusionUI::updateDynamicFusion()
 	ui.widgetErrMap->setRayCastingShadingImage(g_dataholder.m_errorMap_shading);
 
 	// debug, save rendered image
-#if 1
+#if 0
 	// warp view
 	std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
 		*g_dataholder.m_warpedview_shading.cols());
@@ -614,6 +616,19 @@ void DynamicFusionUI::on_sbShowGraphLevel_valueChanged(int v)
 	{
 		g_dataholder.m_dparam.view_show_graph_level = v;
 		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_sbActiveNode_valueChanged(int v)
+{
+	try
+	{
+		g_dataholder.m_dparam.view_activeNode_id = v;
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+		printf("active node id: %d\n", v);
 	}
 	catch (std::exception e)
 	{

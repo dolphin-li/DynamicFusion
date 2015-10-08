@@ -154,6 +154,8 @@ namespace dfusion
 			throw std::exception("Dynamic Resizing Not Allowed Now!");
 
 		m_param = param;
+		if (m_warpField)
+			m_warpField->setActiveVisualizeNodeId(m_param.view_activeNode_id);
 
 		if (reCreate)
 			init(param);
@@ -205,7 +207,7 @@ namespace dfusion
 		{
 			m_warpedMesh->renderToImg(userCam, light, img, m_param, m_warpField,
 				&m_vmap_curr_pyd[0], &m_vmap_warp, &m_nmap_curr_pyd[0],
-				&m_nmap_warp);
+				&m_nmap_warp, m_canoMesh);
 			//img.create(m_nmap_cano.rows(), m_nmap_cano.cols());
 			//generateNormalMap(m_vmap_cano, img);
 		}
@@ -251,7 +253,7 @@ namespace dfusion
 		// 0. create visibility map of the current warp view
 		m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
 		m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
-
+		return;
 		CpuGaussNewton solver;
 
 		// icp iteration

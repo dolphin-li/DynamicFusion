@@ -47,6 +47,7 @@ public:
 	void on_cbShowGraph_clicked();
 	void on_cbShowCorr_clicked();
 	void on_sbShowGraphLevel_valueChanged(int);
+	void on_sbActiveNode_valueChanged(int v);
 protected:
 	void updateUiFromParam();
 

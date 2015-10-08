@@ -856,19 +856,19 @@ namespace dfusion
 		if (x >= cols || y >= rows)
 			return;
 
-		float3 ncurr = read_float3_4(nmap_live(y, x));
-		float3 vcurr = read_float3_4(vmap_live(y, x));
-		float3 uvd = intr.xyz2uvd(vcurr);
+		float3 nprev = read_float3_4(nmap_warp(y, x));
+		float3 vprev = read_float3_4(vmap_warp(y, x));
+		float3 uvd = intr.xyz2uvd(vprev);
 		int2 ukr = make_int2(__float2int_rn(uvd.x), __float2int_rn(uvd.y));
 		PixelRGBA color;
 		color.a = color.r = 255;
 		color.g = color.b = 0;
 
-		if (!isnan(ncurr.x) && ukr.x >= 0 && ukr.y >= 0 && ukr.x < cols && ukr.y < rows)
+		if (!isnan(nprev.x) && ukr.x >= 0 && ukr.y >= 0 && ukr.x < cols && ukr.y < rows)
 		{
-			float3 nprev = read_float3_4(nmap_warp(y, x));
-			float3 vprev = read_float3_4(vmap_warp(y, x));
-			if (!isnan(nprev.x))
+			float3 ncurr = read_float3_4(nmap_live(ukr.y, ukr.x));
+			float3 vcurr = read_float3_4(vmap_live(ukr.y, ukr.x));
+			if (!isnan(ncurr.x))
 			{
 				float err = abs(dot(nprev, vprev - vcurr));
 				err = min(1.f, err / range);

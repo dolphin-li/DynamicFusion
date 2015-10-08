@@ -14,6 +14,7 @@ namespace dfusion
 		m_current_point_buffer_size = 0;
 		memset(m_numNodes, 0, sizeof(m_numNodes));
 		memset(m_lastNumNodes, 0, sizeof(m_lastNumNodes));
+		m_activeVisualizeNodeId = -1;
 	}
 
 	WarpField::~WarpField()
@@ -140,5 +141,15 @@ namespace dfusion
 	const TsdfVolume* WarpField::getVolume()const
 	{
 		return m_volume;
+	}
+
+	void WarpField::setActiveVisualizeNodeId(int id)
+	{
+		m_activeVisualizeNodeId = min(getNumNodesInLevel(0)-1, id);
+	}
+
+	int WarpField::getActiveVisualizeNodeId()const
+	{
+		return m_activeVisualizeNodeId;
 	}
 }

@@ -133,7 +133,8 @@ namespace dfusion
 	__global__ void copy_warp_node_to_gl_buffer_kernel(
 		float4* gldata, int* glindex,
 		Tbx::Transfo trans, const float4* nodes, 
-		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, float3 origion, float invVoxelSize,
+		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, 
+		float3 origion, float invVoxelSize,
 		const WarpField::KnnIdx* nodesKnn, 
 		int n, int node_start_id)
 	{
@@ -258,5 +259,63 @@ namespace dfusion
 			gl_live_v, gl_warp_v, gl_live_n, gl_warp_n,  gledge, 
 			param.fusion_nonRigid_distThre, param.fusion_nonRigid_angleThreSin);
 		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_maps_to_gl_buffer");
+	}
+
+	__global__ void update_color_buffer_by_warpField_kernel(
+		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
+		GpuMesh::PointType* colors, const GpuMesh::PointType* verts, int num,
+		int activeKnnId, float3 origion, float invVoxelSize)
+	{
+		int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+		if (i < num)
+		{
+			float3 p = GpuMesh::from_point(verts[i]);
+			WarpField::KnnIdx knnIdx;
+
+			if (!isnan(p.x))
+			{
+				GpuMesh::PointType color = GpuMesh::to_point(make_float3(0.7, 0.7, 0.7), 1);
+				float3 p1 = (p - origion)*invVoxelSize;
+				int x = int(p1.x);
+				int y = int(p1.y);
+				int z = int(p1.z);
+				tex3D(&knnIdx, knnTex, x, y, z);
+				for (int k = 0; k < WarpField::KnnK; k++)
+				if (get_by_arrayid(knnIdx, k) == activeKnnId)
+				{
+					float4 nearestVw = make_float4(0, 0, 0, 1);
+					tex1Dfetch(&nearestVw, nodesDqVwTex, get_by_arrayid(knnIdx, k) * 3 + 2); 
+					float w = __expf(-norm2(p - GpuMesh::from_point(nearestVw))*2*nearestVw.w*nearestVw.w);
+					color = GpuMesh::to_point(make_float3(w, 0, 0));
+				}
+
+				colors[i] = color;
+			}
+		}
+	}
+
+	void GpuMesh::update_color_buffer_by_warpField(const WarpField* warpField, GpuMesh* canoMesh)
+	{
+		if (canoMesh->num() != num())
+			throw std::exception("GpuMesh::update_color_buffer_by_warpField(): cano mesh not matched!");
+		lockVertsNormals();
+		canoMesh->lockVertsNormals();
+		cudaTextureObject_t knnTex = warpField->bindKnnFieldTexture();
+		cudaTextureObject_t nodesDqVwTex = warpField->bindNodesDqVwTexture();
+		float3 ori = warpField->getVolume()->getOrigion();
+		float vsz = warpField->getVolume()->getVoxelSize();
+		int aid = warpField->getActiveVisualizeNodeId();
+
+		dim3 block(256);
+		dim3 grid(divUp(num(), block.x));
+		update_color_buffer_by_warpField_kernel << <grid, block >> >(
+			knnTex, nodesDqVwTex, m_colors_d, canoMesh->verts(), num(), aid, ori, 1.f/vsz);
+		cudaSafeCall(cudaGetLastError(), "update_color_buffer_by_warpField_kernel");
+
+		warpField->unBindKnnFieldTexture(knnTex);
+		warpField->unBindNodesDqVwTexture(nodesDqVwTex);
+		canoMesh->unlockVertsNormals();
+		unlockVertsNormals();
 	}
 }

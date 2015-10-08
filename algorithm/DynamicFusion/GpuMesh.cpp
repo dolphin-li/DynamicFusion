@@ -362,6 +362,7 @@ namespace dfusion
 	{
 		m_verts_d = nullptr;
 		m_normals_d = nullptr;
+		m_colors_d = nullptr;
 		m_cuda_res = nullptr;
 		m_vbo_id = 0;
 		m_num = 0;
@@ -394,7 +395,7 @@ namespace dfusion
 	void GpuMesh::create(size_t n)
 	{
 		// here we only release if memory not enough
-		if (m_current_buffer_size < n*2*sizeof(PointType))
+		if (m_current_buffer_size < n*3*sizeof(PointType))
 			release();
 
 		if (n == 0)
@@ -416,7 +417,7 @@ namespace dfusion
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
 			// allocate slightly larger to avoid too dynamic updating.
 			// cudaGraphicsGLRegisterBuffer is slow for large buffers.
-			m_current_buffer_size = 2 * n * sizeof(PointType) * 1.5;
+			m_current_buffer_size = 3 * n * sizeof(PointType) * 1.5;
 			glBufferData(GL_ARRAY_BUFFER, m_current_buffer_size, 0, GL_DYNAMIC_DRAW);
 			if (n)// when n==0, it may crash.
 			{
@@ -436,6 +437,7 @@ namespace dfusion
 			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res));
 		m_verts_d = nullptr;
 		m_normals_d = nullptr;
+		m_colors_d = nullptr;
 		m_cuda_res = nullptr;
 		m_vbo_id = 0;
 		m_num = 0;
@@ -449,7 +451,7 @@ namespace dfusion
 		rhs.lockVertsNormals();
 		lockVertsNormals();
 
-		cudaMemcpy(verts(), rhs.verts(), num() * 2 * sizeof(PointType), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(verts(), rhs.verts(), num() * 3 * sizeof(PointType), cudaMemcpyDeviceToDevice);
 
 		unlockVertsNormals();
 		rhs.unlockVertsNormals();
@@ -469,6 +471,7 @@ namespace dfusion
 		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res, 0));
 		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_verts_d, &num_bytes, m_cuda_res));
 		m_normals_d = m_verts_d + m_num;
+		m_colors_d = m_normals_d + m_num;
 	}
 	void GpuMesh::unlockVertsNormals()
 	{
@@ -477,6 +480,7 @@ namespace dfusion
 		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res, 0));
 		m_verts_d = nullptr;
 		m_normals_d = nullptr;
+		m_colors_d = nullptr;
 	}
 
 	void GpuMesh::toObjMesh(ObjMesh& omesh)
@@ -598,7 +602,7 @@ namespace dfusion
 			} while (is_cuda_pbo_vbo_id_used_push_new(m_vbo_id_warpnodes));
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
 
-			int bytes_warp = WarpField::MaxNodeNum*WarpField::GraphLevelNum*(sizeof(float4)
+			int bytes_warp = WarpField::MaxNodeNum*WarpField::GraphLevelNum*(sizeof(float4)+
 								+WarpField::KnnK*sizeof(int)* 2);
 			int bytes_corr = KINECT_WIDTH*KINECT_HEIGHT*(4*sizeof(float4)+2*sizeof(int));
 			int bytes = max(bytes_warp, bytes_corr);
@@ -641,7 +645,8 @@ namespace dfusion
 	void GpuMesh::renderToImg(const Camera& camera, LightSource light, ColorMap& img, 
 		const Param& param, const WarpField* warpField, 
 		const MapArr* vmap_live, const MapArr* vmap_warp,
-		const MapArr* nmap_live, const MapArr* nmap_warp)
+		const MapArr* nmap_live, const MapArr* nmap_warp, 
+		GpuMesh* canoMesh)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
@@ -669,6 +674,7 @@ namespace dfusion
 		glEnable(GL_LIGHTING);
 		glEnable(GL_LIGHT0);
 		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_COLOR_MATERIAL);
 		glDepthMask(GL_TRUE);
 		glEnable(GL_POINT_SPRITE_ARB);
 		glTexEnvi(GL_POINT_SPRITE_ARB, GL_COORD_REPLACE_ARB, GL_TRUE);
@@ -685,22 +691,36 @@ namespace dfusion
 
 		camera.apply();
 
+		bool showColorVert = warpField && param.view_show_nodes && canoMesh;
+		if (showColorVert)
+			showColorVert = (warpField->getActiveVisualizeNodeId() >= 0);
+
 		// draw mesh vertices
 		if (param.view_show_mesh)
 		{
+			if (showColorVert)
+				update_color_buffer_by_warpField(warpField, canoMesh);
+
 			unlockVertsNormals();
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
 			glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
 			glEnableClientState(GL_VERTEX_ARRAY);
+			if (showColorVert)
+			{
+				size_t shift1 = m_num*sizeof(PointType)*2;
+				glColorPointer(3, GL_FLOAT, sizeof(PointType), (GLvoid*)shift1);
+				glEnableClientState(GL_COLOR_ARRAY);
+			}
 
 			size_t shift = m_num*sizeof(PointType);
 			glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
 			glEnableClientState(GL_NORMAL_ARRAY);
 
-			glColor3f(1.0, 1.0, 1.0);
+			glColor3f(0.7, 0.7, 0.7);
 			glDrawArrays(GL_TRIANGLES, 0, m_num);
 			glDisableClientState(GL_VERTEX_ARRAY);
 			glDisableClientState(GL_NORMAL_ARRAY);
+			glDisableClientState(GL_COLOR_ARRAY);
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 		}
 
@@ -720,7 +740,6 @@ namespace dfusion
 			glEnableClientState(GL_VERTEX_ARRAY);
 
 			// draw level nodes
-
 			ldp::Float3 colors[4] = {
 				ldp::Float3(0, 1, 0),
 				ldp::Float3(0, 1, 1),
@@ -734,7 +753,8 @@ namespace dfusion
 				g_shader_node->begin();
 				g_shader_node->setUniform1f("pointScale", width / tanf(camera.getFov()
 					*0.5f*(float)M_PI / 180.0f));
-				for (int level = 0; level < WarpField::KnnK; level++)
+
+				for (int level = 0; level < WarpField::GraphLevelNum; level++)
 				{
 					g_shader_node->setUniform1f("pointRadius", 0.005*(level+1));
 					glVertexPointer(3, GL_FLOAT, sizeof(float4), 
@@ -742,6 +762,17 @@ namespace dfusion
 					glColor3fv(colors[level].ptr());
 					glDrawArrays(GL_POINTS, 0, warpField->getNumNodesInLevel(level));
 				}
+
+				if (showColorVert)
+				{
+					int id = warpField->getActiveVisualizeNodeId();
+					g_shader_node->setUniform1f("pointRadius", 0.008);
+					glColor3f(1, 0, 1);
+					glVertexPointer(3, GL_FLOAT, sizeof(float4),
+						(void*)(id*sizeof(float4)));
+					glDrawArrays(GL_POINTS, 0, 1);
+				}
+
 				g_shader_node->end();
 				glBindBuffer(GL_ARRAY_BUFFER, 0);
 			}
