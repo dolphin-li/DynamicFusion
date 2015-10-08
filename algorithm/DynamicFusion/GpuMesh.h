@@ -59,7 +59,9 @@ namespace dfusion
 			const Param& param, const WarpField* warpField = nullptr,
 			const MapArr* vmap_live = nullptr, const MapArr* vmap_warp = nullptr,
 			const MapArr* nmap_live = nullptr, const MapArr* nmap_warp = nullptr,
-			GpuMesh* canoMesh = nullptr);
+			GpuMesh* canoMesh = nullptr,
+			const float3* canoPosActive = nullptr,
+			const ushort4* knnIdxActiveView = nullptr);
 		void renderToDepth(const Camera& camera, DepthMap& img);
 
 		// we assume self is warped by the warpField,

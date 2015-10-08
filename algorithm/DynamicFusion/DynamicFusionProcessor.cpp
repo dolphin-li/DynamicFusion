@@ -205,9 +205,44 @@ namespace dfusion
 		}
 		else
 		{
+			// read passed image pos and return selections/related-knns for visualization
+			static int lastX = -1, lastY = -1;
+			static WarpField::KnnIdx lastKnn;
+			static float3 lastCano;
+			const int x = m_param.view_click_vert_xy[0];
+			const int y = m_param.view_click_vert_xy[1];
+			WarpField::KnnIdx* knnPtr = nullptr;
+			WarpField::KnnIdx knnIdx = make_ushort4(WarpField::MaxNodeNum, WarpField::MaxNodeNum,
+				WarpField::MaxNodeNum, WarpField::MaxNodeNum);
+			float3* canoPosPtr = nullptr;
+			float3 canoPos = make_float3(0,0,0);
+			if (lastX != x || lastY != y)
+			{
+				lastX = x;
+				lastY = y;
+				if (x >= 0 && x < m_vmap_cano.cols()
+					&& y >= 0 && y < m_vmap_cano.rows())
+				{
+					cudaSafeCall(cudaMemcpy(&canoPos, ((char*)m_vmap_cano.ptr())
+						+ m_vmap_cano.step()*y + x*sizeof(float4)
+						, sizeof(float3), cudaMemcpyDeviceToHost), "copy cano pos");
+					knnIdx = m_warpField->getKnnAt(canoPos);
+					knnPtr = &knnIdx;
+					canoPosPtr = &canoPos;
+				}
+				lastKnn = knnIdx;
+				lastCano = canoPos;
+			}
+			else
+			{
+				knnPtr = &lastKnn;
+				canoPosPtr = &lastCano;
+			}
+
+			// render
 			m_warpedMesh->renderToImg(userCam, light, img, m_param, m_warpField,
 				&m_vmap_curr_pyd[0], &m_vmap_warp, &m_nmap_curr_pyd[0],
-				&m_nmap_warp, m_canoMesh);
+				&m_nmap_warp, m_canoMesh, canoPosPtr, knnPtr);
 			//img.create(m_nmap_cano.rows(), m_nmap_cano.cols());
 			//generateNormalMap(m_vmap_cano, img);
 		}

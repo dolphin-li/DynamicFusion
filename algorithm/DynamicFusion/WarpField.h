@@ -192,6 +192,10 @@ namespace dfusion
 
 		void setActiveVisualizeNodeId(int id);
 		int getActiveVisualizeNodeId()const;
+
+		// slow: copy from cuda array to a single host pos
+		KnnIdx getKnnAt(float3 volumePos)const;
+		KnnIdx getKnnAt(int3 gridXYZ)const;
 	protected:
 		void initKnnField();
 		void insertNewNodes(GpuMesh& src);

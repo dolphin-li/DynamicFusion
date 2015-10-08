@@ -273,6 +273,22 @@ void RayCastViewer::keyPressEvent(QKeyEvent*ev)
 
 void RayCastViewer::mouseReleaseEvent(QMouseEvent *ev)
 {
+	if (ev->button() == Qt::MouseButton::LeftButton
+		&& ev->modifiers() == Qt::CTRL)
+	{
+		float scalex = float(width()) / float(dfusion::KINECT_WIDTH);
+		float scaley = float(height()) / float(dfusion::KINECT_HEIGHT);
+		float scale = std::min(scalex, scaley);
+		float w1 = float(dfusion::KINECT_WIDTH * scale);
+		float h1 = float(dfusion::KINECT_HEIGHT * scale);
+
+		float l = (width() - w1) / 2; 
+		float t = (height() - h1) / 2;
+		g_dataholder.m_dparam.view_click_vert_xy[0] = std::lroundf((ev->pos().x()-l)/scale);
+		g_dataholder.m_dparam.view_click_vert_xy[1] = std::lroundf((ev->pos().y()-t)/scale);
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+
 	// clear buttons
 	m_buttons = Qt::NoButton;
 

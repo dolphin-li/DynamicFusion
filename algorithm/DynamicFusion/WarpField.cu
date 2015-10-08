@@ -979,4 +979,43 @@ namespace dfusion
 		cudaSafeCall(cudaGetLastError(), "update_nodes_via_twist");
 	}
 #pragma endregion
+
+#pragma region --getKnnAt
+
+	__global__ void getKnnAtKernel(WarpField::KnnIdx* data, int3 p, cudaTextureObject_t tex)
+	{
+		tex3D(&data[0], tex, p.x, p.y, p.z);
+	}
+
+	WarpField::KnnIdx WarpField::getKnnAt(float3 volumePos)const
+	{
+		if (m_volume == nullptr)
+			throw std::exception("WarpField::getKnnAt(): null pointer");
+		float3 ori = m_volume->getOrigion();
+		float vsz = m_volume->getVoxelSize();
+		float3 p = (volumePos - ori) / vsz;
+		return getKnnAt(make_int3(p.x, p.y, p.z));
+	}
+	WarpField::KnnIdx WarpField::getKnnAt(int3 gridXYZ)const
+	{
+		if (m_volume == nullptr)
+			throw std::exception("WarpField::getKnnAt(): null pointer");
+		int3 res = m_volume->getResolution();
+		int x = gridXYZ.x, y = gridXYZ.y, z = gridXYZ.z;
+		if (x < 0 || y < 0 || z < 0 || x >= res.x || y >= res.y || z >= res.z)
+			return make_ushort4(MaxNodeNum, MaxNodeNum, MaxNodeNum, MaxNodeNum);
+		static DeviceArray<KnnIdx> knn;
+		knn.create(1);
+
+		cudaTextureObject_t tex = bindKnnFieldTexture();
+		getKnnAtKernel << <dim3(1), dim3(1) >> >(knn.ptr(), gridXYZ, tex);
+		cudaSafeCall(cudaGetLastError(), "WarpField::getKnnAtKernel");
+		unBindKnnFieldTexture(tex);
+
+		WarpField::KnnIdx host;
+		cudaSafeCall(cudaMemcpy(&host, knn.ptr(), sizeof(KnnIdx), cudaMemcpyDeviceToHost),
+			"WarpField::getKnnAtKernel, post copy");
+		return host;
+	}
+#pragma endregion
 }

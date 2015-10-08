@@ -9,6 +9,7 @@
 #include "glsl\glsl.h"
 #include "glsl\glslprogram.h"
 #include "WarpField.h"
+#include "TsdfVolume.h"
 
 #define CHECK_GL_ERROR(str) {\
 	GLenum err = glGetError(); \
@@ -646,7 +647,9 @@ namespace dfusion
 		const Param& param, const WarpField* warpField, 
 		const MapArr* vmap_live, const MapArr* vmap_warp,
 		const MapArr* nmap_live, const MapArr* nmap_warp, 
-		GpuMesh* canoMesh)
+		GpuMesh* canoMesh, 
+		const float3* canoPosActive,
+		const WarpField::KnnIdx* knnIdxActiveView)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
@@ -771,6 +774,32 @@ namespace dfusion
 					glVertexPointer(3, GL_FLOAT, sizeof(float4),
 						(void*)(id*sizeof(float4)));
 					glDrawArrays(GL_POINTS, 0, 1);
+				}
+
+				if (knnIdxActiveView && canoPosActive)
+				{
+					float3 canoPos = *canoPosActive;
+					const WarpField::IdxType *knnPtr = (const WarpField::IdxType *)knnIdxActiveView;
+
+					// render knn
+					g_shader_node->setUniform1f("pointRadius", 0.008);
+					glColor3f(1, 0, 1);
+					for (int k = 0; k < WarpField::KnnK; k++)
+					{
+						if (knnPtr[k] < warpField->getNumNodesInLevel(0))
+						{
+							glVertexPointer(3, GL_FLOAT, sizeof(float4),
+								(void*)(knnPtr[k] * sizeof(float4)));
+							glDrawArrays(GL_POINTS, 0, 1);
+						}
+					}
+
+					// render vert
+					g_shader_node->setUniform1f("pointRadius", 0.006);
+					glColor3f(1, 0, 0);
+					glBegin(GL_POINTS);
+					glVertex3f(canoPos.x, canoPos.y, canoPos.z);
+					glEnd();
 				}
 
 				g_shader_node->end();
