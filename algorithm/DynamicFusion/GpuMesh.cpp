@@ -769,7 +769,7 @@ namespace dfusion
 				if (showColorVert)
 				{
 					int id = warpField->getActiveVisualizeNodeId();
-					g_shader_node->setUniform1f("pointRadius", 0.008);
+					g_shader_node->setUniform1f("pointRadius", 0.0051);
 					glColor3f(1, 0, 1);
 					glVertexPointer(3, GL_FLOAT, sizeof(float4),
 						(void*)(id*sizeof(float4)));
@@ -781,8 +781,9 @@ namespace dfusion
 					float3 canoPos = *canoPosActive;
 					const WarpField::IdxType *knnPtr = (const WarpField::IdxType *)knnIdxActiveView;
 
+					glDisable(GL_DEPTH_TEST);
 					// render knn
-					g_shader_node->setUniform1f("pointRadius", 0.008);
+					g_shader_node->setUniform1f("pointRadius", 0.0051);
 					glColor3f(1, 0, 1);
 					for (int k = 0; k < WarpField::KnnK; k++)
 					{
@@ -795,11 +796,12 @@ namespace dfusion
 					}
 
 					// render vert
-					g_shader_node->setUniform1f("pointRadius", 0.006);
+					g_shader_node->setUniform1f("pointRadius", 0.002);
 					glColor3f(1, 0, 0);
 					glBegin(GL_POINTS);
 					glVertex3f(canoPos.x, canoPos.y, canoPos.z);
 					glEnd();
+					glEnable(GL_DEPTH_TEST);
 				}
 
 				g_shader_node->end();

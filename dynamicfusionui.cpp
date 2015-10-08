@@ -628,7 +628,6 @@ void DynamicFusionUI::on_sbActiveNode_valueChanged(int v)
 	{
 		g_dataholder.m_dparam.view_activeNode_id = v;
 		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
-		printf("active node id: %d\n", v);
 	}
 	catch (std::exception e)
 	{

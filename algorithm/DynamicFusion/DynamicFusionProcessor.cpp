@@ -229,6 +229,7 @@ namespace dfusion
 					knnIdx = m_warpField->getKnnAt(canoPos);
 					knnPtr = &knnIdx;
 					canoPosPtr = &canoPos;
+					printf("knnIdx: %d %d %d %d\n", knnIdx.x, knnIdx.y, knnIdx.z, knnIdx.w);
 				}
 				lastKnn = knnIdx;
 				lastCano = canoPos;
