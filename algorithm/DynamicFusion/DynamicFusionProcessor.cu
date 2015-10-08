@@ -5,12 +5,12 @@
 namespace dfusion
 {
 //// could not understand it in sec. 3.2 of the paper; just ignore it currently.
-//#define ENABLE_ADAPTIVE_FUSION_WEIGHT
+#define ENABLE_ADAPTIVE_FUSION_WEIGHT
 
 	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
 		int x, int y, int z, float3 origion, float voxelSize,
-		float& fusion_weight)
+		float nodeRadius, float& fusion_weight)
 	{
 		Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 		fusion_weight = 0.f;
@@ -24,7 +24,7 @@ namespace dfusion
 		if (knnIdx.x >= WarpField::MaxNodeNum)
 		{
 			dq_blend = Tbx::Dual_quat_cu::identity();
-			fusion_weight = 1.f;
+			fusion_weight = 0.1f;
 		}
 		else
 		{
@@ -62,6 +62,7 @@ namespace dfusion
 			dq_blend.normalize();
 #ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
 			fusion_weight /= float(numK);
+			fusion_weight = nodeRadius / fusion_weight;
 #else
 			fusion_weight = 1.f;
 #endif
@@ -79,6 +80,7 @@ namespace dfusion
 		cudaSurfaceObject_t volumeTex;
 		int3 volume_resolution;
 		float3 origion;
+		float nodeRadius;
 		float voxel_size;
 		float tranc_dist;
 		float max_weight;
@@ -93,11 +95,8 @@ namespace dfusion
 		{
 			float fusion_weight = 0;
 			Tbx::Dual_quat_cu dq = calc_dual_quat_blend_on_voxel(
-				knnTex, nodesDqVwTex, x, y, z, origion, voxel_size, fusion_weight);
-
-#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
-			fusion_weight /= tranc_dist;
-#endif
+				knnTex, nodesDqVwTex, x, y, z, origion, voxel_size, 
+				nodeRadius, fusion_weight);
 
 			float3 cxyz = convert(Rv2c.rotate(dq.transform(Tbx::Point3(x*voxel_size + origion.x,
 				y*voxel_size+origion.y, z*voxel_size+origion.z))) + tv2c);
@@ -105,7 +104,7 @@ namespace dfusion
 			float3 uvd = intr.xyz2uvd(cxyz);
 			int2 coo = make_int2(__float2int_rn(uvd.x), __float2int_rn(uvd.y));
 
-			if (coo.x >= 0 && coo.x < depth.cols && coo.y >= 0 && coo.y < depth.rows)
+			if (uvd.x >= 0 && uvd.x < depth.cols && uvd.y >= 0 && uvd.y < depth.rows)
 			{
 				float depthVal = tex2D(g_depth_tex, coo.x, coo.y)*0.001f;
 				float3 dxyz = intr.uvd2xyz(make_float3(coo.x, coo.y, depthVal));
@@ -153,6 +152,7 @@ namespace dfusion
 			divUp(m_volume->getResolution().z, block.z<<3));
 
 		// bind src to texture
+		g_depth_tex.filterMode = cudaFilterModePoint;
 		size_t offset;
 		cudaChannelFormatDesc desc = cudaCreateChannelDesc<depthtype>();
 		cudaBindTexture2D(&offset, &g_depth_tex, m_depth_input.ptr(), &desc, 
@@ -164,6 +164,7 @@ namespace dfusion
 		fs.volumeTex = m_volume->bindSurface();
 		fs.volume_resolution = m_volume->getResolution();
 		fs.origion = m_volume->getOrigion();
+		fs.nodeRadius = m_param.warp_radius_search_epsilon;
 		fs.voxel_size = m_volume->getVoxelSize();
 		fs.tranc_dist = m_volume->getTsdfTruncDist();
 		fs.max_weight = m_param.fusion_max_weight;

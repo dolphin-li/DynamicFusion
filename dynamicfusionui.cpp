@@ -9,7 +9,7 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	m_frameIndex = 0;
 	m_view_normalmap = false;
 	m_lastState = DynamicFusionUI::Live;
-	m_state = DynamicFusionUI::Live;
+	m_state = DynamicFusionUI::Pause;
 	m_renderType = RenderRayCasting;
 	updateUiFromParam();
 
@@ -244,7 +244,7 @@ void DynamicFusionUI::updateDynamicFusion()
 	ui.widgetErrMap->setRayCastingShadingImage(g_dataholder.m_errorMap_shading);
 
 	// debug, save rendered image
-#if 0
+#if 1
 	// warp view
 	std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
 		*g_dataholder.m_warpedview_shading.cols());

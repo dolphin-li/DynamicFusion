@@ -289,7 +289,7 @@ namespace dfusion
 		// 0. create visibility map of the current warp view
 		m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
 		m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
-		return;
+
 		CpuGaussNewton solver;
 
 		// icp iteration

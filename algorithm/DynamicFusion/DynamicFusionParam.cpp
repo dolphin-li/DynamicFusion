@@ -34,7 +34,7 @@ namespace dfusion
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 128;
-		fusion_lambda = 200;
+		fusion_lambda = 3000;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_nonRigidICP_maxIter = 3;
@@ -49,8 +49,8 @@ namespace dfusion
 		* visualization related
 		* ******************************************************/
 		view_show_mesh = true;
-		view_show_nodes = true;
-		view_show_graph = true;
+		view_show_nodes = false;
+		view_show_graph = false;
 		view_show_corr = false;
 		view_show_graph_level = 0;
 		view_errorMap_range = 0.01;

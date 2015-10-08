@@ -9,6 +9,7 @@ namespace dfusion
 #define USE_ROBUST_HUBER_PENALTY
 #define USE_ROBUST_TUKEY_PENALTY
 #define ENABLE_ANTIPODALITY
+#define ENABLE_DIALG_HESSIAN
 	inline float3 read_float3_from_4(float4 p)
 	{
 		return make_float3(p.x, p.y, p.z);
@@ -27,6 +28,7 @@ namespace dfusion
 		};
 		typedef float real;
 		typedef Eigen::Matrix<real, -1, 1> Vec;
+		typedef Eigen::Matrix<real, 6, 6> Mat6;
 		typedef Eigen::SparseMatrix<real, Eigen::ColMajor> SpMat;
 
 		// 6-twist of exponential map of dual-quaternion
@@ -54,7 +56,7 @@ namespace dfusion
 		Tbx::Transfo Tlw_;
 		std::vector<Eigen::Triplet<real>> m_cooSys;
 
-		void checkNanAndInf(const Vec& vec)
+		void checkNanAndInf(const Vec& vec, const Vec& fx, const Vec& g)
 		{
 			for (size_t i = 0; i < vec.size(); i++)
 			{
@@ -62,6 +64,8 @@ namespace dfusion
 				{
 					printf("warning: nan/inf found: %d=%f\n", i, vec[i]);
 					dumpSparseMatrix(jac_, "D:/ana.txt");
+					dumpVec(fx, "D:/fx.txt");
+					dumpVec(g, "D:/g.txt");
 					system("pause");
 				}
 			}
@@ -116,19 +120,15 @@ namespace dfusion
 			Vec fx(jac_.rows()), h(jac_.cols()), g(jac_.cols()), fx1(jac_.rows());
 
 			//define structure of J'J
-			JacTJac = jact_ * jac_;
+			CalcHessian(JacTJac);
 			Eigen::SimplicialCholesky<SpMat> solver;
 			solver.analyzePattern(JacTJac.triangularView<Eigen::Lower>());
-			Eigen::Diagonal<SpMat> diag(JacTJac);
 
 			//Gauss-Newton Optimization
 			for (int iter = 0; iter<nMaxIter; iter++)
 			{
 				CalcJacobiFunc(xStart, jac_, jact_);	//J
-				JacTJac = jact_ * jac_;//J'J
-
-				// ldp test: add small reg value to prevent singular
-				diag += Vec(diag.size()).setConstant(param_.fusion_GaussNewton_diag_regTerm);
+				CalcHessian(JacTJac);
 
 				CalcEnergyFunc(xStart, fx);	//f
 
@@ -137,7 +137,7 @@ namespace dfusion
 				solver.factorize(JacTJac.triangularView<Eigen::Lower>());
 				h = solver.solve(g);
 
-				checkNanAndInf(h);
+				checkNanAndInf(h, fx, g);
 
 				real normv = xStart.norm();
 				real old_energy = evaluateTotalEnergy(xStart);
@@ -547,7 +547,7 @@ namespace dfusion
 
 			// reg term
 			int nRow = nPixel_rows_;
-			const float lambda = sqrt(param_.fusion_lambda);
+			const float lambda = param_.fusion_lambda;
 			for (int iNode = 0; iNode < nNodes; iNode++)
 			{
 				KnnIdx knn = nodesKnn_[iNode];
@@ -563,16 +563,18 @@ namespace dfusion
 					{
 						Tbx::Vec3 rj(x[knnNodeId * 6], x[knnNodeId * 6 + 1], x[knnNodeId * 6 + 2]);
 						Tbx::Vec3 tj(x[knnNodeId * 6 + 3], x[knnNodeId * 6 + 4], x[knnNodeId * 6 + 5]);
-						real alpha_ij = sqrt(max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w));
+						real alpha_ij = max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w);
 
 						Tbx::Dual_quat_cu dqj;
 						dqj.from_twist(rj, tj);
 						Tbx::Vec3 vj = convert(read_float3_from_4(nodesVw_[knnNodeId]));
 						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 						val = reg_term_penalty(val);
-						f[nRow++] = val.x * lambda * alpha_ij;
-						f[nRow++] = val.y * lambda * alpha_ij;
-						f[nRow++] = val.z * lambda * alpha_ij;
+
+						real ww = sqrt(lambda * alpha_ij);
+						f[nRow++] = val.x * ww;
+						f[nRow++] = val.y * ww;
+						f[nRow++] = val.z * ww;
 					}
 				}
 			}// end for iNode
@@ -635,7 +637,7 @@ namespace dfusion
 
 			// reg term
 			int nRow = nPixel_rows_;
-			const float lambda = sqrt(param_.fusion_lambda);
+			const float lambda = param_.fusion_lambda;
 			for (int iNode = 0; iNode < nNodes; iNode++)
 			{
 				KnnIdx knn = nodesKnn_[iNode];
@@ -651,7 +653,7 @@ namespace dfusion
 					{
 						Tbx::Vec3 rj(x[knnNodeId * 6], x[knnNodeId * 6 + 1], x[knnNodeId * 6 + 2]);
 						Tbx::Vec3 tj(x[knnNodeId * 6 + 3], x[knnNodeId * 6 + 4], x[knnNodeId * 6 + 5]);
-						real alpha_ij = sqrt(max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w));
+						real alpha_ij = max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w);
 
 						Tbx::Dual_quat_cu dqj;
 						dqj.from_twist(rj, tj);
@@ -663,6 +665,50 @@ namespace dfusion
 			}// end for iNode
 
 			return total_energy;
+		}
+
+		void CalcHessian(SpMat& H)
+		{
+#ifdef ENABLE_DIALG_HESSIAN
+			// reg term, use full representation
+			SpMat jacReg = jac_.bottomRows(jac_.rows() - nPixel_rows_).eval();
+			H = jacReg.transpose()*jacReg;
+
+			// data term, only compute diag block
+			SpMat jacData = jac_.topRows(nPixel_rows_).eval();
+			const int nNodes = jacData.cols() / 6;
+
+			std::vector<Mat6> blocks(nNodes);
+			for (int iNode = 0; iNode<nNodes; iNode++)
+			{
+				SpMat jacDataBlock = jacData.middleCols(iNode * 6, 6).eval();
+				blocks[iNode] = (jacDataBlock.transpose() * jacDataBlock).eval().toDense();
+			}// end for ix
+
+			// traverse H to adding blocks on
+			for (int row = 0; row < H.outerSize(); row ++)
+			{
+				int rs = H.outerIndexPtr()[row];
+				int re = H.outerIndexPtr()[row + 1];
+				int iNode = row / 6;
+				int blockRowShift = row - iNode*6;
+				const Mat6& block = blocks[iNode];
+				for (int c = rs; c < re; c++)
+				{
+					int col = H.innerIndexPtr()[c];
+					int blockColShift = col - iNode*6;
+					if (blockColShift < 6 && blockColShift >= 0)
+					{
+						H.valuePtr()[c] += block(blockRowShift, blockColShift);
+					}
+				}
+			}
+#else
+			H = jact_ * jac_;
+#endif
+			// ldp test: add small reg value to prevent singular
+			Eigen::Diagonal<SpMat> diag(H);
+			diag += Vec(diag.size()).setConstant(param_.fusion_GaussNewton_diag_regTerm);
 		}
 
 		int FindColIndices(const SpMat& A, int cid, int* vidx, int* ridx)
@@ -798,7 +844,7 @@ namespace dfusion
 			// Reg term    ======================================================================
 			int nRow = nPixel_rows_;
 			int cooPos = nPixel_cooPos_;
-			const float lambda = sqrt(param_.fusion_lambda);
+			const float lambda = param_.fusion_lambda;
 			for (int iNode = 0; iNode < nNodes; iNode++)
 			{
 				KnnIdx knn = nodesKnn_[iNode];
@@ -814,7 +860,7 @@ namespace dfusion
 					{
 						Tbx::Vec3 rj(pTest[knnNodeId * 6], pTest[knnNodeId * 6 + 1], pTest[knnNodeId * 6 + 2]);
 						Tbx::Vec3 tj(pTest[knnNodeId * 6 + 3], pTest[knnNodeId * 6 + 4], pTest[knnNodeId * 6 + 5]);
-						real alpha_ij = sqrt(max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w));
+						real alpha_ij = max(1 / nodesVw_[iNode].w, 1 / nodesVw_[knnNodeId].w);
 						Tbx::Dual_quat_cu dqj;
 						dqj.from_twist(rj, tj);
 						Tbx::Point3 vj(convert(read_float3_from_4(nodesVw_[knnNodeId])));
@@ -835,8 +881,9 @@ namespace dfusion
 							}
 
 							// partial_psi_partial_alpha
-							Tbx::Vec3 p_psi_p_alphai = p_h_p_alphai * lambda * alpha_ij;
-							Tbx::Vec3 p_psi_p_alphaj = p_h_p_alphaj * lambda * alpha_ij;
+							real ww = sqrt(lambda * alpha_ij);
+							Tbx::Vec3 p_psi_p_alphai = p_h_p_alphai * ww;
+							Tbx::Vec3 p_psi_p_alphaj = p_h_p_alphaj * ww;
 							for (int ixyz = 0; ixyz < 3; ixyz++)
 							{
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
@@ -988,6 +1035,18 @@ namespace dfusion
 				int re = A.outerIndexPtr()[r+1];
 				for (int c = rs; c < re; c++)
 					fprintf(pFile, "%d %d %f\n", r, A.innerIndexPtr()[c], A.valuePtr()[c]);
+			}
+			fclose(pFile);
+		}
+
+		static void dumpVec(const Vec& A, const char* filename)
+		{
+			FILE* pFile = fopen(filename, "w");
+			if (!pFile)
+				throw std::exception("dumpVec: create file failed!");
+			for (int r = 0; r < A.size(); r++)
+			{
+				fprintf(pFile, "%f\n", A[r]);
 			}
 			fclose(pFile);
 		}
