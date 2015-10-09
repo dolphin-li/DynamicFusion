@@ -269,7 +269,8 @@ namespace dfusion
 	void DynamicFusionProcessor::shadingCurrentErrorMap(ColorMap& img, float errorMapRange)
 	{
 		computeErrorMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp,
-			img, m_kinect_intr, errorMapRange);
+			img, m_kinect_intr, errorMapRange, m_param.fusion_nonRigid_distThre,
+			m_param.fusion_nonRigid_angleThreSin);
 	}
 
 	const WarpField* DynamicFusionProcessor::getWarpField()const
@@ -290,6 +291,9 @@ namespace dfusion
 		m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
 		m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
 
+		if (!m_param.fusion_enable_nonRigidSolver)
+			return;
+
 		CpuGaussNewton solver;
 
 		// icp iteration
@@ -302,7 +306,7 @@ namespace dfusion
 #if 1
 			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
-			solver.solve();
+			solver.solve(m_param.fusion_post_rigid_factor);
 #endif
 
 			// 3. update warped mesh and render for visiblity

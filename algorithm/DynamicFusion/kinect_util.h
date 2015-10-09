@@ -51,5 +51,5 @@ namespace dfusion
 	//
 	void computeErrorMap(const MapArr& vmap_live, const MapArr& nmap_live,
 		const MapArr& vmap_warp, const MapArr& nmap_warp, ColorMap& errMap,
-		Intr intr, float errMap_range);
+		Intr intr, float errMap_range, float distThre, float angleThre_sin);
 }

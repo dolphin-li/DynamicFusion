@@ -848,7 +848,7 @@ namespace dfusion
 #pragma region --error map
 	__global__ void computeErrorMap_kernel(PtrStep<float4> vmap_live, PtrStep<float4> nmap_live, 
 		PtrStep<float4> vmap_warp, PtrStep<float4> nmap_warp, PtrStep<PixelRGBA> errMap, 
-		int cols, int rows, Intr intr, float range)
+		int cols, int rows, Intr intr, float range, float distThre, float angleThre_sin)
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
 		int y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -870,9 +870,14 @@ namespace dfusion
 			float3 vcurr = read_float3_4(vmap_live(ukr.y, ukr.x));
 			if (!isnan(ncurr.x))
 			{
-				float err = abs(dot(nprev, vprev - vcurr));
-				err = min(1.f, err / range);
-				color.r = color.g = color.b = err * 255;
+				float dist = norm(vprev - vcurr);
+				float sine = norm(cross(ncurr, nprev));
+				if (dist <= distThre && sine <= angleThre_sin)
+				{
+					float err = abs(dot(nprev, vprev - vcurr));
+					err = min(1.f, err / range);
+					color.r = color.g = color.b = err * 255;
+				}
 			}
 		}
 
@@ -881,7 +886,7 @@ namespace dfusion
 
 	void computeErrorMap(const MapArr& vmap_live, const MapArr& nmap_live,
 		const MapArr& vmap_warp, const MapArr& nmap_warp, ColorMap& errMap, 
-		Intr intr, float errMap_range)
+		Intr intr, float errMap_range, float distThre, float angleThre_sin)
 	{
 		int r = vmap_live.rows(), c = vmap_live.cols();
 
@@ -898,7 +903,7 @@ namespace dfusion
 		dim3 grid(divUp(c, block.x), divUp(r, block.y));
 		
 		computeErrorMap_kernel << <grid, block >> >(vmap_live, nmap_live, 
-			vmap_warp, nmap_warp, errMap, c, r, intr, errMap_range);
+			vmap_warp, nmap_warp, errMap, c, r, intr, errMap_range, distThre, angleThre_sin);
 		cudaSafeCall(cudaGetLastError(), "computeErrorMap");
 	}
 #pragma endregion

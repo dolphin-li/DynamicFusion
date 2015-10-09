@@ -144,12 +144,20 @@ namespace dfusion
 		{
 			float4 node = nodes[i*3+2];
 
+#if 1
+			Tbx::Dual_quat_cu dq = pack_dual_quat(nodes[i * 3], nodes[i * 3 + 1]);
+			Tbx::Vec3 t = trans * dq.transform(Tbx::Point3(node.x, node.y, node.z));
+			node.x = t.x;
+			node.y = t.y;
+			node.z = t.z; 
+#else
 			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
 				nodesDqVwTex, make_float3(node.x, node.y, node.z), origion, invVoxelSize);
 			Tbx::Vec3 t = trans * dq_blend.transform(Tbx::Point3(node.x, node.y, node.z));
 			node.x = t.x;
 			node.y = t.y;
 			node.z = t.z;
+#endif
 
 			gldata[i] = node;
 

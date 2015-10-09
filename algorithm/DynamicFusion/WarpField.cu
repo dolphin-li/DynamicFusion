@@ -639,7 +639,7 @@ namespace dfusion
 		float vsz = m_volume->getVoxelSize();
 
 		// if 1st frame, then perform whole-volume search, which is slow
-		if (1)//ldp debug //m_lastNumNodes[0] == 0)
+		if (m_lastNumNodes[0] == 0)
 		{
 			m_nodeTree[0]->buildTree(m_nodesQuatTransVw.ptr() + 2, m_numNodes[0], 3);
 			cudaSurfaceObject_t surf = bindKnnFieldSurface();

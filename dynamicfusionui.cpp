@@ -9,7 +9,9 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	m_frameIndex = 0;
 	m_view_normalmap = false;
 	m_lastState = DynamicFusionUI::Live;
-	m_state = DynamicFusionUI::Pause;
+	m_state = DynamicFusionUI::Live;
+	if (g_dataholder.m_dparam.fusion_loading_mode)
+		m_state = DynamicFusionUI::Pause;
 	m_renderType = RenderRayCasting;
 	updateUiFromParam();
 
@@ -167,7 +169,6 @@ void DynamicFusionUI::frameLoading()
 	catch (std::exception e)
 	{
 		std::cout << e.what() << std::endl;
-		setState(DynamicFusionUI::Pause);
 	}
 }
 
@@ -244,53 +245,51 @@ void DynamicFusionUI::updateDynamicFusion()
 	ui.widgetErrMap->setRayCastingShadingImage(g_dataholder.m_errorMap_shading);
 
 	// ldp debug, save rendered image
-#if 1
-	// warp view
-	std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
-		*g_dataholder.m_warpedview_shading.cols());
-	g_dataholder.m_warpedview_shading.download(tmpMap.data(),
-		g_dataholder.m_warpedview_shading.cols()*sizeof(uchar4));
-	QImage img = QImage(g_dataholder.m_warpedview_shading.cols(),
-		g_dataholder.m_warpedview_shading.rows(), QImage::Format::Format_ARGB32);
-	for (int y = 0; y < g_dataholder.m_warpedview_shading.rows(); y++)
-	for (int x = 0; x < g_dataholder.m_warpedview_shading.cols(); x++)
+	if (g_dataholder.m_dparam.fusion_dumping_each_frame)
 	{
-		uchar4 v = tmpMap[y*g_dataholder.m_warpedview_shading.cols() + x];
-		img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+		// warp view
+		std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
+			*g_dataholder.m_warpedview_shading.cols());
+		g_dataholder.m_warpedview_shading.download(tmpMap.data(),
+			g_dataholder.m_warpedview_shading.cols()*sizeof(uchar4));
+		QImage img = QImage(g_dataholder.m_warpedview_shading.cols(),
+			g_dataholder.m_warpedview_shading.rows(), QImage::Format::Format_ARGB32);
+		for (int y = 0; y < g_dataholder.m_warpedview_shading.rows(); y++)
+		for (int x = 0; x < g_dataholder.m_warpedview_shading.cols(); x++)
+		{
+			uchar4 v = tmpMap[y*g_dataholder.m_warpedview_shading.cols() + x];
+			img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+		}
+		int fid = g_dataholder.m_processor.getFrameId();
+
+		QString name;
+		name.sprintf("data/screenshots/%06d_%d_%d_%d_%d.png", fid,
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
+		img.save(name);
+
+		// error map
+		img = QImage(g_dataholder.m_errorMap_shading.cols(),
+			g_dataholder.m_errorMap_shading.rows(), QImage::Format::Format_ARGB32);
+		g_dataholder.m_errorMap_shading.download(tmpMap.data(),
+			g_dataholder.m_errorMap_shading.cols()*sizeof(uchar4));
+		for (int y = 0; y < g_dataholder.m_errorMap_shading.rows(); y++)
+		for (int x = 0; x < g_dataholder.m_errorMap_shading.cols(); x++)
+		{
+			uchar4 v = tmpMap[y*g_dataholder.m_errorMap_shading.cols() + x];
+			img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+		}
+
+		QString name1;
+		name1.sprintf("data/screenshots/e_%06d_%d_%d_%d_%d.png", fid,
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
+		img.save(name1);
 	}
-	int fid = g_dataholder.m_processor.getFrameId();
-
-	QString name;
-	name.sprintf("data/screenshots/%06d_%d_%d_%d_%d.png", fid,
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
-	img.save(name);
-
-	// error map
-	img = QImage(g_dataholder.m_errorMap_shading.cols(),
-		g_dataholder.m_errorMap_shading.rows(), QImage::Format::Format_ARGB32);
-	g_dataholder.m_errorMap_shading.download(tmpMap.data(),
-		g_dataholder.m_errorMap_shading.cols()*sizeof(uchar4));
-	for (int y = 0; y < g_dataholder.m_errorMap_shading.rows(); y++)
-	for (int x = 0; x < g_dataholder.m_errorMap_shading.cols(); x++)
-	{
-		uchar4 v = tmpMap[y*g_dataholder.m_errorMap_shading.cols() + x];
-		img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
-	}
-
-	QString name1;
-	name1.sprintf("data/screenshots/e_%06d_%d_%d_%d_%d.png", fid,
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
-	img.save(name1);
-#endif
-	// end debug
-
-
 }
 
 void DynamicFusionUI::on_actionPause_triggered()

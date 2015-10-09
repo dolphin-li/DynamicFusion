@@ -64,6 +64,12 @@ namespace dfusion
 		float fusion_nonRigid_angleThreSin;
 		int fusion_GaussNewton_maxIter;
 		float fusion_GaussNewton_diag_regTerm;
+		bool fusion_post_rigid_factor;
+
+		bool fusion_dumping_each_frame;
+		bool fusion_enable_nonRigidSolver;
+
+		bool fusion_loading_mode;
 
 		/** *****************************************************
 		* visualization related

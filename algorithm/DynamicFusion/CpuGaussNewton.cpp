@@ -7,11 +7,13 @@
 namespace dfusion
 {
 //#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+#define SHOW_LAST_NODE_INFO
 
 #define USE_ROBUST_HUBER_PENALTY
 #define USE_ROBUST_TUKEY_PENALTY
 #define ENABLE_ANTIPODALITY
 #define ENABLE_DIALG_HESSIAN
+#define ENABLE_DOUBLE_EDGE
 	inline float3 read_float3_from_4(float4 p)
 	{
 		return make_float3(p.x, p.y, p.z);
@@ -21,6 +23,10 @@ namespace dfusion
 		return sqrt(a.x*a.x + a.y*a.y + a.z*a.z);
 	}
 
+	inline WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
+	{
+		return ((WarpField::IdxType*)(&knn))[k];
+	}
 
 	typedef WarpField::KnnIdx KnnIdx;
 	struct EigenContainter
@@ -28,7 +34,7 @@ namespace dfusion
 		enum{
 			KnnK = WarpField::KnnK
 		};
-		typedef float real;
+		typedef double real;
 		typedef Eigen::Matrix<real, -1, 1> Vec;
 		typedef Eigen::Matrix<real, 6, 6> Mat6;
 		typedef Eigen::SparseMatrix<real, Eigen::ColMajor> SpMat;
@@ -64,7 +70,7 @@ namespace dfusion
 			{
 				if (isnan(vec[i]) || isinf(vec[i]))
 				{
-					printf("warning: nan/inf found: %d=%f\n", i, vec[i]);
+					printf("warning: nan/inf found: %d=%f; pixelRow: %d\n", i, vec[i], nPixel_rows_);
 					dumpSparseMatrix(jac_, "D:/ana.txt");
 					dumpSparseMatrix(H, "D:/H.txt");
 					dumpVec(fx, "D:/fx.txt");
@@ -75,12 +81,37 @@ namespace dfusion
 			}
 		}
 
+		void checkNanAndInf(const SpMat& H)
+		{
+			for (int r = 0; r < H.outerSize(); r++)
+			{
+				int rs = H.outerIndexPtr()[r];
+				int re = H.outerIndexPtr()[r + 1];
+				for (int c = rs; c < re; c++)
+				{
+					real v = H.valuePtr()[c];
+					if (isnan(v) || isinf(v))
+					{
+						printf("warning: nan/inf found: %d %d=%f; pixelRow: %d\n", r, 
+							H.innerIndexPtr()[c], v, nPixel_rows_);
+						dumpSparseMatrix(jac_, "D:/ana.txt");
+						dumpSparseMatrix(H, "D:/H.txt");
+						system("pause");
+					}
+				}
+			}
+		}
+
 		void checkLinearSolver(const SpMat& A, const Vec& x, const Vec& b)
 		{
 			real err = (A*x - b).norm() / (b.norm() + 1e-5);
-			if (err > 1e-2)
+			if (err > 1e-1)
 			{
 				printf("linear solver error: %f = %f/%f\n", err, (A*x - b).norm(), b.norm());
+				dumpSparseMatrix(jac_, "D:/ana.txt");
+				dumpSparseMatrix(A, "D:/H.txt");
+				dumpVec(x, "D:/x.txt");
+				dumpVec(b, "D:/g.txt");
 				throw std::exception("linear solver failed");
 			}
 		}
@@ -133,36 +164,34 @@ namespace dfusion
 			SpMat JacTJac;
 			Vec fx(jac_.rows()), h(jac_.cols()), g(jac_.cols()), fx1(jac_.rows());
 
-			CalcHessian(JacTJac);
-			Eigen::SparseLU<SpMat> solver(JacTJac);
-
 			//Gauss-Newton Optimization
 			for (int iter = 0; iter<nMaxIter; iter++)
 			{
 				CalcJacobiFunc(xStart, jac_, jact_);	//J
 				CalcHessian(JacTJac);
-
 				CalcEnergyFunc(xStart, fx);	//f
 
 				//solve: J'J h =  - J' f(x)
 				g = jact_ * (-fx);
-				solver.factorize(JacTJac);
+				checkNanAndInf(JacTJac);
+				Eigen::SparseLU<SpMat> solver(JacTJac);
+				solver.compute(JacTJac);
 				h = solver.solve(g);
 
 				checkNanAndInf(h, fx, g, JacTJac);
 				checkLinearSolver(JacTJac, h, g);
 
-				real normv = xStart.norm();
 				real old_energy = evaluateTotalEnergy(xStart);
 				real new_energy = 0;
 				real h_0 = h[0];
+				real normv = xStart.norm();
 				for (real alpha = 1; alpha > 1e-15; alpha *= 0.5)
 				{
 					Vec x = xStart + h;
 					new_energy = evaluateTotalEnergy(x);
 					if (new_energy > old_energy)
 					{
-						h = h * 0.5;
+						h = h * 0.618;
 					}
 					if (new_energy < old_energy)
 					{
@@ -434,11 +463,6 @@ namespace dfusion
 			return T;
 		}
 
-		inline WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)const
-		{
-			return ((WarpField::IdxType*)(&knn))[k];
-		}
-
 		void DefineJacobiStructure(SpMat& jac, SpMat& jact)
 		{
 			enum {VarPerNode = 6};
@@ -497,6 +521,14 @@ namespace dfusion
 							m_cooSys.push_back(Eigen::Triplet<real>(nRow, iNode * VarPerNode + t, 0));
 							m_cooSys.push_back(Eigen::Triplet<real>(nRow, knnNodeId * VarPerNode + t, 0));
 						}
+#ifdef ENABLE_DOUBLE_EDGE
+						for (int ixyz = 0; ixyz < 3; ixyz++, nRow++)
+						for (int t = 0; t < VarPerNode; t++)
+						{
+							m_cooSys.push_back(Eigen::Triplet<real>(nRow, iNode * VarPerNode + t, 0));
+							m_cooSys.push_back(Eigen::Triplet<real>(nRow, knnNodeId * VarPerNode + t, 0));
+						}
+#endif
 					}
 				}
 			}// end for iNode
@@ -507,7 +539,7 @@ namespace dfusion
 			jact = jac.transpose();
 		}
 
-		void CalcEnergyFunc(const Eigen::VectorXf& x, Eigen::VectorXf& f)const
+		void CalcEnergyFunc(const Vec& x, Vec& f)const
 		{
 			int nNodes = x.size() / 6;
 
@@ -565,6 +597,7 @@ namespace dfusion
 			{
 				KnnIdx knn = nodesKnn_[iNode];
 				Tbx::Dual_quat_cu dqi;
+				Tbx::Vec3 vi = convert(read_float3_from_4(nodesVw_[iNode]));
 				Tbx::Vec3 ri(x[iNode * 6], x[iNode * 6 + 1], x[iNode * 6 + 2]);
 				Tbx::Vec3 ti(x[iNode * 6 + 3], x[iNode * 6 + 4], x[iNode * 6 + 5]);
 				dqi.from_twist(ri, ti);
@@ -588,12 +621,20 @@ namespace dfusion
 						f[nRow++] = val.x * ww;
 						f[nRow++] = val.y * ww;
 						f[nRow++] = val.z * ww;
+#ifdef ENABLE_DOUBLE_EDGE
+						Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
+						val1 = reg_term_penalty(val1);
+
+						f[nRow++] = val1.x * ww;
+						f[nRow++] = val1.y * ww;
+						f[nRow++] = val1.z * ww;
+#endif
 					}
 				}
 			}// end for iNode
 		}
 
-		real evaluateTotalEnergy(const Eigen::VectorXf& x)const
+		real evaluateTotalEnergy(const Vec& x)const
 		{
 			int nNodes = x.size() / 6;
 
@@ -655,6 +696,7 @@ namespace dfusion
 			{
 				KnnIdx knn = nodesKnn_[iNode];
 				Tbx::Dual_quat_cu dqi;
+				Tbx::Vec3 vi = convert(read_float3_from_4(nodesVw_[iNode]));
 				Tbx::Vec3 ri(x[iNode * 6], x[iNode * 6 + 1], x[iNode * 6 + 2]);
 				Tbx::Vec3 ti(x[iNode * 6 + 3], x[iNode * 6 + 4], x[iNode * 6 + 5]);
 				dqi.from_twist(ri, ti);
@@ -673,6 +715,10 @@ namespace dfusion
 						Tbx::Vec3 vj = convert(read_float3_from_4(nodesVw_[knnNodeId]));
 						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 						total_energy += reg_term_energy(val) * lambda * alpha_ij;
+#ifdef ENABLE_DOUBLE_EDGE
+						Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
+						total_energy += reg_term_energy(val1) * lambda * alpha_ij;
+#endif
 					}
 				}
 			}// end for iNode
@@ -728,8 +774,8 @@ namespace dfusion
 			H = jact_ * jac_;
 #endif
 			// ldp test: add small reg value to prevent singular
-			//Eigen::Diagonal<SpMat> diag(H);
-			//diag += Vec(diag.size()).setConstant(param_.fusion_GaussNewton_diag_regTerm);
+			Eigen::Diagonal<SpMat> diag(H);
+			diag += Vec(diag.size()).setConstant(param_.fusion_GaussNewton_diag_regTerm);
 		}
 
 		int FindColIndices(const SpMat& A, int cid, int* vidx, int* ridx)
@@ -744,22 +790,22 @@ namespace dfusion
 			return k;
 		}
 
-		void CalcJacobiFunc(const Eigen::VectorXf& pTest, SpMat& jac, SpMat& jact)
+		void CalcJacobiFunc(const Vec& pTest, SpMat& jac, SpMat& jact)
 		{
 			//CalcJacobiFuncNumeric(pTest, jac, jact);
 			CalcJacobiFuncAnalytic(pTest, jac, jact);
 #if 0
 			// debug
 			CalcJacobiFuncNumeric(pTest, jac, jact);
-			dumpSparseMatrix(jac_, "D:/num.txt");
+			dumpSparseMatrix(jac, "D:/num.txt");
 			CalcJacobiFuncAnalytic(pTest, jac, jact);
-			dumpSparseMatrix(jac_, "D:/ana.txt");
+			dumpSparseMatrix(jac, "D:/ana.txt");
 			system("pause");
 			// end debug
 #endif
 		}
 
-		void CalcJacobiFuncAnalytic(const Eigen::VectorXf& pTest, SpMat& jac, SpMat& jact)
+		void CalcJacobiFuncAnalytic(const Vec& pTest, SpMat& jac, SpMat& jact)
 		{
 			enum { VarPerNode = 6 };
 			const int nNodes = x_.size() / 6;
@@ -802,8 +848,9 @@ namespace dfusion
 					}// end if (knnNodeId < nNodes)
 				}// ebd fir knnK
 
-				if (dq.get_non_dual_part().norm() == 0)
-					printf("warning: non-covered pixel: %d\n", iPixel);
+				if (dq.get_non_dual_part().norm() == std::numeric_limits<float>::epsilon())
+					printf("warning: non-covered pixel: %d %f\n", iPixel, 
+					dq.get_non_dual_part().norm());
 
 				Tbx::Dual_quat_cu dq_bar = dq;
 				real norm_dq_bar = dq_bar.get_non_dual_part().norm();
@@ -854,6 +901,26 @@ namespace dfusion
 
 							real p_f_p_alphak = trace_AtB(p_f_p_T, p_T_p_alphak);
 
+							// debug, check nan
+							if (isnan(p_f_p_alphak) || isinf(p_f_p_alphak))
+							{
+								printf("warning: nan/inf found: %d %d,%d = %f\n", 
+									nRow, knnNodeId, ialpha, p_f_p_alphak);
+								printf("v: %f %f %f\n", v.x, v.y, v.z);
+								printf("n: %f %f %f\n", n.x, n.y, n.z);
+								printf("vl: %f %f %f\n", vl.x, vl.y, vl.z);
+								printf("dq_bar: %f %f %f %f\n", dq_bar.get_non_dual_part().w(),
+									dq_bar.get_non_dual_part().i(), dq_bar.get_non_dual_part().j(), 
+									dq_bar.get_non_dual_part().k());
+								printf("w: %f %f %f %f\n", wk[0], wk[1], wk[2], wk[3]);
+								printf("p_f_p_T:\n");
+								p_f_p_T.print();
+								printf("p_T_p_alphak:\n");
+								p_T_p_alphak.print();
+								printf("p_qk_p_alpha:\n");
+								p_qk_p_alpha.to_transformation().print();
+							}
+
 							// write to jacobi
 							m_cooSys.at(cooPos++) = Eigen::Triplet<real>(nRow,
 								knnNodeId * VarPerNode + ialpha, p_f_p_alphak);
@@ -870,6 +937,7 @@ namespace dfusion
 			{
 				KnnIdx knn = nodesKnn_[iNode];
 				Tbx::Dual_quat_cu dqi;
+				Tbx::Point3 vi(convert(read_float3_from_4(nodesVw_[iNode])));
 				Tbx::Vec3 ri(pTest[iNode * 6], pTest[iNode * 6 + 1], pTest[iNode * 6 + 2]);
 				Tbx::Vec3 ti(pTest[iNode * 6 + 3], pTest[iNode * 6 + 4], pTest[iNode * 6 + 5]);
 				dqi.from_twist(ri, ti);
@@ -892,30 +960,51 @@ namespace dfusion
 							Tbx::Transfo p_Tj_p_alpha = p_SE3_p_alpha_func(dqj, ialpha);
 
 							// partial_h_partial_alpha
-							Tbx::Vec3 p_h_p_alphai, p_h_p_alphaj;
+							Tbx::Vec3 p_h_p_alphai_j, p_h_p_alphaj_j;
+							Tbx::Vec3 p_h_p_alphai_i, p_h_p_alphaj_i;
 							for (int ixyz = 0; ixyz < 3; ixyz++)
 							{
-								p_h_p_alphai[ixyz] = p_Ti_p_alpha(ixyz, 0) * vj.x + p_Ti_p_alpha(ixyz, 1) * vj.y
+								p_h_p_alphai_j[ixyz] = p_Ti_p_alpha(ixyz, 0) * vj.x + p_Ti_p_alpha(ixyz, 1) * vj.y
 									+ p_Ti_p_alpha(ixyz, 2) * vj.z + p_Ti_p_alpha(ixyz, 3);
-								p_h_p_alphaj[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vj.x + p_Tj_p_alpha(ixyz, 1) * vj.y
+								p_h_p_alphaj_j[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vj.x + p_Tj_p_alpha(ixyz, 1) * vj.y
 									+ p_Tj_p_alpha(ixyz, 2) * vj.z + p_Tj_p_alpha(ixyz, 3));
+								p_h_p_alphai_i[ixyz] = p_Ti_p_alpha(ixyz, 0) * vi.x + p_Ti_p_alpha(ixyz, 1) * vi.y
+									+ p_Ti_p_alpha(ixyz, 2) * vi.z + p_Ti_p_alpha(ixyz, 3);
+								p_h_p_alphaj_i[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vi.x + p_Tj_p_alpha(ixyz, 1) * vi.y
+									+ p_Tj_p_alpha(ixyz, 2) * vi.z + p_Tj_p_alpha(ixyz, 3));
 							}
 
 							// partial_psi_partial_alpha
 							real ww = sqrt(lambda * alpha_ij);
-							Tbx::Vec3 p_psi_p_alphai = p_h_p_alphai * ww;
-							Tbx::Vec3 p_psi_p_alphaj = p_h_p_alphaj * ww;
+							Tbx::Vec3 p_psi_p_alphai_j = p_h_p_alphai_j * ww;
+							Tbx::Vec3 p_psi_p_alphaj_j = p_h_p_alphaj_j * ww;
+							Tbx::Vec3 p_psi_p_alphai_i = p_h_p_alphai_i * ww;
+							Tbx::Vec3 p_psi_p_alphaj_i = p_h_p_alphaj_i * ww;
 							for (int ixyz = 0; ixyz < 3; ixyz++)
 							{
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
 									iNode * VarPerNode + ialpha, 
-									p_psi_p_alphai[ixyz]);
+									p_psi_p_alphai_j[ixyz]);
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
 									knnNodeId * VarPerNode + ialpha,
-									p_psi_p_alphaj[ixyz]);
+									p_psi_p_alphaj_j[ixyz]);
 							}
+#ifdef ENABLE_DOUBLE_EDGE
+							for (int ixyz = 0; ixyz < 3; ixyz++)
+							{
+								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + 3 + ixyz,
+									iNode * VarPerNode + ialpha,
+									p_psi_p_alphai_i[ixyz]);
+								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + 3 + ixyz,
+									knnNodeId * VarPerNode + ialpha,
+									p_psi_p_alphaj_i[ixyz]);
+							}
+#endif
 						}// end for ialpha
 						nRow += 3;
+#ifdef ENABLE_DOUBLE_EDGE
+						nRow += 3;
+#endif
 					}// end if knnNode valid
 				}// end for knnK
 			}// end for iNode
@@ -925,7 +1014,7 @@ namespace dfusion
 			jact = jac.transpose();
 		}
 
-		void CalcJacobiFuncNumeric(const Eigen::VectorXf& pTest, SpMat& jac, SpMat& jact)
+		void CalcJacobiFuncNumeric(const Vec& pTest, SpMat& jac, SpMat& jact)
 		{
 			Vec p = pTest;
 			const int nobs = jac.rows();
@@ -1108,10 +1197,15 @@ namespace dfusion
 		m_pWarpField->extract_nodes_info(m_nodesKnn, m_twist, m_vw);
 		m_egc->nodesKnn_.resize(m_nodesKnn.size());
 		m_nodesKnn.download(m_egc->nodesKnn_.data());
-		m_egc->x_.resize(m_twist.size());
-		m_twist.download(m_egc->x_.data());
+
 		m_egc->nodesVw_.resize(m_vw.size());
 		m_vw.download(m_egc->nodesVw_.data());
+
+		std::vector<float> tmpx;
+		m_twist.download(tmpx);
+		m_egc->x_.resize(m_twist.size());
+		for (int i = 0; i < tmpx.size(); i++)
+			m_egc->x_[i] = tmpx[i];
 	}
 
 	void CpuGaussNewton::findCorr(const MapArr& vmap_live, const MapArr& nmap_live,
@@ -1132,6 +1226,67 @@ namespace dfusion
 	{
 		if (m_egc->x_.size() == 0)
 			return;
+#ifdef SHOW_LAST_NODE_INFO
+		printf("last node before opt.: %f %f %f, %f %f %f\n", 
+			m_egc->x_[m_egc->x_.size() - 6],
+			m_egc->x_[m_egc->x_.size() - 5],
+			m_egc->x_[m_egc->x_.size() - 4],
+			m_egc->x_[m_egc->x_.size() - 3],
+			m_egc->x_[m_egc->x_.size() - 2],
+			m_egc->x_[m_egc->x_.size() - 1]);
+#endif
+
+		// pre initialization for all level!=0 nodes
+#if 0
+		std::vector<std::vector<int>> levelNbsToFiner(m_egc->nodesKnn_.size());
+		for (int iNode = 0; iNode < m_egc->nodesKnn_.size(); iNode++)
+		{
+			WarpField::KnnIdx knn = m_egc->nodesKnn_[iNode];
+			for (int k = 0; k < WarpField::KnnK; k++)
+			{
+				if (knn_k(knn, k) < m_egc->nodesKnn_.size())
+					levelNbsToFiner.at(knn_k(knn, k)).push_back(iNode);
+			}
+		}
+
+		// sequential...
+		for (int iNode = 0; iNode < m_egc->nodesKnn_.size(); iNode++)
+		{
+			const std::vector<int>& nbs = levelNbsToFiner.at(iNode);
+			if (nbs.size() == 0)
+				continue;
+
+			Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+			for (int k = 0; k < nbs.size(); k++)
+			{
+				int id = nbs[k]*6;
+				Tbx::Vec3 r(m_egc->x_[id + 0], m_egc->x_[id + 1], m_egc->x_[id + 2]);
+				Tbx::Vec3 t(m_egc->x_[id + 3], m_egc->x_[id + 4], m_egc->x_[id + 5]);
+
+				Tbx::Dual_quat_cu dq;
+				dq.from_twist(r, t);
+				dq_blend = dq_blend + dq;
+			}
+			dq_blend.normalize();
+			Tbx::Vec3 r, t;
+			dq_blend.to_twist(r, t);
+			m_egc->x_[iNode*6 + 0] = r.x;
+			m_egc->x_[iNode*6 + 1] = r.y;
+			m_egc->x_[iNode*6 + 2] = r.z;
+			m_egc->x_[iNode*6 + 3] = t.x;
+			m_egc->x_[iNode*6 + 4] = t.y;
+			m_egc->x_[iNode*6 + 5] = t.z;
+		}
+#ifdef SHOW_LAST_NODE_INFO
+		printf("last node after pre.: %f %f %f, %f %f %f\n",
+			m_egc->x_[m_egc->x_.size() - 6],
+			m_egc->x_[m_egc->x_.size() - 5],
+			m_egc->x_[m_egc->x_.size() - 4],
+			m_egc->x_[m_egc->x_.size() - 3],
+			m_egc->x_[m_egc->x_.size() - 2],
+			m_egc->x_[m_egc->x_.size() - 1]);
+#endif
+#endif
 
 		m_egc->Optimize(m_egc->x_, m_egc->param_.fusion_GaussNewton_maxIter);
 
@@ -1169,8 +1324,22 @@ namespace dfusion
 			m_pWarpField->set_rigidTransform(m_pWarpField->get_rigidTransform()*dq_blend.to_transformation());
 		}
 
+#ifdef SHOW_LAST_NODE_INFO
+		printf("last node after opt.: %f %f %f, %f %f %f\n",
+			m_egc->x_[m_egc->x_.size() - 6],
+			m_egc->x_[m_egc->x_.size() - 5],
+			m_egc->x_[m_egc->x_.size() - 4],
+			m_egc->x_[m_egc->x_.size() - 3],
+			m_egc->x_[m_egc->x_.size() - 2],
+			m_egc->x_[m_egc->x_.size() - 1]);
+#endif
 
-		m_twist.upload(m_egc->x_.data(), m_egc->x_.size());
+
+		std::vector<float> tmpx(m_egc->x_.size());
+		for (int i = 0; i < tmpx.size(); i++)
+			tmpx[i] = m_egc->x_[i];
+
+		m_twist.upload(tmpx.data(), m_egc->x_.size());
 		m_pWarpField->update_nodes_via_twist(m_twist);
 	}
 }
