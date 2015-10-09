@@ -6,6 +6,8 @@
 #include "ldpdef.h"
 namespace dfusion
 {
+//#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+
 #define USE_ROBUST_HUBER_PENALTY
 #define USE_ROBUST_TUKEY_PENALTY
 #define ENABLE_ANTIPODALITY
@@ -56,7 +58,7 @@ namespace dfusion
 		Tbx::Transfo Tlw_;
 		std::vector<Eigen::Triplet<real>> m_cooSys;
 
-		void checkNanAndInf(const Vec& vec, const Vec& fx, const Vec& g)
+		void checkNanAndInf(const Vec& vec, const Vec& fx, const Vec& g, const SpMat& H)
 		{
 			for (size_t i = 0; i < vec.size(); i++)
 			{
@@ -64,10 +66,22 @@ namespace dfusion
 				{
 					printf("warning: nan/inf found: %d=%f\n", i, vec[i]);
 					dumpSparseMatrix(jac_, "D:/ana.txt");
+					dumpSparseMatrix(H, "D:/H.txt");
 					dumpVec(fx, "D:/fx.txt");
 					dumpVec(g, "D:/g.txt");
+					dumpVec(vec, "D:/x.txt");
 					system("pause");
 				}
+			}
+		}
+
+		void checkLinearSolver(const SpMat& A, const Vec& x, const Vec& b)
+		{
+			real err = (A*x - b).norm() / (b.norm() + 1e-5);
+			if (err > 1e-2)
+			{
+				printf("linear solver error: %f = %f/%f\n", err, (A*x - b).norm(), b.norm());
+				throw std::exception("linear solver failed");
 			}
 		}
 
@@ -119,10 +133,8 @@ namespace dfusion
 			SpMat JacTJac;
 			Vec fx(jac_.rows()), h(jac_.cols()), g(jac_.cols()), fx1(jac_.rows());
 
-			//define structure of J'J
 			CalcHessian(JacTJac);
-			Eigen::SimplicialCholesky<SpMat> solver;
-			solver.analyzePattern(JacTJac.triangularView<Eigen::Lower>());
+			Eigen::SparseLU<SpMat> solver(JacTJac);
 
 			//Gauss-Newton Optimization
 			for (int iter = 0; iter<nMaxIter; iter++)
@@ -134,10 +146,11 @@ namespace dfusion
 
 				//solve: J'J h =  - J' f(x)
 				g = jact_ * (-fx);
-				solver.factorize(JacTJac.triangularView<Eigen::Lower>());
+				solver.factorize(JacTJac);
 				h = solver.solve(g);
 
-				checkNanAndInf(h, fx, g);
+				checkNanAndInf(h, fx, g, JacTJac);
+				checkLinearSolver(JacTJac, h, g);
 
 				real normv = xStart.norm();
 				real old_energy = evaluateTotalEnergy(xStart);
@@ -703,12 +716,20 @@ namespace dfusion
 					}
 				}
 			}
+
+			// ldp debug
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+			static int a = 0;
+			dumpSparseMatrix(jacReg.transpose()*jacReg, ("D:/tmp/regH"+std::to_string(a)+".txt").c_str());
+			dumpSparseMatrix(H, ("D:/tmp/H" + std::to_string(a) + ".txt").c_str());
+			a++;
+#endif
 #else
 			H = jact_ * jac_;
 #endif
 			// ldp test: add small reg value to prevent singular
-			Eigen::Diagonal<SpMat> diag(H);
-			diag += Vec(diag.size()).setConstant(param_.fusion_GaussNewton_diag_regTerm);
+			//Eigen::Diagonal<SpMat> diag(H);
+			//diag += Vec(diag.size()).setConstant(param_.fusion_GaussNewton_diag_regTerm);
 		}
 
 		int FindColIndices(const SpMat& A, int cid, int* vidx, int* ridx)

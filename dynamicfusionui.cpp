@@ -243,7 +243,7 @@ void DynamicFusionUI::updateDynamicFusion()
 		g_dataholder.m_dparam.view_errorMap_range);
 	ui.widgetErrMap->setRayCastingShadingImage(g_dataholder.m_errorMap_shading);
 
-	// debug, save rendered image
+	// ldp debug, save rendered image
 #if 1
 	// warp view
 	std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
@@ -261,7 +261,11 @@ void DynamicFusionUI::updateDynamicFusion()
 	int fid = g_dataholder.m_processor.getFrameId();
 
 	QString name;
-	name.sprintf("data/screenshots/%06d.png", fid);
+	name.sprintf("data/screenshots/%06d_%d_%d_%d_%d.png", fid,
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
 	img.save(name);
 
 	// error map
@@ -277,7 +281,11 @@ void DynamicFusionUI::updateDynamicFusion()
 	}
 
 	QString name1;
-	name1.sprintf("data/screenshots/e_%06d.png", fid);
+	name1.sprintf("data/screenshots/e_%06d_%d_%d_%d_%d.png", fid,
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
 	img.save(name1);
 #endif
 	// end debug
