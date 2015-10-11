@@ -864,7 +864,8 @@ namespace dfusion
 			nw.index = m_meshPointsFlags.ptr();
 			nw.nodesDqVw = getNodesDqVwPtr(level);
 			nw.num = m_numNodes[level];
-			nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_radius_search_beta, level));
+			//nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_radius_search_beta, level));
+			nw.inv_weight_radius = 1.f / m_param.warp_param_dw;
 			nw.origion = m_volume->getOrigion();
 			nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
 			nw.knnTex = bindKnnFieldTexture();

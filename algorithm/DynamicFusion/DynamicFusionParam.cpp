@@ -10,7 +10,7 @@ namespace dfusion
 		volume_resolution[0] = 256;
 		volume_resolution[1] = 256;
 		volume_resolution[2] = 256;
-		voxels_per_meter = 256;
+		voxels_per_meter = 387;
 
 		/** *****************************************************
 		* marching cube related
@@ -23,7 +23,7 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.055;
+		warp_radius_search_epsilon = 0.025;
 		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
@@ -34,22 +34,22 @@ namespace dfusion
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 128;
-		fusion_lambda = 200;
+		fusion_lambda = 400;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_nonRigidICP_maxIter = 3;
 		fusion_rigid_distThre = 0.1f; // meter
 		fusion_rigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
-		fusion_nonRigid_distThre = 0.1f; // meter
+		fusion_nonRigid_distThre = 0.03f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 		fusion_GaussNewton_maxIter = 5;
 		fusion_GaussNewton_diag_regTerm = 1e-5;
 		fusion_post_rigid_factor = false;
 
 		// debuging related
-		fusion_dumping_each_frame = false;
-		fusion_enable_nonRigidSolver = false;
-		fusion_loading_mode = false;
+		fusion_dumping_each_frame = true;
+		fusion_enable_nonRigidSolver = true;
+		fusion_loading_mode = true;
 		fusion_dumping_max_frame = 500;
 
 		/** *****************************************************
