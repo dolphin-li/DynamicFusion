@@ -10,7 +10,7 @@ namespace dfusion
 		volume_resolution[0] = 256;
 		volume_resolution[1] = 256;
 		volume_resolution[2] = 256;
-		voxels_per_meter = 384;
+		voxels_per_meter = 256;
 
 		/** *****************************************************
 		* marching cube related
@@ -23,7 +23,7 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.025;
+		warp_radius_search_epsilon = 0.055;
 		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
@@ -47,9 +47,9 @@ namespace dfusion
 		fusion_post_rigid_factor = false;
 
 		// debuging related
-		fusion_dumping_each_frame = true;
-		fusion_enable_nonRigidSolver = true;
-		fusion_loading_mode = true;
+		fusion_dumping_each_frame = false;
+		fusion_enable_nonRigidSolver = false;
+		fusion_loading_mode = false;
 		fusion_dumping_max_frame = 500;
 
 		/** *****************************************************

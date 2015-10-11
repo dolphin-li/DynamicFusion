@@ -7,6 +7,10 @@
 #include "GpuKdTree.h"
 namespace dfusion
 {
+	__device__ __host__ __forceinline__ WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
+	{
+		return ((WarpField::IdxType*)(&knn))[k];
+	}
 #pragma region --warpmesh
 
 	struct MeshWarper
@@ -632,6 +636,59 @@ namespace dfusion
 		}
 	}
 
+	__global__ void bruteforce_updateKnn_kernel(cudaTextureObject_t nodesDqVwTex,
+		cudaSurfaceObject_t knnSurf, int3 res, int newNodesBegin, int newNodesEnd,
+		float3 origion, float voxelSize)
+	{
+		int x = threadIdx.x + blockIdx.x*blockDim.x;
+		int y = threadIdx.y + blockIdx.y*blockDim.y;
+		int z = threadIdx.z + blockIdx.z*blockDim.z;
+
+		if (x < res.x && y < res.y && z < res.z)
+		{
+			// compute all 4 dists stored
+			WarpField::KnnIdx knn;
+			surf3Dread(&knn, knnSurf, x*sizeof(WarpField::KnnIdx), y, z);
+			float3 voxelPos = origion + voxelSize*make_float3(x, y, z);
+			float oldDists2[WarpField::KnnK];
+			for (int k = 0; k < WarpField::KnnK; k++)
+			{
+				float4 p;
+				tex1Dfetch(&p, nodesDqVwTex, knn_k(knn, k)*3 + 2);
+				oldDists2[k] = norm2(make_float3(p.x, p.y, p.z) - voxelPos);
+			}
+			
+			// update new nodes
+			for (int iNode = newNodesBegin; iNode < newNodesEnd; iNode++)
+			{
+				float4 p;
+				tex1Dfetch(&p, nodesDqVwTex, iNode * 3 + 2);
+				float newDist2 = norm2(make_float3(p.x, p.y, p.z) - voxelPos);
+
+				// we swap the farest nodes out
+				// note that the knn is kept sorted
+				int swapPos = WarpField::KnnK;
+				for (int k = 0; k < WarpField::KnnK; k++)
+				{
+					if (newDist2 < oldDists2[k])
+					{
+						swapPos = k;
+						break;
+					}
+				}
+
+				if (swapPos < WarpField::KnnK)
+				{
+					WarpField::KnnIdx newKnn = knn;
+					knn_k(newKnn, swapPos) = iNode;
+					for (int k = swapPos + 1; k < WarpField::KnnK; k++)
+						knn_k(newKnn, k) = knn_k(knn, k - 1);
+					surf3Dwrite(newKnn, knnSurf, x*sizeof(WarpField::KnnIdx), y, z);
+				}
+			}// end for iNode
+		}
+	}
+
 	void WarpField::updateAnnField()
 	{
 		float3 origion = m_volume->getOrigion();
@@ -650,7 +707,7 @@ namespace dfusion
 		else
 		{
 			int nNewNodes = m_numNodes[0] - m_lastNumNodes[0];
-
+#if 0
 			// 1st step, collect bounding box of new nodes to avoid additional computation
 			float* xptr = m_tmpBuffer.ptr() + nNewNodes;
 			float* yptr = xptr + nNewNodes;
@@ -699,6 +756,27 @@ namespace dfusion
 			m_nodeTree[0]->knnSearchGpu(surf, begin, end, origion, vsz, KnnK);
 			//m_nodeTree[0]->knnSearchGpu(surf, make_int3(0,0,0), res, origion, vsz, KnnK);
 			unBindKnnFieldSurface(surf);
+#else
+			//tranverse each voxel to update
+			if (nNewNodes > 0)
+			{
+				int3 res = m_volume->getResolution();
+				float3 origion = m_volume->getOrigion();
+				float vsz = m_volume->getVoxelSize();
+				dim3 block(32, 8, 2);
+				dim3 grid(divUp(res.x, block.x),
+					divUp(res.y, block.y),
+					divUp(res.z, block.z));
+
+				cudaSurfaceObject_t surf = bindKnnFieldSurface();
+				cudaTextureObject_t tex = bindNodesDqVwTexture();
+				bruteforce_updateKnn_kernel << <grid, block >> >(
+					tex, surf, res, m_lastNumNodes[0], m_numNodes[0], origion, vsz);
+				cudaSafeCall(cudaGetLastError(), "bruteforce_updateKnn_kernel");
+				unBindNodesDqVwTexture(tex);
+				unBindKnnFieldSurface(surf);
+			}
+#endif
 		}
 	}
 #pragma endregion
@@ -817,10 +895,6 @@ namespace dfusion
 		}
 	};
 
-	__device__ __host__ __forceinline__ WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
-	{
-		return ((WarpField::IdxType*)(&knn))[k];
-	}
 
 	__global__ void extract_knn_for_vmap_kernel(PtrStepSz<float4> vmap, PtrStepSz<WarpField::KnnIdx> vmapKnn,
 		float3 origion, float invVoxelSize, cudaTextureObject_t knnTex, IdxContainter ic)
