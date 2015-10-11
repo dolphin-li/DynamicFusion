@@ -243,7 +243,7 @@ namespace dfusion
 			// render
 			m_warpedMesh->renderToImg(userCam, light, img, m_param, m_warpField,
 				&m_vmap_curr_pyd[0], &m_vmap_warp, &m_nmap_curr_pyd[0],
-				&m_nmap_warp, m_canoMesh, canoPosPtr, knnPtr);
+				&m_nmap_warp, m_canoMesh, canoPosPtr, knnPtr, &m_kinect_intr);
 			//img.create(m_nmap_cano.rows(), m_nmap_cano.cols());
 			//generateNormalMap(m_vmap_cano, img);
 		}
@@ -353,7 +353,8 @@ namespace dfusion
 
 	Tbx::Transfo DynamicFusionProcessor::rigid_align()
 	{
-		bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
+		//bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
+		m_depth_input.copyTo(m_depth_curr_pyd[0]);
 		createVMap(m_kinect_intr(0), m_depth_curr_pyd[0], m_vmap_curr_pyd[0]);
 		createNMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
 

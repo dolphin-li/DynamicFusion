@@ -37,11 +37,14 @@ namespace dfusion
 		typedef double real;
 		typedef Eigen::Matrix<real, -1, 1> Vec;
 		typedef Eigen::Matrix<real, 6, 6> Mat6;
+		typedef Eigen::Matrix<real, -1, -1> Mat;
 		typedef Eigen::SparseMatrix<real, Eigen::ColMajor> SpMat;
 
 		// 6-twist of exponential map of dual-quaternion
 		Vec x_;
 		SpMat jac_, jact_;
+		std::vector<Mat6> m_diagBlocks;
+		int nodesInLevel0_;
 
 		std::vector<KnnIdx> vmapKnn_;
 		std::vector<KnnIdx> nodesKnn_;
@@ -63,6 +66,7 @@ namespace dfusion
 		Intr intr_;
 		Tbx::Transfo Tlw_;
 		std::vector<Eigen::Triplet<real>> m_cooSys;
+
 
 		void checkNanAndInf(const Vec& vec, const Vec& fx, const Vec& g, const SpMat& H)
 		{
@@ -163,19 +167,22 @@ namespace dfusion
 
 			SpMat JacTJac;
 			Vec fx(jac_.rows()), h(jac_.cols()), g(jac_.cols()), fx1(jac_.rows());
+			CalcHessian(JacTJac);
+			Eigen::SparseLU<SpMat> solver;
+			solver.analyzePattern(JacTJac);
 
 			//Gauss-Newton Optimization
 			for (int iter = 0; iter<nMaxIter; iter++)
 			{
 				CalcJacobiFunc(xStart, jac_, jact_);	//J
+
 				CalcHessian(JacTJac);
 				CalcEnergyFunc(xStart, fx);	//f
 
 				//solve: J'J h =  - J' f(x)
 				g = jact_ * (-fx);
 				checkNanAndInf(JacTJac);
-				Eigen::SparseLU<SpMat> solver(JacTJac);
-				solver.compute(JacTJac);
+				solver.factorize(JacTJac);
 				h = solver.solve(g);
 
 				checkNanAndInf(h, fx, g, JacTJac);
@@ -191,7 +198,7 @@ namespace dfusion
 					new_energy = evaluateTotalEnergy(x);
 					if (new_energy > old_energy)
 					{
-						h = h * 0.618;
+						h = h * 0.5;
 					}
 					if (new_energy < old_energy)
 					{
@@ -202,7 +209,6 @@ namespace dfusion
 						new_energy = 0;
 				}
 				real normh = h.norm();
-
 				if (showInfo)
 					printf("Gauss-Newton: %d %f: %f->%f [0]=%f, %f\n", iter, normh / (1e-6+normv),
 					old_energy, new_energy, xStart[0], h_0);
@@ -212,6 +218,45 @@ namespace dfusion
 			}
 
 			return evaluateTotalEnergy(xStart);
+		}
+
+		// should be called each time after CalcHessian()
+		void blockSolve(const SpMat& H, Vec& x, const Vec& rhs)const
+		{
+			// level0 term LLt
+			std::vector<Eigen::Triplet<real>> L0invsys, L0L0tinvsys;
+			L0invsys.reserve(m_diagBlocks.size() * 36);
+			L0L0tinvsys.reserve(m_diagBlocks.size() * 36);
+			for (size_t i = 0; i < m_diagBlocks.size(); i++)
+			{
+				Mat6 L = m_diagBlocks[i].llt().matrixL();
+				Mat6 Linv = L.triangularView<Eigen::Lower>().solve(Mat6::Identity());
+				Mat6 LLtinv = Linv.transpose()*Linv;
+				int rc = i * 6;
+				for (int y = 0; y < 6; y++)
+				for (int x = 0; x < y; x++)
+					L0invsys.push_back(Eigen::Triplet<real>(rc + y, rc + x, Linv(y, x)));
+				for (int y = 0; y < 6; y++)
+				for (int x = 0; x < 6; x++)
+					L0invsys.push_back(Eigen::Triplet<real>(rc + y, rc + x, LLtinv(y, x)));
+			}
+			SpMat L0inv, L0L0tinv;
+			L0inv.resize(m_diagBlocks.size() * 6, m_diagBlocks.size() * 6);
+			L0inv.setFromTriplets(L0invsys.begin(), L0invsys.end());
+			L0L0tinv.resize(m_diagBlocks.size() * 6, m_diagBlocks.size() * 6);
+			L0L0tinv.setFromTriplets(L0L0tinvsys.begin(), L0L0tinvsys.end());
+
+			SpMat CD = H.bottomRows(H.rows() - nodesInLevel0_ * 6);
+			SpMat C = CD.leftCols(nodesInLevel0_ * 6);
+			SpMat D = CD.rightCols(CD.cols() - C.cols());
+			Eigen::SimplicialLLT<SpMat> solverD(D);
+			
+			// solve for ux = Lt^(-1) * b
+			Vec ux;
+			ux.resize(H.cols());
+			ux.topRows(L0inv.cols()) = L0inv * rhs.topRows(L0inv.rows());
+
+			rhs.bottomRows(D.cols())-C*L0L0tinv*rhs.topRows(L0inv.rows());
 		}
 
 		inline real data_term_energy(real f)const
@@ -641,7 +686,7 @@ namespace dfusion
 			double total_energy = 0;
 
 			// data term
-#pragma omp parallel for
+//#pragma omp parallel for
 			for (int iPixel = 0; iPixel < map_c2l_corr_.size(); iPixel++)
 			{
 				int nRow = row_index_of_pixel_[iPixel];
@@ -730,18 +775,18 @@ namespace dfusion
 		{
 #ifdef ENABLE_DIALG_HESSIAN
 			// reg term, use full representation
-			SpMat jacReg = jac_.bottomRows(jac_.rows() - nPixel_rows_).eval();
+			SpMat jacReg = jac_.bottomRows(jac_.rows() - nPixel_rows_);
 			H = jacReg.transpose()*jacReg;
 
 			// data term, only compute diag block
 			SpMat jacData = jac_.topRows(nPixel_rows_).eval();
 			const int nNodes = jacData.cols() / 6;
 
-			std::vector<Mat6> blocks(nNodes);
-			for (int iNode = 0; iNode<nNodes; iNode++)
+			m_diagBlocks.resize(nodesInLevel0_);
+			for (int iNode = 0; iNode<nodesInLevel0_; iNode++)
 			{
-				SpMat jacDataBlock = jacData.middleCols(iNode * 6, 6).eval();
-				blocks[iNode] = (jacDataBlock.transpose() * jacDataBlock).eval().toDense();
+				SpMat jacDataBlock = jacData.middleCols(iNode * 6, 6);
+				m_diagBlocks[iNode] = (jacDataBlock.transpose() * jacDataBlock).eval().toDense();
 			}// end for ix
 
 			// traverse H to adding blocks on
@@ -750,8 +795,12 @@ namespace dfusion
 				int rs = H.outerIndexPtr()[row];
 				int re = H.outerIndexPtr()[row + 1];
 				int iNode = row / 6;
+
+				if (iNode >= nodesInLevel0_)
+					continue;
+
 				int blockRowShift = row - iNode*6;
-				const Mat6& block = blocks[iNode];
+				Mat6& block = m_diagBlocks[iNode];
 				for (int c = rs; c < re; c++)
 				{
 					int col = H.innerIndexPtr()[c];
@@ -759,6 +808,7 @@ namespace dfusion
 					if (blockColShift < 6 && blockColShift >= 0)
 					{
 						H.valuePtr()[c] += block(blockRowShift, blockColShift);
+						block(blockRowShift, blockColShift) = H.valuePtr()[c]; // keep this value for later usage
 					}
 				}
 			}
@@ -1181,6 +1231,7 @@ namespace dfusion
 		m_egc->param_ = param;
 		m_egc->intr_ = intr;
 		m_egc->Tlw_ = pWarpField->get_rigidTransform();
+		m_egc->nodesInLevel0_ = pWarpField->getNumNodesInLevel(0);
 
 		// copy maps to cpu
 		m_egc->vmap_cano_.resize(m_egc->imgHeight_*m_egc->imgWidth_);

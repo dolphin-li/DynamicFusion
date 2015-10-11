@@ -649,7 +649,8 @@ namespace dfusion
 		const MapArr* nmap_live, const MapArr* nmap_warp, 
 		GpuMesh* canoMesh, 
 		const float3* canoPosActive,
-		const WarpField::KnnIdx* knnIdxActiveView)
+		const WarpField::KnnIdx* knnIdxActiveView,
+		const Intr* intr)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
@@ -827,7 +828,7 @@ namespace dfusion
 		}
 
 		// show correspondence
-		if (vmap_live && param.view_show_corr)
+		if (vmap_live && param.view_show_corr && intr)
 		{
 			glEnableClientState(GL_VERTEX_ARRAY);
 			glEnableClientState(GL_NORMAL_ARRAY);
@@ -835,7 +836,7 @@ namespace dfusion
 			size_t num_bytes = 0;
 			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0));
 			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
-			copy_maps_to_gl_buffer(*vmap_live, *vmap_warp, *nmap_live, *nmap_warp, gldata, param);
+			copy_maps_to_gl_buffer(*vmap_live, *vmap_warp, *nmap_live, *nmap_warp, gldata, param, *intr);
 			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0));
 
 			const int n = vmap_live->rows() * vmap_live->cols();
@@ -846,6 +847,8 @@ namespace dfusion
 			glEnable(GL_LIGHTING);
 			glColor3f(0.4, 0, 0);
 			glDrawArrays(GL_POINTS, 0, n);
+			glColor3f(0.4, 0.4, 0);
+			glDrawArrays(GL_POINTS, n, n);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_vbo_id_warpnodes);
 			glColor3f(0.0, 0.6, 0.0);
 			glDrawElements(GL_LINES, n*2, GL_UNSIGNED_INT, (void*)(n * 4 * sizeof(float4)));

@@ -216,10 +216,12 @@ namespace dfusion
 		PtrStepSz<float4> vmap_live, PtrStepSz<float4> vmap_warp, 
 		PtrStepSz<float4> nmap_live, PtrStepSz<float4> nmap_warp,
 		float4* gl_live_v, float4* gl_warp_v, float4* gl_live_n, float4* gl_warp_n,
-		int2* gl_edge, float distThre, float angleThreSin)
+		int2* gl_edge, float distThre, float angleThreSin, Intr intr)
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
 		int y = threadIdx.y + blockIdx.y * blockDim.y;
+		int h = vmap_warp.rows;
+		int w = vmap_warp.cols;
 
 		if (x < vmap_live.cols && y < vmap_live.rows)
 		{
@@ -235,19 +237,26 @@ namespace dfusion
 			gl_live_n[i] = make_float4(nl.x, nl.y, nl.z, 0.f);
 			gl_warp_n[i] = make_float4(nw.x, nw.y, nw.z, 0.f);
 
-			float dist = norm(pl - pw);
-			float agSin = norm(cross(nl, nw));
+			gl_edge[i] = make_int2(0, 0);
+			float3 uvd = intr.xyz2uvd(pw);
+			int2 ukr = make_int2(uvd.x + 0.5, uvd.y + 0.5);
 
-			if (dist < distThre && agSin < angleThreSin)
-				gl_edge[i] = make_int2(i, i + vmap_live.cols*vmap_live.rows);
-			else
-				gl_edge[i] = make_int2(0, 0);
+			// we use opengl coordinate, thus world.z should < 0
+			if (ukr.x >= 0 && ukr.y >= 0 && ukr.x < w && ukr.y < h && pw.z < 0)
+			{
+				float3 plive = read_float3_4(vmap_live[ukr.y*w + ukr.x]);
+				float3 nlive = read_float3_4(nmap_live[ukr.y*w + ukr.x]);
+				float dist = norm(pw - plive);
+				float sine = norm(cross(nw, nlive));
+				if (dist <= distThre && sine < angleThreSin)
+					gl_edge[i] = make_int2(i + w*h, ukr.y*w + ukr.x);
+			}
 		}
 	}
 
 	void GpuMesh::copy_maps_to_gl_buffer(const MapArr& vmap_live, const MapArr& vmap_warp,
 		const MapArr& nmap_live, const MapArr& nmap_warp,
-		float4* gldata, const Param& param)
+		float4* gldata, const Param& param, Intr intr)
 	{
 		const int w = vmap_live.cols();
 		const int h = vmap_live.rows();
@@ -265,7 +274,7 @@ namespace dfusion
 		
 		copy_maps_to_gl_buffer_kernel << <grid, block >> >(vmap_live, vmap_warp, nmap_live, nmap_warp,
 			gl_live_v, gl_warp_v, gl_live_n, gl_warp_n,  gledge, 
-			param.fusion_nonRigid_distThre, param.fusion_nonRigid_angleThreSin);
+			param.fusion_nonRigid_distThre, param.fusion_nonRigid_angleThreSin, intr);
 		cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_maps_to_gl_buffer");
 	}
 

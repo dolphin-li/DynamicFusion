@@ -245,7 +245,9 @@ void DynamicFusionUI::updateDynamicFusion()
 	ui.widgetErrMap->setRayCastingShadingImage(g_dataholder.m_errorMap_shading);
 
 	// ldp debug, save rendered image
-	if (g_dataholder.m_dparam.fusion_dumping_each_frame)
+	if (g_dataholder.m_dparam.fusion_dumping_each_frame
+		&& m_frameIndex < g_dataholder.m_dparam.fusion_dumping_max_frame
+		&& m_state != Pause)
 	{
 		// warp view
 		std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
@@ -315,7 +317,7 @@ void DynamicFusionUI::on_actionLoad_triggered()
 }
 void DynamicFusionUI::on_actionLoad_frames_triggered()
 {
-	setState(DynamicFusionUI::Pause);
+	//setState(DynamicFusionUI::Pause);
 	m_currentPath = QFileDialog::getExistingDirectory(this, "load folder", "data/frames/");
 	if (m_currentPath != "")
 	{
@@ -323,14 +325,14 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		setState(DynamicFusionUI::Loading);
 		g_dataholder.m_processor.reset();
 	}
-	else
-		restoreState();
+	//else
+	//	restoreState();
 }
 void DynamicFusionUI::on_actionRecord_frames_triggered()
 {
 	if (ui.actionRecord_frames->isChecked())
 	{
-		setState(DynamicFusionUI::Pause);
+		//setState(DynamicFusionUI::Pause);
 		m_currentPath = QFileDialog::getExistingDirectory(this, "record folder", "data/frames/");
 		if (m_currentPath != "")
 		{

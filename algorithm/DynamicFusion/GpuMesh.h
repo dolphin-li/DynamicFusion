@@ -61,7 +61,8 @@ namespace dfusion
 			const MapArr* nmap_live = nullptr, const MapArr* nmap_warp = nullptr,
 			GpuMesh* canoMesh = nullptr,
 			const float3* canoPosActive = nullptr,
-			const ushort4* knnIdxActiveView = nullptr);
+			const ushort4* knnIdxActiveView = nullptr,
+			const Intr* intr = nullptr);
 		void renderToDepth(const Camera& camera, DepthMap& img);
 
 		// we assume self is warped by the warpField,
@@ -82,7 +83,7 @@ namespace dfusion
 		void copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField);
 		void copy_maps_to_gl_buffer(const MapArr& vmap_live, const MapArr& vmap_warp,
 			const MapArr& nmap_live, const MapArr& nmap_warp,
-			float4* gldata, const Param& param);
+			float4* gldata, const Param& param, Intr intr);
 		void update_color_buffer_by_warpField(const WarpField* warpField, GpuMesh* canoMesh);
 	private:
 		PointType* m_verts_d;

@@ -44,7 +44,7 @@ namespace Tbx {
  */
 class __align__(16) Dual_quat_cu{
     public:
-		__device__ __host__ static float epsilon(){ return 1e-5; }
+		__device__ __host__ static float epsilon(){ return 1e-8; }
     // -------------------------------------------------------------------------
     /// @name Constructors
     // -------------------------------------------------------------------------

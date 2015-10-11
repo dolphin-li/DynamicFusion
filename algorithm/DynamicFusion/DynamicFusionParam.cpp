@@ -10,7 +10,7 @@ namespace dfusion
 		volume_resolution[0] = 256;
 		volume_resolution[1] = 256;
 		volume_resolution[2] = 256;
-		voxels_per_meter = 387;
+		voxels_per_meter = 384;
 
 		/** *****************************************************
 		* marching cube related
@@ -24,7 +24,7 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		warp_radius_search_epsilon = 0.025;
-		warp_param_dw = warp_radius_search_epsilon * 4;
+		warp_param_dw = warp_radius_search_epsilon * 1.5;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
 		warp_valid_point_num_each_node = 0.1 * (pow(warp_radius_search_epsilon*voxels_per_meter, 3) 
@@ -43,19 +43,20 @@ namespace dfusion
 		fusion_nonRigid_distThre = 0.1f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 		fusion_GaussNewton_maxIter = 5;
-		fusion_GaussNewton_diag_regTerm = 1e-3;
+		fusion_GaussNewton_diag_regTerm = 1e-5;
 		fusion_post_rigid_factor = false;
 
 		// debuging related
 		fusion_dumping_each_frame = true;
 		fusion_enable_nonRigidSolver = true;
 		fusion_loading_mode = true;
+		fusion_dumping_max_frame = 500;
 
 		/** *****************************************************
 		* visualization related
 		* ******************************************************/
 		view_show_mesh = true;
-		view_show_nodes = false;
+		view_show_nodes = true;
 		view_show_graph = false;
 		view_show_corr = false;
 		view_show_graph_level = 0;
