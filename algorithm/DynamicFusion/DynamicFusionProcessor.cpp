@@ -11,6 +11,7 @@
 #include "ObjMesh.h"
 #include "VolumeData.h"
 #include "CpuGaussNewton.h"
+#include "GpuGaussNewtonSolver.h"
 namespace dfusion
 {
 #define DFUSION_SAFE_DELETE(buffer)\
@@ -45,6 +46,7 @@ namespace dfusion
 		m_warpedMesh = nullptr;
 		m_warpField = nullptr;
 		m_frame_id = 0;
+		m_gsSolver = nullptr;
 	}
 
 	DynamicFusionProcessor::~DynamicFusionProcessor()
@@ -99,6 +101,9 @@ namespace dfusion
 		m_warpField = new WarpField();
 		m_warpField->init(m_volume, m_param);
 
+		// GaussNewton solver
+		m_gsSolver = new GpuGaussNewtonSolver();
+
 		// maps
 		m_depth_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
 		m_vmap_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
@@ -124,6 +129,7 @@ namespace dfusion
 		DFUSION_SAFE_DELETE(m_canoMesh);
 		DFUSION_SAFE_DELETE(m_warpedMesh);
 		DFUSION_SAFE_DELETE(m_warpField);
+		DFUSION_SAFE_DELETE(m_gsSolver);
 		m_frame_id = 0;
 		m_depth_curr_pyd.clear();
 		m_vmap_curr_pyd.clear();

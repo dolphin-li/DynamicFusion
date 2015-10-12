@@ -217,6 +217,9 @@
     <ClCompile Include="algorithm\DynamicFusion\CpuGaussNewton.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -566,6 +569,9 @@
     <ClInclude Include="algorithm\DynamicFusion\CpuGaussNewton.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
@@ -600,6 +606,9 @@
     </CudaCompile>
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\ModerGpuWrapper.cu">
       <Filter>algorithm\DynamicFusion\cudpp</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>

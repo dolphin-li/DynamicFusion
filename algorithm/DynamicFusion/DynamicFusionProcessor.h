@@ -10,6 +10,7 @@ namespace dfusion
 	class GpuMesh;
 	class MarchingCubes;
 	class WarpField;
+	class GpuGaussNewtonSolver;
 	class DynamicFusionProcessor
 	{
 	public:
@@ -81,5 +82,7 @@ namespace dfusion
 		// map of normals in canonical/warped view
 		DeviceArray2D<float4> m_nmap_cano;
 		DeviceArray2D<float4> m_nmap_warp;
+
+		GpuGaussNewtonSolver* m_gsSolver;
 	};
 }
