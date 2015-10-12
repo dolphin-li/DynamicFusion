@@ -82,6 +82,12 @@ namespace dfusion
 		//
 		int fusion_GaussNewton_maxIter;
 
+		// if this is not zero, then we use this 
+		// fixed step size instead of line search
+		// this may cause divergenced system, but 
+		// more efficient on the GPU.
+		float fusion_GaussNewton_fixedStep;
+
 		// a small diagonal regularization term, 
 		// used to prevent numerical issues, which may cause #nan.
 		float fusion_GaussNewton_diag_regTerm;

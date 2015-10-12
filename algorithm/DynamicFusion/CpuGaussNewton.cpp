@@ -200,25 +200,36 @@ namespace dfusion
 				real new_energy = 0;
 				real h_0 = h[0];
 				real normv = xStart.norm();
-				for (real alpha = 1; alpha > 1e-15; alpha *= 0.5)
+				real alpha = 1;
+				if (param_.fusion_GaussNewton_fixedStep <= 0.f)
 				{
-					Vec x = xStart + h;
-					new_energy = evaluateTotalEnergy(x);
-					if (new_energy > old_energy)
+					for (; alpha > 1e-15; alpha *= 0.5)
 					{
-						h = h * 0.5;
+						Vec x = xStart + h;
+						new_energy = evaluateTotalEnergy(x);
+						if (new_energy > old_energy)
+						{
+							h = h * 0.5;
+						}
+						if (new_energy < old_energy)
+						{
+							xStart = x;
+							break;
+						}
+						else
+							new_energy = 0;
 					}
-					if (new_energy < old_energy)
-					{
-						xStart = x;
-						break;
-					}
-					else
-						new_energy = 0;
 				}
+				else
+				{
+					alpha = param_.fusion_GaussNewton_fixedStep;
+					h *= alpha;
+					xStart += h;
+				}
+
 				real normh = h.norm();
 				if (showInfo)
-					printf("Gauss-Newton: %d %f: %f->%f [0]=%f, %f\n", iter, normh / (1e-6+normv),
+					printf("Gauss-Newton %f: %d %f: %f->%f [0]=%f, %f\n", alpha, iter, normh / (1e-6+normv),
 					old_energy, new_energy, xStart[0], h_0);
 
 				if (normh < (normv + real(1e-6)) * real(1e-6))
