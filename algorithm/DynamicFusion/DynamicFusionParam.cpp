@@ -23,8 +23,9 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.035;
+		warp_radius_search_epsilon = 0.025;
 		warp_param_dw = warp_radius_search_epsilon * 1.732 * 0.5; // sqrt(3)/2
+		warp_param_dw_lvup_scale = 1;
 		warp_radius_search_beta = 4;
 		warp_point_step_before_update_node = 1;
 		warp_valid_point_num_each_node = 0.1 * (pow(warp_radius_search_epsilon*voxels_per_meter, 3) 

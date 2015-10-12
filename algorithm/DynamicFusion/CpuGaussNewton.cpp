@@ -34,7 +34,7 @@ namespace dfusion
 		enum{
 			KnnK = WarpField::KnnK
 		};
-		typedef double real;
+		typedef float real;
 		typedef Eigen::Matrix<real, -1, 1> Vec;
 		typedef Eigen::Matrix<real, 6, 6> Mat6;
 		typedef Eigen::Matrix<real, -1, -1> Mat;
@@ -167,9 +167,12 @@ namespace dfusion
 
 			SpMat JacTJac;
 			Vec fx(jac_.rows()), h(jac_.cols()), g(jac_.cols()), fx1(jac_.rows());
+
+#ifndef ENABLE_DIALG_HESSIAN
 			CalcHessian(JacTJac);
 			Eigen::SparseLU<SpMat> solver;
 			solver.analyzePattern(JacTJac);
+#endif
 
 			//Gauss-Newton Optimization
 			for (int iter = 0; iter<nMaxIter; iter++)
@@ -182,8 +185,13 @@ namespace dfusion
 				//solve: J'J h =  - J' f(x)
 				g = jact_ * (-fx);
 				checkNanAndInf(JacTJac);
+
+#ifndef ENABLE_DIALG_HESSIAN
 				solver.factorize(JacTJac);
 				h = solver.solve(g);
+#else
+				blockSolve(JacTJac, h, g);
+#endif
 
 				checkNanAndInf(h, fx, g, JacTJac);
 				checkLinearSolver(JacTJac, h, g);
@@ -221,24 +229,25 @@ namespace dfusion
 		}
 
 		// should be called each time after CalcHessian()
-		void blockSolve(const SpMat& H, Vec& x, const Vec& rhs)const
+		void blockSolve(const SpMat& H, Vec& x, const Vec& rhs)
 		{
 			// level0 term LLt
 			std::vector<Eigen::Triplet<real>> L0invsys, L0L0tinvsys;
 			L0invsys.reserve(m_diagBlocks.size() * 36);
 			L0L0tinvsys.reserve(m_diagBlocks.size() * 36);
+			std::vector<Mat6> L0L0tinvBlocks(m_diagBlocks.size());
 			for (size_t i = 0; i < m_diagBlocks.size(); i++)
 			{
 				Mat6 L = m_diagBlocks[i].llt().matrixL();
 				Mat6 Linv = L.triangularView<Eigen::Lower>().solve(Mat6::Identity());
-				Mat6 LLtinv = Linv.transpose()*Linv;
+				L0L0tinvBlocks[i] = Linv.transpose()*Linv;
 				int rc = i * 6;
 				for (int y = 0; y < 6; y++)
-				for (int x = 0; x < y; x++)
+				for (int x = 0; x <= y; x++)
 					L0invsys.push_back(Eigen::Triplet<real>(rc + y, rc + x, Linv(y, x)));
 				for (int y = 0; y < 6; y++)
 				for (int x = 0; x < 6; x++)
-					L0invsys.push_back(Eigen::Triplet<real>(rc + y, rc + x, LLtinv(y, x)));
+					L0L0tinvsys.push_back(Eigen::Triplet<real>(rc + y, rc + x, L0L0tinvBlocks[i](y, x)));
 			}
 			SpMat L0inv, L0L0tinv;
 			L0inv.resize(m_diagBlocks.size() * 6, m_diagBlocks.size() * 6);
@@ -246,17 +255,26 @@ namespace dfusion
 			L0L0tinv.resize(m_diagBlocks.size() * 6, m_diagBlocks.size() * 6);
 			L0L0tinv.setFromTriplets(L0L0tinvsys.begin(), L0L0tinvsys.end());
 
-			SpMat CD = H.bottomRows(H.rows() - nodesInLevel0_ * 6);
-			SpMat C = CD.leftCols(nodesInLevel0_ * 6);
-			SpMat D = CD.rightCols(CD.cols() - C.cols());
-			Eigen::SimplicialLLT<SpMat> solverD(D);
-			
-			// solve for ux = Lt^(-1) * b
-			Vec ux;
-			ux.resize(H.cols());
-			ux.topRows(L0inv.cols()) = L0inv * rhs.topRows(L0inv.rows());
+			// 
+			SpMat BtD = H.bottomRows(H.rows() - nodesInLevel0_ * 6);
+			SpMat::ColsBlockXpr Bt = BtD.leftCols(nodesInLevel0_ * 6);
+			SpMat::ColsBlockXpr D = BtD.rightCols(BtD.cols() - Bt.cols());
+			Mat Q = D - (Bt * L0L0tinv) * Bt.transpose();
+			Mat L1 = Q.llt().matrixL();
 
-			rhs.bottomRows(D.cols())-C*L0L0tinv*rhs.topRows(L0inv.rows());
+			// solve for Lu=b
+			Vec u;
+			u.resize(H.rows());
+			u.topRows(L0inv.rows()) = L0inv * rhs.topRows(L0inv.cols());
+			u.bottomRows(L1.rows()) = L1.triangularView<Eigen::Lower>().solve(
+				rhs.bottomRows(L1.rows()) - Bt * (L0L0tinv * rhs.topRows(L0L0tinv.cols())).eval());
+
+			// solve for Lt x = u
+			x.resize(H.cols());
+			x.topRows(L0inv.cols()) = L0inv.transpose() * u.topRows(L0inv.rows()) 
+				- L0L0tinv.transpose() * (Bt.transpose() *
+				L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()))).eval();
+			x.bottomRows(L1.cols()) = L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()));
 		}
 
 		inline real data_term_energy(real f)const

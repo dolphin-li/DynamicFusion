@@ -34,12 +34,19 @@ namespace dfusion
 		* ******************************************************/
 
 		// meters, for radius search
+		// the larger, the less freedom for warping
 		float warp_radius_search_epsilon; 
 
 		// param \dw in the paper for each node
+		// the larger, the less smoothness and more rigid
 		float warp_param_dw;
 
+		// scale = \dw_{level+1} / \dw_{level}
+		// the larger, the more rigid
+		float warp_param_dw_lvup_scale;
+
 		// scalar of epsilon for different levels, as in the paper \beta
+		// the larger, the less graph level-nodes.
 		float warp_radius_search_beta;
 
 		// there may be not necessary to use the full resolution points.
@@ -53,22 +60,40 @@ namespace dfusion
 		/** *****************************************************
 		* dynamic fusion related
 		* ******************************************************/
+		// the larger, the more time invariant
 		float fusion_max_weight;
+
+		// the larger, the more rigid
 		float fusion_lambda;
+
+		// Tukey penalty coeffs for the data term
 		float fusion_psi_data;
+
+		// Huber penalty coeffs for the regularization term
 		float fusion_psi_reg;
+		
+		// 
 		int fusion_nonRigidICP_maxIter;
 		float fusion_rigid_distThre;
 		float fusion_rigid_angleThreSin;
 		float fusion_nonRigid_distThre;
 		float fusion_nonRigid_angleThreSin;
+
+		//
 		int fusion_GaussNewton_maxIter;
+
+		// a small diagonal regularization term, 
+		// used to prevent numerical issues, which may cause #nan.
 		float fusion_GaussNewton_diag_regTerm;
+
+		// if true, the after each non-linear optimization,
+		// the common rigid transformation will be factored out 
+		// and merged into the rigid part.
 		bool fusion_post_rigid_factor;
 
+		// debugging related
 		bool fusion_dumping_each_frame;
 		bool fusion_enable_nonRigidSolver;
-
 		bool fusion_loading_mode;
 		int fusion_dumping_max_frame;
 
