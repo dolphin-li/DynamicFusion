@@ -92,7 +92,11 @@ namespace dfusion
 						dq_blend = dq_blend + dq*w;
 					}
 				}
-				dq_blend.normalize();
+				float norm = dq_blend.get_non_dual_part().norm();
+				if(norm < Tbx::Dual_quat_cu::epsilon())
+					dq_blend = dq0;
+				else
+					dq_blend = dq_blend * (1.f/norm);
 			}
 			return dq_blend;
 		}

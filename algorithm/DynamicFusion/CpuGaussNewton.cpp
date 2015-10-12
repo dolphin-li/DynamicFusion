@@ -1030,6 +1030,19 @@ namespace dfusion
 							Tbx::Vec3 p_psi_p_alphaj_j = p_h_p_alphaj_j * ww;
 							Tbx::Vec3 p_psi_p_alphai_i = p_h_p_alphai_i * ww;
 							Tbx::Vec3 p_psi_p_alphaj_i = p_h_p_alphaj_i * ww;
+
+
+							if (isnan(p_psi_p_alphai_j[0]) || isinf(p_psi_p_alphai_j[0]))
+							{
+								printf("warning: nan/inf in reg term jacobi: %d,%d=%f\n", 
+									iNode, ialpha, p_psi_p_alphai_j[0]);
+								printf("lambda=%f, alpha_ij=%f\n", lambda, alpha_ij);
+								printf("p_T_p_alpha:\n");
+								p_Ti_p_alpha.print();
+								printf("vi: %f %f %f\n", vi.x, vi.y, vi.z);
+								printf("vj: %f %f %f\n", vj.x, vj.y, vj.z);
+							}
+
 							for (int ixyz = 0; ixyz < 3; ixyz++)
 							{
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,

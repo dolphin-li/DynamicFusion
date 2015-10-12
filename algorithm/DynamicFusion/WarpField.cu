@@ -457,6 +457,75 @@ namespace dfusion
 
 			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
 				nodesDqVwTex, make_float3(p.x, p.y, p.z), origion, invVoxelSize);
+
+#if 0
+			if (isnan(dq_blend.get_dual_part().w()))
+			{
+				printf("kernel: %d %f %f %f %f %f\n", threadId, p.x, p.y, p.z, p.w, inv_w);
+				printf("dqb: %f %f %f %f, %f %f %f %f\n", 
+					dq_blend.get_non_dual_part().w(), dq_blend.get_non_dual_part().i(), 
+					dq_blend.get_non_dual_part().j(), dq_blend.get_non_dual_part().k(), 
+					dq_blend.get_dual_part().w(), dq_blend.get_dual_part().i(),
+					dq_blend.get_dual_part().j(), dq_blend.get_dual_part().k());
+				printf("origion: %f %f %f; ivsz: %f\n", origion.x, origion.y, origion.z, invVoxelSize);
+
+				Tbx::Dual_quat_cu dq_blend1(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+				float3 p1 = (make_float3(p.x, p.y, p.z) - origion)*invVoxelSize;
+				int x = int(p1.x);
+				int y = int(p1.y);
+				int z = int(p1.z);
+				WarpField::KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
+				tex3D(&knnIdx, knnTex, x, y, z);
+
+				printf("knnIdx: (%d, %d, %d) -> (%d %d %d %d)\n", 
+					x,y,z,knnIdx.x, knnIdx.y, knnIdx.z, knnIdx.w);
+
+				if (knn_k(knnIdx, 0) >= WarpField::MaxNodeNum)
+				{
+					dq_blend = Tbx::Dual_quat_cu::identity();
+				}
+				else
+				{
+					Tbx::Dual_quat_cu dq0;
+					for (int k = 0; k < WarpField::KnnK; k++)
+					{
+						if (knn_k(knnIdx, k) < WarpField::MaxNodeNum)
+						{
+							WarpField::IdxType nn3 = knn_k(knnIdx, k) * 3;
+							float4 q0, q1, vw;
+							tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
+							tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
+							tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
+							// note: we store 1.f/radius in vw.w
+							float w = __expf(-norm2(make_float3(vw.x - p.x, vw.y - p.y,
+								vw.z - p.z)) * 2 * (vw.w*vw.w));
+							Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
+							if (k == 0)
+								dq0 = dq;
+							else
+							{
+								if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
+									w = -w;
+							}
+							printf("dq(%d, %f): %f %f %f %f, %f %f %f %f\n", k, w,
+								dq.get_non_dual_part().w(), dq.get_non_dual_part().i(), 
+								dq.get_non_dual_part().j(), dq.get_non_dual_part().k(),
+								dq.get_dual_part().w(), dq.get_dual_part().i(), 
+								dq.get_dual_part().j(), dq.get_dual_part().k());
+							dq_blend1 = dq_blend1 + dq*w;
+						}
+					}
+					printf("bld: %f %f %f %f, %f %f %f %f\n", dq_blend1.get_non_dual_part().w(),
+						dq_blend1.get_non_dual_part().i(), dq_blend1.get_non_dual_part().j(), 
+						dq_blend1.get_non_dual_part().k(),
+						dq_blend1.get_dual_part().w(), dq_blend1.get_dual_part().i(), 
+						dq_blend1.get_dual_part().j(),
+						dq_blend1.get_dual_part().k());
+					dq_blend1.normalize();
+				}
+			}
+#endif
+
 			unpack_dual_quat(dq_blend, nodesDqVw[threadId * 3], nodesDqVw[threadId * 3 + 1]);
 		}
 	};
@@ -857,7 +926,6 @@ namespace dfusion
 			dim3 block(32);
 			dim3 grid(1, 1, 1);
 			grid.x = divUp(m_numNodes[level], block.x);
-
 
 			NodesWriter nw;
 			nw.points_not_compact = m_meshPointsSorted.ptr();
