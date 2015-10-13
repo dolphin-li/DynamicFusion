@@ -185,6 +185,11 @@ namespace dfusion
 		void extract_nodes_info(DeviceArray<KnnIdx>& nodesKnn, DeviceArray<float>& twist,
 			DeviceArray<float4>& vw)const;
 
+		// we will assume the memory are prepared and not call malloc inside
+		void extract_nodes_info_no_allocation(DeviceArray<KnnIdx>& nodesKnn, DeviceArray<float>& twist,
+			DeviceArray<float4>& vw)const;
+
+		// we will assume that the given buffer is at least the matched size (but may be larger)
 		void update_nodes_via_twist(const DeviceArray<float>& twist);
 
 		int getNumAllNodes()const{

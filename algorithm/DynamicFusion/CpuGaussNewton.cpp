@@ -6,7 +6,7 @@
 #include "ldpdef.h"
 namespace dfusion
 {
-//#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
 #define SHOW_LAST_NODE_INFO
 
 #define USE_ROBUST_HUBER_PENALTY
@@ -812,12 +812,29 @@ namespace dfusion
 			const int nNodes = jacData.cols() / 6;
 
 			m_diagBlocks.resize(nodesInLevel0_);
-			for (int iNode = 0; iNode<nodesInLevel0_; iNode++)
+			for (int iNode = 0; iNode < nodesInLevel0_; iNode++)
 			{
 				SpMat jacDataBlock = jacData.middleCols(iNode * 6, 6);
 				m_diagBlocks[iNode] = (jacDataBlock.transpose() * jacDataBlock).eval().toDense();
 			}// end for ix
-
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+			{
+				static int a = 0;
+				{
+					std::string name = ("D:/tmp/cpu_Hd_"+std::to_string(a)+".txt").c_str();
+					FILE*pFile = fopen(name.c_str(), "w");
+					for(int i=0; i<m_diagBlocks.size(); i++)
+					{
+						for (int y = 0; y < 6; y++)
+						for (int x = 0; x < 6; x++)
+							fprintf(pFile, "%f ", m_diagBlocks[i](y, x));
+						fprintf(pFile, "\n");
+					}
+					fclose(pFile);
+				}
+				a++;
+			}
+#endif
 			// traverse H to adding blocks on
 			for (int row = 0; row < H.outerSize(); row ++)
 			{
@@ -844,10 +861,12 @@ namespace dfusion
 
 			// ldp debug
 #ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
-			static int a = 0;
-			dumpSparseMatrix(jacReg.transpose()*jacReg, ("D:/tmp/regH"+std::to_string(a)+".txt").c_str());
-			dumpSparseMatrix(H, ("D:/tmp/H" + std::to_string(a) + ".txt").c_str());
-			a++;
+			{
+				static int a = 0;
+				dumpSparseMatrix(jacReg.transpose()*jacReg, ("D:/tmp/regH"+std::to_string(a)+".txt").c_str());
+				dumpSparseMatrix(H, ("D:/tmp/H" + std::to_string(a) + ".txt").c_str());
+				a++;
+			}
 #endif
 #else
 			H = jact_ * jac_;

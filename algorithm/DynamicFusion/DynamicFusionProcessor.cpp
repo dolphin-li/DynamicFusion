@@ -303,6 +303,7 @@ namespace dfusion
 		CpuGaussNewton solver;
 
 		// icp iteration
+		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{
 			// 1. find correspondence
@@ -313,6 +314,13 @@ namespace dfusion
 			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
 			solver.solve(m_param.fusion_post_rigid_factor);
+
+			ldp::tic();
+			m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
+			cudaThreadSynchronize();
+			ldp::toc("gpu solver");
+			m_gsSolver->debug_print();
+			system("pause");
 #endif
 
 			// 3. update warped mesh and render for visiblity

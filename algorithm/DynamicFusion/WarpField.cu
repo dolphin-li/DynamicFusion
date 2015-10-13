@@ -1065,6 +1065,22 @@ namespace dfusion
 		twist.create(ic[GraphLevelNum] * 6);
 		vw.create(ic[GraphLevelNum]);
 
+		extract_nodes_info_no_allocation(nodesKnn, twist, vw);
+	}
+
+	void WarpField::extract_nodes_info_no_allocation(
+		DeviceArray<KnnIdx>& nodesKnn,
+		DeviceArray<float>& twist,
+		DeviceArray<float4>& vw)const
+	{
+		IdxContainter ic;
+		ic[0] = 0;
+		for (int k = 0; k < GraphLevelNum; k++)
+			ic[k + 1] = ic[k] + m_numNodes[k];
+
+		if (ic[GraphLevelNum] == 0)
+			return;
+
 		dim3 block(256);
 		dim3 grid(divUp(ic[GraphLevelNum], block.x));
 
@@ -1110,7 +1126,7 @@ namespace dfusion
 		for (int k = 0; k < GraphLevelNum; k++)
 			ic[k + 1] = ic[k] + m_numNodes[k];
 
-		if (twist.size() != ic[GraphLevelNum]*6)
+		if (twist.size() < ic[GraphLevelNum]*6)
 			throw std::exception("size not matched in WarpField::update_nodes_via_twist()");
 
 		dim3 block(256);
