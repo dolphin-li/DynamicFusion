@@ -654,7 +654,7 @@ class __align__(16) Quat_cu{
 
     /// Convert the quaternion to a rotation matrix
     /// @warning don't forget to normalize it before conversion
-	__device__ __host__ Mat3 to_matrix3()
+	__device__ __host__ Mat3 to_matrix3()const
     {
         float W = coeff0, X = -coeff1, Y = -coeff2, Z = -coeff3;
         float xx = X * X, xy = X * Y, xz = X * Z, xw = X * W;

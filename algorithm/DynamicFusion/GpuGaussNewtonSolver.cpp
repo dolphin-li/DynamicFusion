@@ -79,6 +79,8 @@ namespace dfusion
 		m_vmap_live = &vmap_live;
 		m_nmap_live = &nmap_live;
 
+		bindTextures();
+
 		// perform Gauss-Newton iteration
 		//for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
@@ -87,6 +89,8 @@ namespace dfusion
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
 			calcDataTerm();
 		}// end for iter
+
+		unBindTextures();
 
 		// finally, write results back
 		m_pWarpField->update_nodes_via_twist(m_twist);

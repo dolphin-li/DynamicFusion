@@ -155,7 +155,7 @@ class __align__(16) Dual_quat_cu{
 
     /// Convert the dual quaternion to a homogenous matrix
     /// N.B: Dual quaternion is normalized before conversion
-	__device__ __host__ Transfo to_transformation()
+	__device__ __host__ Transfo to_transformation()const
     {
         Vec3 t;
         float norm = _quat_0.norm();
@@ -170,6 +170,20 @@ class __align__(16) Dual_quat_cu{
 
         return Transfo(m, t);
     }
+
+	__device__ __host__ Transfo to_transformation_after_normalize()const
+	{
+		Vec3 t;
+		// Rotation matrix from non-dual quaternion part
+		Mat3 m = _quat_0.to_matrix3();
+
+		// translation vector from dual quaternion part:
+		t.x = 2.f*(-_quat_e.w()*_quat_0.i() + _quat_e.i()*_quat_0.w() - _quat_e.j()*_quat_0.k() + _quat_e.k()*_quat_0.j());
+		t.y = 2.f*(-_quat_e.w()*_quat_0.j() + _quat_e.i()*_quat_0.k() + _quat_e.j()*_quat_0.w() - _quat_e.k()*_quat_0.i());
+		t.z = 2.f*(-_quat_e.w()*_quat_0.k() - _quat_e.i()*_quat_0.j() + _quat_e.j()*_quat_0.i() + _quat_e.k()*_quat_0.w());
+
+		return Transfo(m, t);
+	}
 
     // -------------------------------------------------------------------------
     /// @name Operators

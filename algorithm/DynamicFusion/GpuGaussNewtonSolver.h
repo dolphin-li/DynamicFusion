@@ -30,6 +30,8 @@ namespace dfusion
 		void debug_print();
 	protected:
 		void calcDataTerm();
+		void bindTextures();
+		void unBindTextures();
 	private:
 		WarpField* m_pWarpField;
 		const MapArr* m_vmap_cano;

@@ -2,6 +2,31 @@
 #include "device_utils.h"
 namespace dfusion
 {
+	texture<WarpField::KnnIdx, cudaTextureType1D, cudaReadModeElementType> g_nodesKnnTex;
+	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_nodesVwTex;
+	texture<float, cudaTextureType1D, cudaReadModeElementType> g_twistTex;
+
+	__device__ __forceinline__ float4 get_nodesVw(int i)
+	{
+		return tex1Dfetch(g_nodesVwTex, i);
+	}
+
+	__device__ __forceinline__ WarpField::KnnIdx get_nodesKnn(int i)
+	{
+		return tex1Dfetch(g_nodesKnnTex, i);
+	}
+
+	__device__ __forceinline__ void get_twist(int i, Tbx::Vec3& r, Tbx::Vec3& t)
+	{
+		int i6 = i * 6;
+		r.x = tex1Dfetch(g_twistTex, i6++);
+		r.y = tex1Dfetch(g_twistTex, i6++);
+		r.z = tex1Dfetch(g_twistTex, i6++);
+		t.x = tex1Dfetch(g_twistTex, i6++);
+		t.y = tex1Dfetch(g_twistTex, i6++);
+		t.z = tex1Dfetch(g_twistTex, i6++);
+	}
+
 	// map the lower part to full 6x6 matrix
 	__constant__ int g_lower_2_full_6x6[21] = {
 		0,
@@ -19,6 +44,8 @@ namespace dfusion
 		{ 10, 11, 12, 13, 14, -1 },
 		{ 15, 16, 17, 18, 19, 20 },
 	};
+
+#define D_1_DIV_6 0.166666667
 
 	__device__ __forceinline__ float3 read_float3_4(float4 a)
 	{
@@ -45,29 +72,47 @@ namespace dfusion
 		return ((WarpField::IdxType*)(&knn))[k];
 	}
 
-#pragma region --calc data term
-
-	template<int CTA_SIZE_, typename T>
-	static __device__ __forceinline__ void reduce(volatile T* buffer)
+#pragma region --bind textures
+	void GpuGaussNewtonSolver::bindTextures()
 	{
-		int tid = Block::flattenedThreadId();
-		T val = buffer[tid];
-
-		if (CTA_SIZE_ >= 1024) { if (tid < 512) buffer[tid] = val = val + buffer[tid + 512]; __syncthreads(); }
-		if (CTA_SIZE_ >= 512) { if (tid < 256) buffer[tid] = val = val + buffer[tid + 256]; __syncthreads(); }
-		if (CTA_SIZE_ >= 256) { if (tid < 128) buffer[tid] = val = val + buffer[tid + 128]; __syncthreads(); }
-		if (CTA_SIZE_ >= 128) { if (tid <  64) buffer[tid] = val = val + buffer[tid + 64]; __syncthreads(); }
-
-		if (tid < 32){
-			if (CTA_SIZE_ >= 64) { buffer[tid] = val = val + buffer[tid + 32]; }
-			if (CTA_SIZE_ >= 32) { buffer[tid] = val = val + buffer[tid + 16]; }
-			if (CTA_SIZE_ >= 16) { buffer[tid] = val = val + buffer[tid + 8]; }
-			if (CTA_SIZE_ >= 8) { buffer[tid] = val = val + buffer[tid + 4]; }
-			if (CTA_SIZE_ >= 4) { buffer[tid] = val = val + buffer[tid + 2]; }
-			if (CTA_SIZE_ >= 2) { buffer[tid] = val = val + buffer[tid + 1]; }
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<WarpField::KnnIdx>();
+			cudaBindTexture(&offset, &g_nodesKnnTex, m_nodesKnn.ptr(), &desc, 
+				m_nodesKnn.size() * sizeof(WarpField::KnnIdx));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float4>();
+			cudaBindTexture(&offset, &g_nodesVwTex, m_nodesVw.ptr(), &desc, 
+				m_nodesVw.size() * sizeof(float4));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+			cudaBindTexture(&offset, &g_twistTex, m_twist.ptr(), &desc,
+				m_twist.size() * sizeof(float));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
 		}
 	}
 
+	void GpuGaussNewtonSolver::unBindTextures()
+	{
+		cudaUnbindTexture(g_twistTex);
+		cudaUnbindTexture(g_nodesVwTex);
+		cudaUnbindTexture(g_nodesKnnTex);
+	}
+#pragma endregion
+
+#pragma region --calc data term
 	struct DataTermCombined
 	{
 		typedef WarpField::KnnIdx KnnIdx;
@@ -90,9 +135,8 @@ namespace dfusion
 		PtrStep<float4> vmap_cano;
 		PtrStep<float4> nmap_cano;
 		PtrStep<KnnIdx> vmapKnn;
-		float* twist;
-		float4* nodesVw;
-		float* gbuf;
+		float* Hd_;
+		float* g_;
 
 		Intr intr;
 		Tbx::Transfo Tlw;
@@ -108,46 +152,23 @@ namespace dfusion
 
 		__device__ __forceinline__ float data_term_energy(float f)const
 		{
-			// the robust Tukey penelty gradient
-			if (abs(f) <= psi_data)
-				return psi_data*psi_data / 6.f *(1 - pow3(1 - sqr(f / psi_data)));
-			else
-				return psi_data*psi_data / 6.f;
+			return psi_data*psi_data * D_1_DIV_6 * (1 - pow3(max(0.f, 1.f - sqr(f / psi_data))));
+
+			//// the robust Tukey penelty gradient
+			//if (abs(f) <= psi_data)
+			//	return psi_data*psi_data * D_1_DIV_6 * (1 - pow3(1 - sqr(f / psi_data)));
+			//else
+			//	return psi_data*psi_data * D_1_DIV_6;
 		}
 
 		__device__ __forceinline__ float data_term_penalty(float f)const
 		{
-			// the robust Tukey penelty gradient
-			if (abs(f) <= psi_data)
-				return f * sqr(1 - sqr(f / psi_data));
-			else
-				return 0;
-		}
-
-		__device__ __forceinline__ float reg_term_energy(Tbx::Vec3 f)const
-		{
-			// the robust Huber penelty gradient
-			float s = 0;
-			float norm = f.norm();
-			if (norm < psi_reg)
-				s = norm * norm * 0.5f;
-			else
-			for (int k = 0; k < 3; k++)
-				s += psi_reg*(abs(f[k]) - psi_reg*0.5f);
-			return s;
-		}
-
-		__device__ __forceinline__ Tbx::Vec3 reg_term_penalty(Tbx::Vec3 f)const
-		{
-			// the robust Huber penelty gradient
-			Tbx::Vec3 df;
-			float norm = f.norm();
-			if (norm < psi_reg)
-				df = f;
-			else
-			for (int k = 0; k < 3; k++)
-				df[k] = sign(f[k])*psi_reg;
-			return df;
+			return f * sqr(max(0.f, 1.f - sqr(f / psi_data)));
+			//// the robust Tukey penelty gradient
+			//if (abs(f) <= psi_data)
+			//	return f * sqr(1 - sqr(f / psi_data));
+			//else
+			//	return 0;
 		}
 
 		__device__ __forceinline__ Tbx::Transfo outer_product(Tbx::Vec3 n, Tbx::Point3 v)const
@@ -334,6 +355,23 @@ namespace dfusion
 			return T;
 		}
 
+		__device__ __forceinline__ Tbx::Transfo compute_p_f_p_T(const Tbx::Vec3& n,
+			const Tbx::Point3& v, const Tbx::Point3& vl, const Tbx::Dual_quat_cu& dq)const
+		{
+			//Tbx::Transfo T = Tlw*dq.to_transformation_after_normalize();
+			//Tbx::Transfo nvt = outer_product(n, v);
+			//Tbx::Transfo vlnt = outer_product(n, vl).transpose();
+			//Tbx::Transfo p_f_p_T = T*(nvt + nvt.transpose()) - vlnt;
+			Tbx::Vec3 Tn = Tlw*dq.rotate(n);
+			Tbx::Point3 Tv(Tlw*dq.transform(v) - vl);
+			return Tbx::Transfo(
+				Tn.x*v.x + n.x*Tv.x, Tn.x*v.y + n.y*Tv.x, Tn.x*v.z + n.z*Tv.x, Tn.x,
+				Tn.y*v.x + n.x*Tv.y, Tn.y*v.y + n.y*Tv.y, Tn.y*v.z + n.z*Tv.y, Tn.y,
+				Tn.z*v.x + n.x*Tv.z, Tn.z*v.y + n.y*Tv.z, Tn.z*v.z + n.z*Tv.z, Tn.z,
+				n.x, n.y, n.z, 0
+				);
+		}
+
 		__device__ __forceinline__ bool search(int x, int y, Tbx::Point3& vl) const
 		{
 			float3 vwarp = read_float3_4(vmap_warp(y, x));
@@ -392,10 +430,11 @@ namespace dfusion
 					int knnNodeId = knn_k(knn, k);
 					if (knnNodeId < nNodes)
 					{
-						Tbx::Vec3 r(twist[knnNodeId * 6], twist[knnNodeId * 6 + 1], twist[knnNodeId * 6 + 2]);
-						Tbx::Vec3 t(twist[knnNodeId * 6 + 3], twist[knnNodeId * 6 + 4], twist[knnNodeId * 6 + 5]);
-						Tbx::Point3 nodesV(convert(read_float3_4(nodesVw[knnNodeId])));
-						float invNodesW = nodesVw[knnNodeId].w;
+						Tbx::Vec3 r, t;
+						get_twist(knnNodeId, r, t);
+						float4 nodeVw = get_nodesVw(knnNodeId);
+						Tbx::Point3 nodesV(convert(read_float3_4(nodeVw)));
+						float invNodesW = nodeVw.w;
 						dqk[k].from_twist(r, t);
 						// note: we store inv radius as vw.w, thus using * instead of / here
 						wk[k] = __expf(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
@@ -409,7 +448,6 @@ namespace dfusion
 				float inv_norm_dq_bar = 1.f / dq_bar.get_non_dual_part().norm();
 				float inv_norm_dq_bar3 = inv_norm_dq_bar*inv_norm_dq_bar*inv_norm_dq_bar;
 				dq = dq * inv_norm_dq_bar; // normalize
-				Tbx::Transfo T = Tlw*dq.to_transformation();
 
 				v = Tlw*dq.transform(v);
 				n = Tlw*dq.rotate(n);
@@ -418,9 +456,7 @@ namespace dfusion
 				float f = data_term_penalty(n.dot(v - vl));
 
 				// paitial_f_partial_T
-				Tbx::Transfo nvt = outer_product(n, v);
-				Tbx::Transfo vlnt = outer_product(n, vl).transpose();
-				Tbx::Transfo p_f_p_T = T*(nvt + nvt.transpose()) - vlnt;
+				Tbx::Transfo p_f_p_T = compute_p_f_p_T(n, v, vl, dq);
 
 				for (int knnK = 0; knnK < KnnK; knnK++)
 				{
@@ -464,10 +500,13 @@ namespace dfusion
 
 						// reduce
 						int shift = knnNodeId * VarPerNode2;
+						int shift_g = knnNodeId * VarPerNode;
 						for (int i = 0; i < VarPerNode; ++i)
 						{
+							#pragma unroll
 							for (int j = 0; j <= i; ++j)
-								atomicAdd(&gbuf[shift + j], p_f_p_alpha[i] * p_f_p_alpha[j]);
+								atomicAdd(&Hd_[shift + j], p_f_p_alpha[i] * p_f_p_alpha[j]);
+							atomicAdd(&g_[shift_g + i], p_f_p_alpha[i] * f);
 							shift += VarPerNode;
 						}// end for i
 					}// end if knnNodeId < nNodes
@@ -486,7 +525,8 @@ namespace dfusion
 		DataTermCombined cs;
 		cs.angleThres = m_param->fusion_nonRigid_angleThreSin;
 		cs.distThres = m_param->fusion_nonRigid_distThre;
-		cs.gbuf = m_Hd;
+		cs.Hd_ = m_Hd;
+		cs.g_ = m_g;
 		cs.imgHeight = m_vmap_cano->rows();
 		cs.imgWidth = m_vmap_cano->cols();
 		cs.intr = m_intr;
@@ -498,8 +538,6 @@ namespace dfusion
 		cs.vmap_warp = *m_vmap_warp;
 		cs.vmapKnn = m_vmapKnn;
 		cs.nNodes = m_numNodes;
-		cs.twist = m_twist;
-		cs.nodesVw = m_nodesVw;
 		cs.Tlw = m_pWarpField->get_rigidTransform();
 		cs.psi_data = m_param->fusion_psi_data;
 		cs.psi_reg = m_param->fusion_psi_reg;
