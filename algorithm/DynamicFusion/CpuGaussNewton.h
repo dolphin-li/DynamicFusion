@@ -19,7 +19,7 @@ namespace dfusion
 
 		void solve(bool factor_rigid_out = true);
 
-		void debug_set_init_x(const float* x_host);
+		void debug_set_init_x(const float* x_host, int n);
 	protected:
 	private:
 		WarpField* m_pWarpField;

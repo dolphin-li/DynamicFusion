@@ -83,7 +83,7 @@ namespace dfusion
 		{
 			size_t offset;
 			cudaChannelFormatDesc desc = cudaCreateChannelDesc<WarpField::KnnIdx>();
-			cudaBindTexture(&offset, &g_nodesKnnTex, m_nodesKnn.ptr(), &desc, 
+			cudaBindTexture(&offset, &g_nodesKnnTex, m_nodesKnn.ptr(), &desc,
 				m_nodesKnn.size() * sizeof(WarpField::KnnIdx));
 			if (offset != 0)
 				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
@@ -92,7 +92,7 @@ namespace dfusion
 		{
 			size_t offset;
 			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float4>();
-			cudaBindTexture(&offset, &g_nodesVwTex, m_nodesVw.ptr(), &desc, 
+			cudaBindTexture(&offset, &g_nodesVwTex, m_nodesVw.ptr(), &desc,
 				m_nodesVw.size() * sizeof(float4));
 			if (offset != 0)
 				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
@@ -118,7 +118,7 @@ namespace dfusion
 
 #pragma region --calc data term
 
-#define ENABLE_GPU_DUMP_DEBUG
+//#define ENABLE_GPU_DUMP_DEBUG
 
 	struct DataTermCombined
 	{
@@ -304,7 +304,7 @@ namespace dfusion
 			//	0, 0, 0, 0) * 2;
 			p_dqi_p_alphak = wk_k * (
 				p_qk_p_alpha[4] - dq_bar[4] * pdot
-				) * 2;
+				);
 			p_T_p_alphak[3] += -dq[1] * p_dqi_p_alphak;
 			p_T_p_alphak[7] += -dq[2] * p_dqi_p_alphak;
 			p_T_p_alphak[11] += -dq[3] * p_dqi_p_alphak;
@@ -341,7 +341,7 @@ namespace dfusion
 			p_dqi_p_alphak = wk_k * (
 				p_qk_p_alpha[7] - dq_bar[7] * pdot
 				);
-			p_T_p_alphak[3] += -dq[2] * p_dqi_p_alphak;
+			p_T_p_alphak[3] += dq[2] * p_dqi_p_alphak;
 			p_T_p_alphak[7] += -dq[1] * p_dqi_p_alphak;
 			p_T_p_alphak[11] += dq[0] * p_dqi_p_alphak;
 
@@ -487,7 +487,7 @@ namespace dfusion
 						p_f_p_alpha[2] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
 						// alpha3
-						p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0), 
+						p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0),
 							Tbx::Quat_cu(-q1[1], q1[0], -q1[3], q1[2]));
 						p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
 							inv_norm_dq_bar, wk_k);
@@ -512,21 +512,21 @@ namespace dfusion
 						int shift_g = knnNodeId * VarPerNode;
 						for (int i = 0; i < VarPerNode; ++i)
 						{
-							#pragma unroll
+#pragma unroll
 							for (int j = 0; j <= i; ++j)
 							{
 								atomicAdd(&Hd_[shift + j], p_f_p_alpha[i] * p_f_p_alpha[j]);
 #ifdef ENABLE_GPU_DUMP_DEBUG
-							// debug
-							if (knnNodeId == 390 && i == 5 && j == 1
-								&& debug_buffer_pixel_sum2 && debug_buffer_pixel_val
-								)
-							{
-								for (int k = 0; k < VarPerNode; k++)
-									debug_buffer_pixel_val[(y*imgWidth + x)*VarPerNode + k] =
-									p_f_p_alpha[k];
-								debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
-							}
+								// debug
+								if (knnNodeId == 390 && i == 5 && j == 1
+									&& debug_buffer_pixel_sum2 && debug_buffer_pixel_val
+									)
+								{
+									for (int k = 0; k < VarPerNode; k++)
+										debug_buffer_pixel_val[(y*imgWidth + x)*VarPerNode + k] =
+										p_f_p_alpha[k];
+									debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
+								}
 #endif
 							}
 							atomicAdd(&g_[shift_g + i], p_f_p_alpha[i] * f);
@@ -594,7 +594,7 @@ namespace dfusion
 			FILE* pFile = fopen("D:/tmp/gpu_pixel.txt", "w");
 			for (int i = 0; i < ps.size(); i++)
 			{
-				fprintf(pFile, "%ef %ef %ef %ef %ef %ef %ef\n", 
+				fprintf(pFile, "%ef %ef %ef %ef %ef %ef %ef\n",
 					pv[i * 6 + 0], pv[i * 6 + 1], pv[i * 6 + 2],
 					pv[i * 6 + 3], pv[i * 6 + 4], pv[i * 6 + 5],
 					ps[i]);

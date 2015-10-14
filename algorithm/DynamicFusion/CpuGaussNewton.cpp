@@ -1370,9 +1370,14 @@ namespace dfusion
 		m_egc->CalcCorr();
 	}
 
-	void CpuGaussNewton::debug_set_init_x(const float* x)
+	void CpuGaussNewton::debug_set_init_x(const float* x, int n)
 	{
-		for (int i = 0; i < m_egc->x_.size(); i++)
+		if (n != m_egc->x_.size())
+		{
+			printf("debug_set_init_x: size not matched: %d %d\n", n, m_egc->x_.size());
+			throw std::exception();
+		}
+		for (int i = 0; i < n; i++)
 			m_egc->x_[i] = x[i];
 	}
 

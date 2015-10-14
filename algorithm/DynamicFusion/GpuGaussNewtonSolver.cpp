@@ -96,9 +96,14 @@ namespace dfusion
 		m_pWarpField->update_nodes_via_twist(m_twist);
 	}
 
-	void GpuGaussNewtonSolver::debug_set_init_x(const float* x_host)
+	void GpuGaussNewtonSolver::debug_set_init_x(const float* x_host, int n)
 	{
-		m_twist.upload(x_host, m_twist.size());
+		if (n != m_numNodes*VarPerNode)
+		{
+			printf("debug_set_init_x: size not matched: %d %d\n", n, m_numNodes*VarPerNode);
+			throw std::exception();
+		}
+		cudaSafeCall(cudaMemcpy(m_twist.ptr(), x_host, n*sizeof(float), cudaMemcpyHostToDevice));
 	}
 
 	void GpuGaussNewtonSolver::debug_print()

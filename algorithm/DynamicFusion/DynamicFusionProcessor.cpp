@@ -304,6 +304,7 @@ namespace dfusion
 
 		// icp iteration
 		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
+		solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{
 			// 1. find correspondence
@@ -313,11 +314,10 @@ namespace dfusion
 #if 1
 			Eigen::VectorXf debugX;
 			debugX.resize(m_warpField->getNumAllNodes()*6);
-			debugX.setConstant(0.1);
-			solver.debug_set_init_x(debugX.data());
-			m_gsSolver->debug_set_init_x(debugX.data());
+			debugX.setRandom();
+			m_gsSolver->debug_set_init_x(debugX.data(), debugX.size());
+			solver.debug_set_init_x(debugX.data(), debugX.size());
 
-			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
 			solver.solve(m_param.fusion_post_rigid_factor);
 
