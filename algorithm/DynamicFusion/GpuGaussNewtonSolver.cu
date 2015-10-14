@@ -71,6 +71,10 @@ namespace dfusion
 	{
 		return ((WarpField::IdxType*)(&knn))[k];
 	}
+	__device__ __forceinline__ const WarpField::IdxType& knn_k(const WarpField::KnnIdx& knn, int k)
+	{
+		return ((WarpField::IdxType*)(&knn))[k];
+	}
 
 #pragma region --bind textures
 	void GpuGaussNewtonSolver::bindTextures()
@@ -113,6 +117,7 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --calc data term
+
 	struct DataTermCombined
 	{
 		typedef WarpField::KnnIdx KnnIdx;
@@ -183,29 +188,27 @@ namespace dfusion
 
 		__device__ __forceinline__ Tbx::Dual_quat_cu p_qk_p_alpha_func(Tbx::Dual_quat_cu dq, int i)const
 		{
-			Tbx::Vec3 t, r;
-			float b, c, n;
 			Tbx::Quat_cu q0(0, 0, 0, 0), q1 = dq.get_non_dual_part();
-			switch (i)
+
+			if (i < 3)
 			{
-			case 0:
+				Tbx::Vec3 t, r;
+				float b, c, n;
 				dq.to_twist(r, t);
 				n = r.norm();
+				b = sin(n) / n;
+				c = (cos(n) - b) / (n*n);
 				if (n > Tbx::Dual_quat_cu::epsilon())
 				{
-					b = sin(n) / n;
-					c = (cos(n) - b) / (n*n);
-					q0.coeff0 = -r.x * b;
-					q0.coeff1 = b + r.x*r.x*c;
-					q0.coeff2 = r.x*r.y*c;
-					q0.coeff3 = r.x*r.z*c;
+					q0[0] = -r[i] * b;
+					q0[1] = r[i] * r[0] * c;
+					q0[2] = r[i] * r[1] * c;
+					q0[3] = r[i] * r[2] * c;
+					q0[i+1] += b;
 				}
 				else
 				{
-					q0.coeff0 = 0;
-					q0.coeff1 = 1;
-					q0.coeff2 = 0;
-					q0.coeff3 = 0;
+					q0[i+1] = 1;
 				}
 
 				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
@@ -213,66 +216,20 @@ namespace dfusion
 				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
 				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
 				return Tbx::Dual_quat_cu(q0, q1);
-			case 1:
-				dq.to_twist(r, t);
-				n = r.norm();
-				if (n > Tbx::Dual_quat_cu::epsilon())
+			}
+			else
+			{
+				switch (i)
 				{
-					b = sin(n) / n;
-					c = (cos(n) - b) / (n*n);
-					q0.coeff0 = -r.y * b;
-					q0.coeff1 = r.y*r.x*c;
-					q0.coeff2 = b + r.y*r.y*c;
-					q0.coeff3 = r.y*r.z*c;
+				case 3:
+					return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff1, q1.coeff0, -q1.coeff3, q1.coeff2)*0.5f);
+				case 4:
+					return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff2, q1.coeff3, q1.coeff0, -q1.coeff1)*0.5f);
+				case 5:
+					return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff3, -q1.coeff2, q1.coeff1, q1.coeff0)*0.5f);
+				default:
+					return Tbx::Dual_quat_cu::identity();
 				}
-				else
-				{
-					q0.coeff0 = 0;
-					q0.coeff1 = 0;
-					q0.coeff2 = 1;
-					q0.coeff3 = 0;
-				}
-
-				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
-				q1.coeff1 = (t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
-				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
-				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
-				return Tbx::Dual_quat_cu(q0, q1);
-			case 2:
-				dq.to_twist(r, t);
-				n = r.norm();
-				if (n > Tbx::Dual_quat_cu::epsilon())
-				{
-					b = sin(n) / n;
-					c = (cos(n) - b) / (n*n);
-
-					q0.coeff0 = -r.z * b;
-					q0.coeff1 = r.z*r.x*c;
-					q0.coeff2 = r.z*r.y*c;
-					q0.coeff3 = b + r.z*r.z*c;
-				}
-				else
-				{
-					q0.coeff0 = 0;
-					q0.coeff1 = 0;
-					q0.coeff2 = 0;
-					q0.coeff3 = 1;
-				}
-
-				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
-				q1.coeff1 = (t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
-				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
-				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
-				return Tbx::Dual_quat_cu(q0, q1);
-			case 3:
-				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff1, q1.coeff0, -q1.coeff3, q1.coeff2))*0.5;
-			case 4:
-				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff2, q1.coeff3, q1.coeff0, -q1.coeff1))*0.5;
-			case 5:
-				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff3, -q1.coeff2, q1.coeff1, q1.coeff0))*0.5;
-			default:
-				printf("p_qk_p_alpha_func: out of range");
-				return Tbx::Dual_quat_cu::identity();
 			}
 		}
 
@@ -407,21 +364,20 @@ namespace dfusion
 
 		__device__ __forceinline__ void operator () () const
 		{
-			int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
-			int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
+			const int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
+			const int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
 
 			Tbx::Point3 vl;
 			bool found_coresp = false;
 			if (x < imgWidth && y < imgHeight)
 				found_coresp = search(x, y, vl);
 
-			KnnIdx knn = make_ushort4(0,0,0,0);
 			if (found_coresp)
 			{
 				Tbx::Point3 v(convert(read_float3_4(vmap_cano(y, x))));
 				Tbx::Vec3 n(convert(read_float3_4(nmap_cano(y, x))));
 
-				knn = vmapKnn(y, x);
+				const KnnIdx knn = vmapKnn(y, x);
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 				Tbx::Dual_quat_cu dqk[KnnK];
 				float wk[KnnK];
@@ -446,22 +402,22 @@ namespace dfusion
 
 				Tbx::Dual_quat_cu dq_bar = dq;
 				float inv_norm_dq_bar = 1.f / dq_bar.get_non_dual_part().norm();
-				float inv_norm_dq_bar3 = inv_norm_dq_bar*inv_norm_dq_bar*inv_norm_dq_bar;
 				dq = dq * inv_norm_dq_bar; // normalize
 
 				v = Tlw*dq.transform(v);
 				n = Tlw*dq.rotate(n);
 
 				// the grad energy f
-				float f = data_term_penalty(n.dot(v - vl));
+				const float f = data_term_penalty(n.dot(v - vl));
 
 				// paitial_f_partial_T
-				Tbx::Transfo p_f_p_T = compute_p_f_p_T(n, v, vl, dq);
+				const Tbx::Transfo p_f_p_T = compute_p_f_p_T(n, v, vl, dq);
 
 				for (int knnK = 0; knnK < KnnK; knnK++)
 				{
 					float p_f_p_alpha[VarPerNode];
 					int knnNodeId = knn_k(knn, knnK);
+					float wk_k = wk[knnK] * inv_norm_dq_bar * 2;
 					if (knnNodeId < nNodes)
 					{
 						// partial_T_partial_alphak
@@ -469,33 +425,138 @@ namespace dfusion
 						{
 							Tbx::Transfo p_T_p_alphak = Tbx::Transfo::empty();
 							Tbx::Dual_quat_cu p_qk_p_alpha = p_qk_p_alpha_func(dqk[knnK], ialpha);
-							for (int idq = 0; idq < 8; idq++)
-							{
-								// partial_SE3_partial_dqi
-								Tbx::Transfo p_SE3_p_dqi = p_SE3_p_dq_func(dq, idq);
-								float dq_bar_i = dq_bar[idq];
+							float pdot = dq_bar.get_non_dual_part().dot(p_qk_p_alpha.get_non_dual_part())
+								* sqr(inv_norm_dq_bar);
+	
+							//// evaluate p_dqi_p_alphak, heavily hard code here
+							//// this hard code is crucial to the performance 
+							// 0:
+							// (0, -z0, y0, x1,
+							// z0, 0, -x0, y1,
+							//-y0, x0, 0, z1,
+							// 0, 0, 0, 0) * 2;
+							float p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[0] - dq_bar[0] *  pdot
+								);
+							p_T_p_alphak[1] += -dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[2] += dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[3] += dq[5] * p_dqi_p_alphak;
+							p_T_p_alphak[4] += dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[6] += -dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += dq[6] * p_dqi_p_alphak;
+							p_T_p_alphak[8] += -dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[9] += dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[11] += dq[7] * p_dqi_p_alphak;
 
-								// partial_dqi_partial_alphak
-								float p_dqi_p_alphak = 0;
-								for (int j = 0; j < 8; j++)
-								{
-									// partial_dqi_partial_qkj
-									float dq_bar_j = dq_bar[j];
-									float p_dqi_p_qkj = wk[knnK] * inv_norm_dq_bar * (idq == j);
-									if (j < 4)
-										p_dqi_p_qkj -= wk[knnK] * inv_norm_dq_bar3*dq_bar_i*dq_bar_j;
+							// 1
+							//( 0, y0, z0, -w1,
+							//	y0, -2 * x0, -w0, -z1,
+							//	z0, w0, -2 * x0, y1,
+							//	0, 0, 0, 0) * 2;
+							p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[1] - dq_bar[1] * pdot
+								);
+							p_T_p_alphak[1] += dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[2] += dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[3] += -dq[4] * p_dqi_p_alphak;
+							p_T_p_alphak[4] += dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[5] += -dq[1] * p_dqi_p_alphak * 2;
+							p_T_p_alphak[6] += -dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += -dq[7] * p_dqi_p_alphak;
+							p_T_p_alphak[8] += dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[9] += dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[10] += -dq[1] * p_dqi_p_alphak * 2;
+							p_T_p_alphak[11] += dq[6] * p_dqi_p_alphak;
 
-									// partial_qkj_partial_alphak
-									float p_qkj_p_alphak = p_qk_p_alpha[j];
+							// 2.
+							// (-2 * y0, x0, w0, z1,
+							//	x0, 0, z0, -w1,
+							//	-w0, z0, -2 * y0, -x1,
+							//	0, 0, 0, 0) * 2;
+							p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[2] - dq_bar[2] * pdot
+								);
+							p_T_p_alphak[0] += -dq[2] * p_dqi_p_alphak * 2;
+							p_T_p_alphak[1] += dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[2] += dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[3] += dq[7] * p_dqi_p_alphak;
+							p_T_p_alphak[4] += dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[6] += dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += -dq[4] * p_dqi_p_alphak;
+							p_T_p_alphak[8] += -dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[9] += dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[10] += -dq[2] * p_dqi_p_alphak * 2;
+							p_T_p_alphak[11] += -dq[5] * p_dqi_p_alphak;
 
-									p_dqi_p_alphak += p_dqi_p_qkj * p_qkj_p_alphak;
-								}// end for j
+							// 3.
+							// (-2 * z0, -w0, x0, -y1,
+							//	w0, -2 * z0, y0, x1,
+							//	x0, y0, 0, -w1,
+							//	0, 0, 0, 0) * 2;
+							p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[3] - dq_bar[3] * pdot
+								);
+							p_T_p_alphak[0] += -dq[3] * p_dqi_p_alphak * 2;
+							p_T_p_alphak[1] += -dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[2] += dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[3] += -dq[6] * p_dqi_p_alphak;
+							p_T_p_alphak[4] += dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[5] += -dq[3] * p_dqi_p_alphak * 2;
+							p_T_p_alphak[6] += dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += dq[5] * p_dqi_p_alphak;
+							p_T_p_alphak[8] += dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[9] += dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[11] += -dq[4] * p_dqi_p_alphak;
 
-								p_T_p_alphak += p_SE3_p_dqi * p_dqi_p_alphak;
-							}// end for idq
-							p_T_p_alphak = Tlw * p_T_p_alphak;
+							// 4.
+							//( 0, 0, 0, -x0,
+							//	0, 0, 0, -y0,
+							//	0, 0, 0, -z0,
+							//	0, 0, 0, 0) * 2;
+							p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[4] - dq_bar[4] * pdot
+								) * 2;
+							p_T_p_alphak[3] += -dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += -dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[11] += -dq[3] * p_dqi_p_alphak;
 
-							p_f_p_alpha[ialpha] = trace_AtB(p_f_p_T, p_T_p_alphak);
+							// 5. 
+							// (0, 0, 0, w0,
+							//	0, 0, 0, z0,
+							//	0, 0, 0, -y0,
+							//	0, 0, 0, 0) * 2;
+							p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[5] - dq_bar[5] * pdot
+								);
+							p_T_p_alphak[3] += dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[11] += -dq[2] * p_dqi_p_alphak;
+
+							// 6. 
+							// (0, 0, 0, -z0,
+							//	0, 0, 0, w0,
+							//	0, 0, 0, x0,
+							//	0, 0, 0, 0) * 2;
+							p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[6] - dq_bar[6] * pdot
+								);
+							p_T_p_alphak[3] += -dq[3] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += dq[0] * p_dqi_p_alphak;
+							p_T_p_alphak[11] += dq[1] * p_dqi_p_alphak;
+
+							// 7.
+							// (0, 0, 0, y0,
+							//	0, 0, 0, -x0,
+							//	0, 0, 0, w0,
+							//	0, 0, 0, 0) * 2;
+							p_dqi_p_alphak = wk_k * (
+								p_qk_p_alpha[7] - dq_bar[7] * pdot
+								);
+							p_T_p_alphak[3] += -dq[2] * p_dqi_p_alphak;
+							p_T_p_alphak[7] += -dq[1] * p_dqi_p_alphak;
+							p_T_p_alphak[11] += dq[0] * p_dqi_p_alphak;
+
+							p_f_p_alpha[ialpha] = trace_AtB(p_f_p_T, Tlw * p_T_p_alphak);
 						}// end for ialpha
 
 						// reduce

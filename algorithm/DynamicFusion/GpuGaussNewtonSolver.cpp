@@ -82,7 +82,7 @@ namespace dfusion
 		bindTextures();
 
 		// perform Gauss-Newton iteration
-		//for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
+		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
 			// 1. calculate data term: H_d += J_dJ_d'; 
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));

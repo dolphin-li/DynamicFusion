@@ -712,6 +712,7 @@ class __align__(16) Quat_cu{
 
 	__device__ __host__ float& operator[](int i)
 	{
+#if 0
 		switch (i)
 		{
 		case 0:
@@ -725,10 +726,14 @@ class __align__(16) Quat_cu{
 		default:
 			return coeff3;
 		}
+#else
+		return ((float*)this)[i];
+#endif
 	}
 
 	__device__ __host__ const float& operator[](int i)const
 	{
+#if 0
 		switch (i)
 		{
 		case 0:
@@ -742,6 +747,9 @@ class __align__(16) Quat_cu{
 		default:
 			return coeff3;
 		}
+#else
+		return ((float*)this)[i];
+#endif
 	}
 
 	__device__ __host__ float dot(const Quat_cu& q){
