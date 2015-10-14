@@ -118,6 +118,8 @@ namespace dfusion
 
 #pragma region --calc data term
 
+#define ENABLE_GPU_DUMP_DEBUG
+
 	struct DataTermCombined
 	{
 		typedef WarpField::KnnIdx KnnIdx;
@@ -154,6 +156,12 @@ namespace dfusion
 		float angleThres;
 		float psi_reg;
 		float psi_data;
+
+#ifdef ENABLE_GPU_DUMP_DEBUG
+		// for debug
+		float* debug_buffer_pixel_sum2;
+		float* debug_buffer_pixel_val;
+#endif
 
 		__device__ __forceinline__ float data_term_energy(float f)const
 		{
@@ -366,7 +374,7 @@ namespace dfusion
 				return false;
 
 			float sine = norm(cross(nwarp, nlive));
-			if (!(sine <= angleThres))
+			if (!(sine < angleThres))
 				return false;
 
 			vl = Tbx::Point3(vlive.x, vlive.y, vlive.z);
@@ -419,11 +427,8 @@ namespace dfusion
 				float inv_norm_dq_bar = 1.f / dq_bar.get_non_dual_part().norm();
 				dq = dq * inv_norm_dq_bar; // normalize
 
-				v = Tlw*dq.transform(v);
-				n = Tlw*dq.rotate(n);
-
 				// the grad energy f
-				const float f = data_term_penalty(n.dot(v - vl));
+				const float f = data_term_penalty((Tlw*dq.rotate(n)).dot(Tlw*dq.transform(v) - vl));
 
 				// paitial_f_partial_T
 				const Tbx::Transfo p_f_p_T = compute_p_f_p_T(n, v, vl, dq);
@@ -509,7 +514,21 @@ namespace dfusion
 						{
 							#pragma unroll
 							for (int j = 0; j <= i; ++j)
+							{
 								atomicAdd(&Hd_[shift + j], p_f_p_alpha[i] * p_f_p_alpha[j]);
+#ifdef ENABLE_GPU_DUMP_DEBUG
+							// debug
+							if (knnNodeId == 390 && i == 5 && j == 1
+								&& debug_buffer_pixel_sum2 && debug_buffer_pixel_val
+								)
+							{
+								for (int k = 0; k < VarPerNode; k++)
+									debug_buffer_pixel_val[(y*imgWidth + x)*VarPerNode + k] =
+									p_f_p_alpha[k];
+								debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
+							}
+#endif
+							}
 							atomicAdd(&g_[shift_g + i], p_f_p_alpha[i] * f);
 							shift += VarPerNode;
 						}// end for i
@@ -546,6 +565,17 @@ namespace dfusion
 		cs.psi_data = m_param->fusion_psi_data;
 		cs.psi_reg = m_param->fusion_psi_reg;
 
+#ifdef ENABLE_GPU_DUMP_DEBUG
+		// debugging
+		DeviceArray<float> pixelSum2, pixelVal;
+		pixelSum2.create(cs.imgHeight*cs.imgWidth);
+		cudaMemset(pixelSum2.ptr(), 0, pixelSum2.sizeBytes());
+		pixelVal.create(cs.imgHeight*cs.imgWidth*VarPerNode);
+		cudaMemset(pixelVal.ptr(), 0, pixelVal.sizeBytes());
+		cs.debug_buffer_pixel_sum2 = pixelSum2;
+		cs.debug_buffer_pixel_val = pixelVal;
+#endif
+
 		//////////////////////////////
 		dim3 block(CTA_SIZE_X, CTA_SIZE_Y);
 		dim3 grid(1, 1, 1);
@@ -553,6 +583,25 @@ namespace dfusion
 		grid.y = divUp(cs.imgHeight, block.y);
 		dataTermCombinedKernel << <grid, block >> >(cs);
 		cudaSafeCall(cudaGetLastError(), "dataTermCombinedKernel");
+
+		// debugging
+#ifdef ENABLE_GPU_DUMP_DEBUG
+		{
+			std::vector<float> ps, pv;
+			pixelSum2.download(ps);
+			pixelVal.download(pv);
+
+			FILE* pFile = fopen("D:/tmp/gpu_pixel.txt", "w");
+			for (int i = 0; i < ps.size(); i++)
+			{
+				fprintf(pFile, "%ef %ef %ef %ef %ef %ef %ef\n", 
+					pv[i * 6 + 0], pv[i * 6 + 1], pv[i * 6 + 2],
+					pv[i * 6 + 3], pv[i * 6 + 4], pv[i * 6 + 5],
+					ps[i]);
+			}
+			fclose(pFile);
+		}
+#endif
 	}
 #pragma endregion
 }

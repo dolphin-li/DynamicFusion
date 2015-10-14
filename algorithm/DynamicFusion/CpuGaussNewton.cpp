@@ -57,6 +57,7 @@ namespace dfusion
 		std::vector<float4> nmap_live_;
 		std::vector<int> map_c2l_corr_;
 		std::vector<int> row_index_of_pixel_;
+		std::vector<int> pixel_index_of_row_;
 		std::vector<int> coo_pos_of_pixel_;
 		int nPixel_rows_;
 		int nPixel_cooPos_;
@@ -235,7 +236,6 @@ namespace dfusion
 				if (normh < (normv + real(1e-6)) * real(1e-6))
 					break;
 			}
-
 			return evaluateTotalEnergy(xStart);
 		}
 
@@ -546,7 +546,9 @@ namespace dfusion
 			m_cooSys.clear();
 			coo_pos_of_pixel_.resize(nPixel);
 			row_index_of_pixel_.resize(nPixel);
+			pixel_index_of_row_.resize(nPixel);
 			std::fill(row_index_of_pixel_.begin(), row_index_of_pixel_.end(), -1);
+			std::fill(pixel_index_of_row_.begin(), pixel_index_of_row_.end(), -1);
 			std::fill(coo_pos_of_pixel_.begin(), coo_pos_of_pixel_.end(), -1);
 
 			// data term
@@ -575,7 +577,11 @@ namespace dfusion
 					}
 				}
 				if (valid)
-					row_index_of_pixel_[iPixel] = nRow++;
+				{
+					row_index_of_pixel_[iPixel] = nRow;
+					pixel_index_of_row_[nRow] = iPixel;
+					nRow++;
+				}
 			}// end for iPixel
 			nPixel_rows_ = nRow;
 			nPixel_cooPos_ = m_cooSys.size();
@@ -832,6 +838,33 @@ namespace dfusion
 					}
 					fclose(pFile);
 				}
+				{
+					std::vector<float> px(imgWidth_*imgHeight_*6, 0.f);
+					SpMat subJacData = jacData.middleCols(390 * 6, 6);
+					for (int c = 0; c < subJacData.outerSize(); c++)
+					{
+						int cs = subJacData.outerIndexPtr()[c];
+						int ce = subJacData.outerIndexPtr()[c + 1];
+						for (int r = cs; r < ce; r++)
+						{
+							int row = subJacData.innerIndexPtr()[r];
+							int pixelId = pixel_index_of_row_[row];
+							float val = subJacData.valuePtr()[r];
+							if (pixelId >= 0)
+								px[pixelId * 6 + c] = val;
+						}
+					}
+
+					std::string name = ("D:/tmp/cpu_pixel" + std::to_string(a) + ".txt").c_str();
+					FILE*pFile = fopen(name.c_str(), "w");
+					for (int i = 0; i<imgWidth_*imgHeight_; i++)
+					{
+						fprintf(pFile, "%ef %ef %ef %ef %ef %ef\n", 
+							px[i * 6 + 0], px[i * 6 + 1], px[i * 6 + 2],
+							px[i * 6 + 3], px[i * 6 + 4], px[i * 6 + 5]);
+					}
+					fclose(pFile);
+				}
 				a++;
 			}
 #endif
@@ -966,6 +999,7 @@ namespace dfusion
 					int knnNodeId = knn_k(knn, knnK);
 					if (knnNodeId < nNodes)
 					{
+						real p_f_p_alpha[6];
 						// partial_T_partial_alphak
 						for (int ialpha = 0; ialpha < 6; ialpha++)
 						{
@@ -997,13 +1031,14 @@ namespace dfusion
 							}// end for idq
 							p_T_p_alphak = Tlw_ * p_T_p_alphak;
 
-							real p_f_p_alphak = trace_AtB(p_f_p_T, p_T_p_alphak);
+							p_f_p_alpha[ialpha] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
 							// debug, check nan
-							if (isnan(p_f_p_alphak) || isinf(p_f_p_alphak))
+							if (isnan(p_f_p_alpha[ialpha]) || isinf(p_f_p_alpha[ialpha])
+								)
 							{
 								printf("warning: nan/inf found: %d %d,%d = %f\n", 
-									nRow, knnNodeId, ialpha, p_f_p_alphak);
+									nRow, knnNodeId, ialpha, p_f_p_alpha[ialpha]);
 								printf("v: %f %f %f\n", v.x, v.y, v.z);
 								printf("n: %f %f %f\n", n.x, n.y, n.z);
 								printf("vl: %f %f %f\n", vl.x, vl.y, vl.z);
@@ -1021,8 +1056,9 @@ namespace dfusion
 
 							// write to jacobi
 							m_cooSys.at(cooPos++) = Eigen::Triplet<real>(nRow,
-								knnNodeId * VarPerNode + ialpha, p_f_p_alphak);
+								knnNodeId * VarPerNode + ialpha, p_f_p_alpha[ialpha]);
 						}// end for ialpha
+
 					}// end if knnNodeId < nNodes
 				}// end for knnK
 			}// end for iPixel
@@ -1332,6 +1368,12 @@ namespace dfusion
 		vmap_warp.download(m_egc->vmap_warp_.data(), m_egc->imgWidth_*sizeof(float4));
 		nmap_warp.download(m_egc->nmap_warp_.data(), m_egc->imgWidth_*sizeof(float4));
 		m_egc->CalcCorr();
+	}
+
+	void CpuGaussNewton::debug_set_init_x(const float* x)
+	{
+		for (int i = 0; i < m_egc->x_.size(); i++)
+			m_egc->x_[i] = x[i];
 	}
 
 	void CpuGaussNewton::solve(bool factor_rigid_out)

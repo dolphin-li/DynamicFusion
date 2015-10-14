@@ -311,6 +311,12 @@ namespace dfusion
 
 			// 2. Gauss-Newton Optimization
 #if 1
+			Eigen::VectorXf debugX;
+			debugX.resize(m_warpField->getNumAllNodes()*6);
+			debugX.setConstant(0.1);
+			solver.debug_set_init_x(debugX.data());
+			m_gsSolver->debug_set_init_x(debugX.data());
+
 			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
 			solver.solve(m_param.fusion_post_rigid_factor);

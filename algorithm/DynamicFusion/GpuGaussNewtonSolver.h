@@ -28,6 +28,7 @@ namespace dfusion
 			bool factor_rigid_out = false);
 
 		void debug_print();
+		void debug_set_init_x(const float* x_host);
 	protected:
 		void calcDataTerm();
 		void bindTextures();

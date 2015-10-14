@@ -96,6 +96,11 @@ namespace dfusion
 		m_pWarpField->update_nodes_via_twist(m_twist);
 	}
 
+	void GpuGaussNewtonSolver::debug_set_init_x(const float* x_host)
+	{
+		m_twist.upload(x_host, m_twist.size());
+	}
+
 	void GpuGaussNewtonSolver::debug_print()
 	{
 		// dump the diagonal block
