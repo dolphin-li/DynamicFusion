@@ -193,6 +193,22 @@ namespace thrust_wrapper
 		thrust::sort_by_key(thrust::cuda::par(g_allocator), key_begin, key_end, points_begin);
 	}
 
+	void sort_by_key(int* key_d, int* value_d, int n)
+	{
+		thrust::device_ptr<int> key_begin(key_d);
+		thrust::device_ptr<int> key_end(key_d + n);
+		thrust::device_ptr<int> points_begin(value_d);
+		thrust::sort_by_key(thrust::cuda::par(g_allocator), key_begin, key_end, points_begin);
+	}
+
+	void sort_by_key(int* key_d, float* value_d, int n)
+	{
+		thrust::device_ptr<int> key_begin(key_d);
+		thrust::device_ptr<int> key_end(key_d + n);
+		thrust::device_ptr<float> points_begin(value_d);
+		thrust::sort_by_key(thrust::cuda::par(g_allocator), key_begin, key_end, points_begin);
+	}
+
 	void exclusive_scan(const int* in, int* out, int n)
 	{
 		thrust::device_ptr<int> in_begin((int*)in);

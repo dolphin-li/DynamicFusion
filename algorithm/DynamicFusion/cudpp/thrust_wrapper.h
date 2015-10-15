@@ -9,6 +9,8 @@ namespace thrust_wrapper
 {
 	void sort_by_key(int* key_d, float4* value_d, int n);
 	void sort_by_key(float* key_d, int* value_d, int n);
+	void sort_by_key(int* key_d, int* value_d, int n);
+	void sort_by_key(int* key_d, float* value_d, int n);
 
 	void stable_sort_by_key(int* key_d, float4* value_d, int n);
 	void stable_sort_by_key(float* key_d, int* value_d, int n);

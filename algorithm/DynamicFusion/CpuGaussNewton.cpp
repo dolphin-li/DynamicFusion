@@ -827,6 +827,10 @@ namespace dfusion
 			{
 				static int a = 0;
 				{
+					std::string name = ("D:/tmp/cpu_Jr_" + std::to_string(a) + ".txt").c_str();
+					dumpSparseMatrix(jacReg, name.c_str());
+				}
+				{
 					std::string name = ("D:/tmp/cpu_Hd_"+std::to_string(a)+".txt").c_str();
 					FILE*pFile = fopen(name.c_str(), "w");
 					for(int i=0; i<m_diagBlocks.size(); i++)
@@ -1291,7 +1295,7 @@ namespace dfusion
 				int rs = A.outerIndexPtr()[r];
 				int re = A.outerIndexPtr()[r+1];
 				for (int c = rs; c < re; c++)
-					fprintf(pFile, "%d %d %f\n", r, A.innerIndexPtr()[c], A.valuePtr()[c]);
+					fprintf(pFile, "%d %d %f\n", A.innerIndexPtr()[c], r, A.valuePtr()[c]);
 			}
 			fclose(pFile);
 		}

@@ -303,7 +303,10 @@ namespace dfusion
 		CpuGaussNewton solver;
 
 		// icp iteration
-		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
+		ldp::tic();
+		for (int k = 0; k < 100; k++)
+			m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
+		ldp::toc("gpu init");
 		solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{

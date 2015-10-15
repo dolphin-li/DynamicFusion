@@ -1,6 +1,7 @@
 #include "GpuGaussNewtonSolver.h"
 namespace dfusion
 {
+#pragma comment(lib, "cusparse.lib")
 	GpuGaussNewtonSolver::GpuGaussNewtonSolver()
 	{
 		m_vmap_cano = nullptr;
@@ -14,10 +15,15 @@ namespace dfusion
 		m_numNodes = 0;
 		m_not_lv0_nodes_for_buffer = 0;
 		m_numLv0Nodes = 0;
+
+		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
+			throw std::exception("cuSparse creating failed!");
 	}
 
 	GpuGaussNewtonSolver::~GpuGaussNewtonSolver()
 	{
+		unBindTextures();
+		cusparseDestroy(m_cuSparseHandle);
 	}
 
 	void GpuGaussNewtonSolver::init(WarpField* pWarpField, const MapArr& vmap_cano, 
@@ -35,6 +41,16 @@ namespace dfusion
 		m_numNodes = pWarpField->getNumAllNodes();
 		m_numLv0Nodes = pWarpField->getNumNodesInLevel(0);
 		int notLv0Nodes = m_numNodes - m_numLv0Nodes;
+		if (m_numNodes > USHRT_MAX)
+			throw std::exception("not supported, too much nodes!");
+
+		// sparse matrix info
+		m_Jrrows = 0; // unknown now, decided later
+		m_Jrcols = m_numNodes*VarPerNode;
+		m_Jrnnzs = 0; // unknown now, decided later
+		m_JrtJr_nnzs = 0; // unknown now, decides later
+		m_Brows = m_numLv0Nodes * VarPerNode;
+		m_Bcols = m_pWarpField->getNumNodesInLevel(1) * VarPerNode;
 
 		// make larger buffer to prevent malloc/free each frame
 		if (m_nodes_for_buffer < m_numNodes)
@@ -49,25 +65,49 @@ namespace dfusion
 			m_h.create(m_nodes_for_buffer * VarPerNode);
 			m_g.create(m_nodes_for_buffer * VarPerNode);
 			m_Hd.create(VarPerNode * VarPerNode * m_nodes_for_buffer);
-			m_Bt_ColIdx.create(VarPerNode*WarpField::KnnK*m_nodes_for_buffer);
-			m_Bt_val.create(VarPerNode*WarpField::KnnK*m_nodes_for_buffer);
+
+			// each node create 2*3*k rows and each row create at most VarPerNode*2 cols
+			m_Jr_RowCounter.create(m_nodes_for_buffer + 1);
+			m_Jr_RowMap2NodeId.create(m_nodes_for_buffer * 6 * WarpField::KnnK + 1);
+			m_Jr_RowPtr.create(m_nodes_for_buffer*6*WarpField::KnnK + 1);
+			m_Jr_ColIdx.create(VarPerNode * 2  * m_Jr_RowPtr.size());
+			m_Jr_val.create(m_Jr_ColIdx.size());
+			m_Jr_RowPtr_coo.create(m_Jr_ColIdx.size());
+
+			m_Jrt_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
+			m_Jrt_ColIdx.create(m_Jr_ColIdx.size());
+			m_Jrt_val.create(m_Jr_ColIdx.size());
+			m_Jrt_RowPtr_coo.create(m_Jr_ColIdx.size());
+
+			m_JrtJr_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
+			m_JrtJr_ColIdx.create(VarPerNode * VarPerNode*(1+WarpField::KnnK)*m_nodes_for_buffer
+				+ notLv0Nodes * notLv0Nodes * VarPerNode * VarPerNode);
+			m_JrtJr_val.create(m_Jr_ColIdx.size());
+
+			m_B_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
+			m_B_ColIdx.create(VarPerNode * VarPerNode*WarpField::KnnK*m_nodes_for_buffer);
+			m_B_val.create(m_B_ColIdx.size());
 		}
 
 		if (m_not_lv0_nodes_for_buffer < notLv0Nodes)
 		{
 			// the not-level0 nodes are not likely to increase dramatically
-			// thus it is enough to allocate just a bit silghter buffer
+			// thus it is enough to allocate just a bit larger buffer
 			m_not_lv0_nodes_for_buffer = notLv0Nodes * 1.2;
 			m_Hr.create(m_not_lv0_nodes_for_buffer*m_not_lv0_nodes_for_buffer*
 				VarPerNode * VarPerNode);
-			m_Bt_RowPtr.create(m_not_lv0_nodes_for_buffer);
 		}
+
+		bindTextures();
 
 		// extract knn map
 		m_pWarpField->extract_knn_for_vmap(vmap_cano, m_vmapKnn);
 
 		//extract nodes info
 		m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
+
+		// the sparse block B
+		initSparseStructure();
 	}
 
 	void GpuGaussNewtonSolver::solve(const MapArr& vmap_live, const MapArr& nmap_live,
@@ -79,7 +119,6 @@ namespace dfusion
 		m_vmap_live = &vmap_live;
 		m_nmap_live = &nmap_live;
 
-		bindTextures();
 
 		// perform Gauss-Newton iteration
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
@@ -88,9 +127,8 @@ namespace dfusion
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
 			calcDataTerm();
+			calcRegTerm();
 		}// end for iter
-
-		unBindTextures();
 
 		// finally, write results back
 		m_pWarpField->update_nodes_via_twist(m_twist);

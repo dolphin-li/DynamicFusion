@@ -3,6 +3,7 @@
 #include "definations.h"
 #include "DynamicFusionParam.h"
 #include "WarpField.h"
+#include <cusparse.h>
 namespace dfusion
 {
 	class GpuGaussNewtonSolver
@@ -15,6 +16,12 @@ namespace dfusion
 			CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y,
 			VarPerNode = 6,
 			LowerPartNum = 21
+		};
+		struct JrRow2NodeMapper
+		{
+			ushort nodeId;
+			unsigned char k;
+			unsigned char ixyz;
 		};
 	public:
 		GpuGaussNewtonSolver();
@@ -30,7 +37,10 @@ namespace dfusion
 		void debug_print();
 		void debug_set_init_x(const float* x_host, int n);
 	protected:
+		void initSparseStructure();
 		void calcDataTerm();
+		void calcRegTerm();
+
 		void bindTextures();
 		void unBindTextures();
 	private:
@@ -59,6 +69,9 @@ namespace dfusion
 		DeviceArray<float> m_twist;
 
 		// the Hessian matrix representation:
+		// H = Jd'Jd + Jr'Jr
+		// Jd is the data term jacobi, approximated by diagonal blocks
+		// Jr is the regularization term jacobi, sparse.
 		// H =	[ H_d B  ]
 		//		[ B^t H_r]
 		// note H is symmetric, thus it is enough to evaluate the lower triangular
@@ -74,15 +87,40 @@ namespace dfusion
 		// we allocate ?x? buffer but only touch the lower part.
 		DeviceArray<float> m_Hr;
 
-		// CSR sparse matrix
-		DeviceArray<float> m_Bt_val;
-		DeviceArray<int> m_Bt_RowPtr;
-		DeviceArray<int> m_Bt_ColIdx;
+		// CSR sparse matrix of B
+		DeviceArray<float> m_B_val;
+		DeviceArray<int> m_B_RowPtr;
+		DeviceArray<int> m_B_ColIdx;
+		int m_Brows;
+		int m_Bcols;
+
+		// CSR sparse matrix of Jr
+		DeviceArray<float> m_Jr_val;
+		DeviceArray<int> m_Jr_RowCounter;
+		DeviceArray<JrRow2NodeMapper> m_Jr_RowMap2NodeId;
+		DeviceArray<int> m_Jr_RowPtr;
+		DeviceArray<int> m_Jr_RowPtr_coo;
+		DeviceArray<int> m_Jr_ColIdx;
+		DeviceArray<float> m_Jrt_val;
+		DeviceArray<int> m_Jrt_RowPtr;
+		DeviceArray<int> m_Jrt_RowPtr_coo;
+		DeviceArray<int> m_Jrt_ColIdx;
+		int m_Jrrows;
+		int m_Jrcols;
+		int m_Jrnnzs;
+
+		// rows = cols = numNodes*VarPerNode
+		DeviceArray<float> m_JrtJr_val;
+		DeviceArray<int> m_JrtJr_RowPtr;
+		DeviceArray<int> m_JrtJr_ColIdx;
+		int m_JrtJr_nnzs;
 
 		// m_g = -J^t * f
 		// we will solve for H*m_h = m_g
 		// and x += step * m_h
 		DeviceArray<float> m_g;
 		DeviceArray<float> m_h;
+
+		cusparseHandle_t m_cuSparseHandle;
 	};
 }
