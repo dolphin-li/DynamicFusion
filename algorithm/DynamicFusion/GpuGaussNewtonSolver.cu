@@ -612,8 +612,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 
 #pragma region --define sparse structure
 
-//#define ENABLE_GPU_DUMP_DEBUG_B
-
+#define ENABLE_GPU_DUMP_DEBUG_B
 
 	__global__ void count_Jr_rows_kernel(int* rctptr, int nMaxNodes)
 	{
@@ -1183,13 +1182,19 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		calcRegTerm_kernel << <grid, block >> >(rj);
 		cudaSafeCall(cudaGetLastError(), "calcRegTerm_kernel");
 
-
 		// 2. compute Jrt ==============================================
 		// 2.1. fill (row, col) as (col, row) from Jr and sort.
 		cudaMemcpy(m_Jrt_RowPtr_coo.ptr(), m_Jr_ColIdx.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
 		cudaMemcpy(m_Jrt_val.ptr(), m_Jr_val.ptr(), m_Jrnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
 		modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_val.ptr(), m_Jrnnzs);
 		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcRegTerm::mergesort_by_key");
+
+		// 3. compute JrtJr
+		cusparseScsrgemm(m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+			m_Jrcols, m_Jrcols, m_Jrrows,
+			m_Jrt_desc, m_Jrnnzs, m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr(), m_Jrt_ColIdx.ptr(),
+			m_Jr_desc, m_Jrnnzs, m_Jr_val.ptr(), m_Jr_RowPtr.ptr(), m_Jr_ColIdx.ptr(),
+			m_JrtJr_desc, m_JrtJr_val.ptr(), m_JrtJr_RowPtr.ptr(), m_JrtJr_ColIdx.ptr());
 
 #ifdef ENABLE_GPU_DUMP_DEBUG_B
 		{
