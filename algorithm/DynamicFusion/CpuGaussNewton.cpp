@@ -1119,7 +1119,6 @@ namespace dfusion
 							Tbx::Vec3 p_psi_p_alphai_i = p_h_p_alphai_i * ww;
 							Tbx::Vec3 p_psi_p_alphaj_i = p_h_p_alphaj_i * ww;
 
-
 							if (isnan(p_psi_p_alphai_j[0]) || isinf(p_psi_p_alphai_j[0]))
 							{
 								printf("warning: nan/inf in reg term jacobi: %d,%d=%f\n", 

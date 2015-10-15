@@ -18,11 +18,18 @@ namespace dfusion
 
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
 			throw std::exception("cuSparse creating failed!");
+
+		cusparseCreateMatDescr(&m_Jr_desc);
+		cusparseCreateMatDescr(&m_Jrt_desc);
+		cusparseCreateMatDescr(&m_JrtJr_desc);
 	}
 
 	GpuGaussNewtonSolver::~GpuGaussNewtonSolver()
 	{
 		unBindTextures();
+		cusparseDestroyMatDescr(m_Jr_desc);
+		cusparseDestroyMatDescr(m_Jrt_desc);
+		cusparseDestroyMatDescr(m_JrtJr_desc);
 		cusparseDestroy(m_cuSparseHandle);
 	}
 
@@ -87,6 +94,8 @@ namespace dfusion
 			m_B_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
 			m_B_ColIdx.create(VarPerNode * VarPerNode*WarpField::KnnK*m_nodes_for_buffer);
 			m_B_val.create(m_B_ColIdx.size());
+
+			m_f_r.create(m_Jr_RowPtr.size());
 		}
 
 		if (m_not_lv0_nodes_for_buffer < notLv0Nodes)

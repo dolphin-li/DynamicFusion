@@ -304,7 +304,7 @@ namespace dfusion
 
 		// icp iteration
 		ldp::tic();
-		for (int k = 0; k < 100; k++)
+		for (int k = 0; k < 1; k++)
 			m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 		ldp::toc("gpu init");
 		solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);

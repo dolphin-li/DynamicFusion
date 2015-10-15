@@ -67,7 +67,7 @@ namespace dfusion
 
 	__device__ __forceinline__ float sign(float a)
 	{
-		return a>0 - a<0;
+		return (a>0.f) - (a<0.f);
 	}
 
 	__device__ __forceinline__ WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
@@ -172,7 +172,6 @@ namespace dfusion
 
 		float distThres;
 		float angleThres;
-		float psi_reg;
 		float psi_data;
 
 #ifdef ENABLE_GPU_DUMP_DEBUG
@@ -570,7 +569,6 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		cs.nNodes = m_numNodes;
 		cs.Tlw = m_pWarpField->get_rigidTransform();
 		cs.psi_data = m_param->fusion_psi_data;
-		cs.psi_reg = m_param->fusion_psi_reg;
 
 #ifdef ENABLE_GPU_DUMP_DEBUG
 		// debugging
@@ -612,14 +610,10 @@ if (knnNodeId == 390 && i == 5 && j == 1
 	}
 #pragma endregion
 
-#pragma region --calc reg term
+#pragma region --define sparse structure
 
 //#define ENABLE_GPU_DUMP_DEBUG_B
 
-	enum{
-		VarPerNode = GpuGaussNewtonSolver::VarPerNode,
-		ColPerRow = VarPerNode * 2
-	};
 
 	__global__ void count_Jr_rows_kernel(int* rctptr, int nMaxNodes)
 	{
@@ -665,6 +659,10 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		const GpuGaussNewtonSolver::JrRow2NodeMapper* row2nodeId, 
 		int nMaxNodes, int nRows)
 	{
+		enum{
+			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
+			ColPerRow = VarPerNode * 2
+		};
 		const int iRow = threadIdx.x + blockIdx.x*blockDim.x;
 		if (iRow < nRows)
 		{
@@ -747,11 +745,28 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			m_Jrt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))
 			throw std::exception("GpuGaussNewtonSolver::initSparseStructure::cusparseXcoo2csr failed");
 
+		// 3. compute Jrt*Jr stucture ==============================================
+		// quite slow...
+		cusparseSetPointerMode(m_cuSparseHandle, CUSPARSE_POINTER_MODE_HOST);
+		cusparseXcsrgemmNnz(m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+			m_Jrcols, m_Jrcols, m_Jrrows, 
+			m_Jrt_desc, m_Jrnnzs, m_Jrt_RowPtr.ptr(), m_Jrt_ColIdx.ptr(), 
+			m_Jr_desc, m_Jrnnzs, m_Jr_RowPtr.ptr(), m_Jr_ColIdx.ptr(), 
+			m_JrtJr_desc, m_JrtJr_RowPtr.ptr(), &m_JrtJr_nnzs);
+		if (m_JrtJr_nnzs > m_JrtJr_ColIdx.size())
+			throw std::exception("Jr'Jr: size out of range!");
+		cusparseScsrgemm(m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+			m_Jrcols, m_Jrcols, m_Jrrows,
+			m_Jrt_desc, m_Jrnnzs, m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr(), m_Jrt_ColIdx.ptr(),
+			m_Jr_desc, m_Jrnnzs, m_Jr_val.ptr(), m_Jr_RowPtr.ptr(), m_Jr_ColIdx.ptr(),
+			m_JrtJr_desc, m_JrtJr_val.ptr(), m_JrtJr_RowPtr.ptr(), m_JrtJr_ColIdx.ptr());
+
 #ifdef ENABLE_GPU_DUMP_DEBUG_B
 		{
 			std::vector<int> host_Jr_rowptr, host_Jr_colIdx, host_Jr_rowptr_coo;
 			std::vector<int> host_Jrt_rowptr, host_Jrt_colIdx, host_Jrt_rowptr_coo;
-			std::vector<float> host_Jr_val, host_Jrt_val;
+			std::vector<int> host_JrtJr_rowptr, host_JrtJr_colIdx;
+			std::vector<float> host_Jr_val, host_Jrt_val, host_JrtJr_val;
 			m_Jr_RowPtr.download(host_Jr_rowptr);
 			m_Jr_ColIdx.download(host_Jr_colIdx);
 			m_Jr_RowPtr_coo.download(host_Jr_rowptr_coo);
@@ -760,6 +775,9 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			m_Jrt_ColIdx.download(host_Jrt_colIdx);
 			m_Jrt_RowPtr_coo.download(host_Jrt_rowptr_coo);
 			m_Jrt_val.download(host_Jrt_val);
+			m_JrtJr_RowPtr.download(host_JrtJr_rowptr);
+			m_JrtJr_ColIdx.download(host_JrtJr_colIdx);
+			m_JrtJr_val.download(host_JrtJr_val);
 
 			FILE* pFile = fopen("D:/tmp/gpu_Jr.txt", "w");
 			if (pFile)
@@ -777,13 +795,6 @@ if (knnNodeId == 390 && i == 5 && j == 1
 						fprintf(pFile, "%d %d %f\n", r, host_Jr_colIdx[ic], host_Jr_val[ic]);
 					}
 				}
-				fclose(pFile);
-			}
-			{
-				FILE* pFile = fopen("D:/tmp/gpu_Jrt_row_coo.txt", "w");
-				if (pFile)
-				for (int i = 0; i < m_Jrnnzs; i++)
-					fprintf(pFile, "%d\n", host_Jrt_rowptr_coo[i]);
 				fclose(pFile);
 			}
 
@@ -810,12 +821,398 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				}
 				fclose(pFile1);
 			}
+
+			FILE* pFile2 = fopen("D:/tmp/gpu_JrtJr.txt", "w");
+			if (pFile1)
+			{
+				for (int r = 0; r < m_Jrcols; r++)
+				{
+					int cb = host_JrtJr_rowptr[r], ce = host_JrtJr_rowptr[r + 1];
+					for (int ic = cb; ic < ce; ic++)
+						fprintf(pFile1, "%d %d %f\n", r, host_JrtJr_colIdx[ic], host_JrtJr_val[ic]);
+				}
+				fclose(pFile1);
+			}
 		}
 #endif
 	}
 
+#pragma endregion
+
+#pragma region --define sparse structure
+	struct RegTermJacobi
+	{
+		typedef WarpField::KnnIdx KnnIdx;
+		typedef WarpField::IdxType IdxType;
+		typedef GpuGaussNewtonSolver::JrRow2NodeMapper Mapper;
+		enum
+		{
+			KnnK = WarpField::KnnK,
+			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
+			VarPerNode2 = VarPerNode*VarPerNode,
+			ColPerRow = VarPerNode * 2
+		};
+
+		int nNodes;
+		int nRows;
+		const Mapper* rows2nodeIds;
+		const int* rptr;
+		const int* cidx;
+		mutable float* vptr;
+		mutable float* fptr;
+
+		float psi_reg;
+		float lambda;
+
+		__device__ __forceinline__  Tbx::Dual_quat_cu p_qk_p_alpha_func(Tbx::Dual_quat_cu dq, int i)const
+		{
+			Tbx::Vec3 t, r;
+			float b, c, n;
+			Tbx::Quat_cu q0(0, 0, 0, 0), q1 = dq.get_non_dual_part();
+			switch (i)
+			{
+			case 0:
+				dq.to_twist(r, t);
+				n = r.norm();
+				if (n > Tbx::Dual_quat_cu::epsilon())
+				{
+					b = sin(n) / n;
+					c = (cos(n) - b) / (n*n);
+					q0.coeff0 = -r.x * b;
+					q0.coeff1 = b + r.x*r.x*c;
+					q0.coeff2 = r.x*r.y*c;
+					q0.coeff3 = r.x*r.z*c;
+				}
+				else
+				{
+					q0.coeff0 = 0;
+					q0.coeff1 = 1;
+					q0.coeff2 = 0;
+					q0.coeff3 = 0;
+				}
+
+				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
+				q1.coeff1 = (t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
+				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
+				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
+				return Tbx::Dual_quat_cu(q0, q1);
+			case 1:
+				dq.to_twist(r, t);
+				n = r.norm();
+				if (n > Tbx::Dual_quat_cu::epsilon())
+				{
+					b = sin(n) / n;
+					c = (cos(n) - b) / (n*n);
+					q0.coeff0 = -r.y * b;
+					q0.coeff1 = r.y*r.x*c;
+					q0.coeff2 = b + r.y*r.y*c;
+					q0.coeff3 = r.y*r.z*c;
+				}
+				else
+				{
+					q0.coeff0 = 0;
+					q0.coeff1 = 0;
+					q0.coeff2 = 1;
+					q0.coeff3 = 0;
+				}
+
+				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
+				q1.coeff1 = (t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
+				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
+				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
+				return Tbx::Dual_quat_cu(q0, q1);
+			case 2:
+				dq.to_twist(r, t);
+				n = r.norm();
+				if (n > Tbx::Dual_quat_cu::epsilon())
+				{
+					b = sin(n) / n;
+					c = (cos(n) - b) / (n*n);
+
+					q0.coeff0 = -r.z * b;
+					q0.coeff1 = r.z*r.x*c;
+					q0.coeff2 = r.z*r.y*c;
+					q0.coeff3 = b + r.z*r.z*c;
+				}
+				else
+				{
+					q0.coeff0 = 0;
+					q0.coeff1 = 0;
+					q0.coeff2 = 0;
+					q0.coeff3 = 1;
+				}
+
+				q1.coeff0 = (t.x * q0.coeff1 + t.y * q0.coeff2 + t.z * q0.coeff3) * (-0.5);
+				q1.coeff1 = (t.x * q0.coeff0 + t.y * q0.coeff3 - t.z * q0.coeff2) * 0.5;
+				q1.coeff2 = (-t.x * q0.coeff3 + t.y * q0.coeff0 + t.z * q0.coeff1) * 0.5;
+				q1.coeff3 = (t.x * q0.coeff2 - t.y * q0.coeff1 + t.z * q0.coeff0) * 0.5;
+				return Tbx::Dual_quat_cu(q0, q1);
+			case 3:
+				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff1, q1.coeff0, -q1.coeff3, q1.coeff2))*0.5;
+			case 4:
+				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff2, q1.coeff3, q1.coeff0, -q1.coeff1))*0.5;
+			case 5:
+				return Tbx::Dual_quat_cu(q0, Tbx::Quat_cu(-q1.coeff3, -q1.coeff2, q1.coeff1, q1.coeff0))*0.5;
+			default:
+				return Tbx::Dual_quat_cu();
+			}
+		}
+
+		__device__ __forceinline__  Tbx::Vec3 reg_term_penalty(Tbx::Vec3 f)const
+		{
+			// the robust Huber penelty gradient
+			Tbx::Vec3 df;
+			float norm = f.norm();
+			if (norm < psi_reg)
+				df = f;
+			else
+			for (int k = 0; k < 3; k++)
+				df[k] = sign(f[k])*psi_reg;
+			return df;
+		}
+
+		__device__ __forceinline__  Tbx::Transfo p_SE3_p_dq_func(Tbx::Dual_quat_cu dq, int i)const
+		{
+			Tbx::Quat_cu q0 = dq.get_non_dual_part();
+			Tbx::Quat_cu q1 = dq.get_dual_part();
+			float x0 = q0.i(), y0 = q0.j(), z0 = q0.k(), w0 = q0.w();
+			float x1 = q1.i(), y1 = q1.j(), z1 = q1.k(), w1 = q1.w();
+			switch (i)
+			{
+			case 0:
+				return Tbx::Transfo(
+					0, -z0, y0, x1,
+					z0, 0, -x0, y1,
+					-y0, x0, 0, z1,
+					0, 0, 0, 0) * 2;
+			case 1:
+				return Tbx::Transfo(
+					0, y0, z0, -w1,
+					y0, -2 * x0, -w0, -z1,
+					z0, w0, -2 * x0, y1,
+					0, 0, 0, 0) * 2;
+			case 2:
+				return Tbx::Transfo(
+					-2 * y0, x0, w0, z1,
+					x0, 0, z0, -w1,
+					-w0, z0, -2 * y0, -x1,
+					0, 0, 0, 0) * 2;
+			case 3:
+				return Tbx::Transfo(
+					-2 * z0, -w0, x0, -y1,
+					w0, -2 * z0, y0, x1,
+					x0, y0, 0, -w1,
+					0, 0, 0, 0) * 2;
+			case 4:
+				return Tbx::Transfo(
+					0, 0, 0, -x0,
+					0, 0, 0, -y0,
+					0, 0, 0, -z0,
+					0, 0, 0, 0) * 2;
+			case 5:
+				return Tbx::Transfo(
+					0, 0, 0, w0,
+					0, 0, 0, z0,
+					0, 0, 0, -y0,
+					0, 0, 0, 0) * 2;
+			case 6:
+				return Tbx::Transfo(
+					0, 0, 0, -z0,
+					0, 0, 0, w0,
+					0, 0, 0, x0,
+					0, 0, 0, 0) * 2;
+			case 7:
+				return Tbx::Transfo(
+					0, 0, 0, y0,
+					0, 0, 0, -x0,
+					0, 0, 0, w0,
+					0, 0, 0, 0) * 2;
+			default:
+				return Tbx::Transfo::identity();
+			}
+		}
+
+		__device__ __forceinline__  Tbx::Transfo p_SE3_p_alpha_func(Tbx::Dual_quat_cu dq, int i)const
+		{
+			Tbx::Transfo T = Tbx::Transfo::empty();
+			Tbx::Dual_quat_cu p_dq_p_alphai = p_qk_p_alpha_func(dq, i);
+			for (int j = 0; j < 8; j++)
+			{
+				T = T + p_SE3_p_dq_func(dq, j)*p_dq_p_alphai[j];
+			}
+			return T;
+		}
+
+		__device__ __forceinline__ void operator () () const
+		{
+			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x)*6;
+		
+			if (iRow >= nRows)
+				return;
+
+			Mapper mapper = rows2nodeIds[iRow];
+			int knnNodeId = knn_k(get_nodesKnn(mapper.nodeId), mapper.k);
+
+			if (knnNodeId >= nNodes)
+				return;
+
+			int cooPos = rptr[iRow];
+
+			Tbx::Dual_quat_cu dqi, dqj;
+			Tbx::Vec3 ri, ti, rj, tj;
+			get_twist(mapper.nodeId, ri, ti);
+			get_twist(knnNodeId, rj, tj);
+			dqi.from_twist(ri, ti);
+			dqj.from_twist(rj, tj);
+
+			float4 nodeVwi = get_nodesVw(mapper.nodeId);
+			float4 nodeVwj = get_nodesVw(knnNodeId);
+			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
+			Tbx::Point3 vj(convert(read_float3_4(nodeVwj)));
+			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
+			float ww = sqrt(lambda * alpha_ij);
+
+			// energy=============================================
+			Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+			val = reg_term_penalty(val);
+
+			fptr[iRow + 0] = val.x * ww;
+			fptr[iRow + 1] = val.y * ww;
+			fptr[iRow + 2] = val.z * ww;
+
+			Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
+			val1 = reg_term_penalty(val1);
+			fptr[iRow + 3] = val1.x * ww;
+			fptr[iRow + 4] = val1.y * ww;
+			fptr[iRow + 5] = val1.z * ww;
+
+			// jacobi=============================================
+			for (int ialpha = 0; ialpha < VarPerNode; ialpha++)
+			{
+				Tbx::Transfo p_Ti_p_alpha = p_SE3_p_alpha_func(dqi, ialpha);
+				Tbx::Transfo p_Tj_p_alpha = p_SE3_p_alpha_func(dqj, ialpha);
+
+				// partial_h_partial_alpha
+				Tbx::Vec3 p_h_p_alphai_j, p_h_p_alphaj_j;
+				Tbx::Vec3 p_h_p_alphai_i, p_h_p_alphaj_i;
+				for (int ixyz = 0; ixyz < 3; ixyz++)
+				{
+					p_h_p_alphai_j[ixyz] = p_Ti_p_alpha(ixyz, 0) * vj.x + p_Ti_p_alpha(ixyz, 1) * vj.y
+						+ p_Ti_p_alpha(ixyz, 2) * vj.z + p_Ti_p_alpha(ixyz, 3);
+					p_h_p_alphaj_j[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vj.x + p_Tj_p_alpha(ixyz, 1) * vj.y
+						+ p_Tj_p_alpha(ixyz, 2) * vj.z + p_Tj_p_alpha(ixyz, 3));
+					p_h_p_alphai_i[ixyz] = p_Ti_p_alpha(ixyz, 0) * vi.x + p_Ti_p_alpha(ixyz, 1) * vi.y
+						+ p_Ti_p_alpha(ixyz, 2) * vi.z + p_Ti_p_alpha(ixyz, 3);
+					p_h_p_alphaj_i[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vi.x + p_Tj_p_alpha(ixyz, 1) * vi.y
+						+ p_Tj_p_alpha(ixyz, 2) * vi.z + p_Tj_p_alpha(ixyz, 3));
+				}
+
+				// partial_psi_partial_alpha
+				Tbx::Vec3 p_psi_p_alphai_j = p_h_p_alphai_j * ww;
+				Tbx::Vec3 p_psi_p_alphaj_j = p_h_p_alphaj_j * ww;
+				Tbx::Vec3 p_psi_p_alphai_i = p_h_p_alphai_i * ww;
+				Tbx::Vec3 p_psi_p_alphaj_i = p_h_p_alphaj_i * ww;
+
+				for (int ixyz = 0; ixyz < 3; ixyz++)
+				{
+					int pos = cooPos + ixyz*ColPerRow + ialpha;
+					vptr[pos] = p_psi_p_alphai_j[ixyz];
+					vptr[pos + VarPerNode] = p_psi_p_alphaj_j[ixyz];
+					pos += 3 * ColPerRow;
+					vptr[pos] = p_psi_p_alphai_i[ixyz];
+					vptr[pos + VarPerNode] = p_psi_p_alphaj_i[ixyz];
+				}
+			}// end for ialpha
+		}// end function ()
+	};
+
+	__global__ void calcRegTerm_kernel(RegTermJacobi rj)
+	{
+		rj();
+	}
+
 	void GpuGaussNewtonSolver::calcRegTerm()
 	{
+		RegTermJacobi rj;
+		rj.cidx = m_Jr_ColIdx.ptr();
+		rj.lambda = m_param->fusion_lambda;
+		rj.nNodes = m_numNodes;
+		rj.nRows = m_Jrrows;
+		rj.psi_reg = m_param->fusion_psi_reg;
+		rj.rows2nodeIds = m_Jr_RowMap2NodeId;
+		rj.rptr = m_Jr_RowPtr.ptr();
+		rj.vptr = m_Jr_val.ptr();
+		rj.fptr = m_f_r.ptr();
+
+		dim3 block(CTA_SIZE);
+		dim3 grid(divUp(m_Jrrows / 6, block.x));
+
+		calcRegTerm_kernel << <grid, block >> >(rj);
+		cudaSafeCall(cudaGetLastError(), "calcRegTerm_kernel");
+
+
+		// 2. compute Jrt ==============================================
+		// 2.1. fill (row, col) as (col, row) from Jr and sort.
+		cudaMemcpy(m_Jrt_RowPtr_coo.ptr(), m_Jr_ColIdx.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_Jrt_val.ptr(), m_Jr_val.ptr(), m_Jrnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
+		modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_val.ptr(), m_Jrnnzs);
+		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcRegTerm::mergesort_by_key");
+
+#ifdef ENABLE_GPU_DUMP_DEBUG_B
+		{
+			std::vector<int> host_Jr_rowptr, host_Jr_colIdx, host_Jr_rowptr_coo;
+			std::vector<int> host_Jrt_rowptr, host_Jrt_colIdx, host_Jrt_rowptr_coo;
+			std::vector<int> host_JrtJr_rowptr, host_JrtJr_colIdx;
+			std::vector<float> host_Jr_val, host_Jrt_val, host_JrtJr_val;
+			m_Jr_RowPtr.download(host_Jr_rowptr);
+			m_Jr_ColIdx.download(host_Jr_colIdx);
+			m_Jr_RowPtr_coo.download(host_Jr_rowptr_coo);
+			m_Jr_val.download(host_Jr_val);
+			m_Jrt_RowPtr.download(host_Jrt_rowptr);
+			m_Jrt_ColIdx.download(host_Jrt_colIdx);
+			m_Jrt_RowPtr_coo.download(host_Jrt_rowptr_coo);
+			m_Jrt_val.download(host_Jrt_val);
+			m_JrtJr_RowPtr.download(host_JrtJr_rowptr);
+			m_JrtJr_ColIdx.download(host_JrtJr_colIdx);
+			m_JrtJr_val.download(host_JrtJr_val);
+
+			FILE* pFile = fopen("D:/tmp/gpu_Jr.txt", "w");
+			if (pFile)
+			{
+				for (int r = 0; r < m_Jrrows; r++)
+				{
+					int cb = host_Jr_rowptr[r], ce = host_Jr_rowptr[r + 1];
+					for (int ic = cb; ic < ce; ic++)
+						fprintf(pFile, "%d %d %f\n", r, host_Jr_colIdx[ic], host_Jr_val[ic]);
+				}
+				fclose(pFile);
+			}
+
+			FILE* pFile1 = fopen("D:/tmp/gpu_Jrt.txt", "w");
+			if (pFile1)
+			{
+				for (int r = 0; r < m_Jrcols; r++)
+				{
+					int cb = host_Jrt_rowptr[r], ce = host_Jrt_rowptr[r + 1];
+					for (int ic = cb; ic < ce; ic++)
+						fprintf(pFile1, "%d %d %f\n", r, host_Jrt_colIdx[ic], host_Jrt_val[ic]);
+				}
+				fclose(pFile1);
+			}
+
+			FILE* pFile2 = fopen("D:/tmp/gpu_JrtJr.txt", "w");
+			if (pFile1)
+			{
+				for (int r = 0; r < m_Jrcols; r++)
+				{
+					int cb = host_JrtJr_rowptr[r], ce = host_JrtJr_rowptr[r + 1];
+					for (int ic = cb; ic < ce; ic++)
+						fprintf(pFile1, "%d %d %f\n", r, host_JrtJr_colIdx[ic], host_JrtJr_val[ic]);
+				}
+				fclose(pFile1);
+			}
+		}
+#endif
 	}
 #pragma endregion
 }

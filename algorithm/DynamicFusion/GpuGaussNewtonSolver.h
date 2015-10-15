@@ -101,6 +101,8 @@ namespace dfusion
 		DeviceArray<int> m_Jr_RowPtr;
 		DeviceArray<int> m_Jr_RowPtr_coo;
 		DeviceArray<int> m_Jr_ColIdx;
+		cusparseMatDescr_t m_Jr_desc;
+
 		DeviceArray<float> m_Jrt_val;
 		DeviceArray<int> m_Jrt_RowPtr;
 		DeviceArray<int> m_Jrt_RowPtr_coo;
@@ -108,18 +110,23 @@ namespace dfusion
 		int m_Jrrows;
 		int m_Jrcols;
 		int m_Jrnnzs;
+		cusparseMatDescr_t m_Jrt_desc;
 
 		// rows = cols = numNodes*VarPerNode
 		DeviceArray<float> m_JrtJr_val;
 		DeviceArray<int> m_JrtJr_RowPtr;
 		DeviceArray<int> m_JrtJr_ColIdx;
 		int m_JrtJr_nnzs;
+		cusparseMatDescr_t m_JrtJr_desc;
 
 		// m_g = -J^t * f
 		// we will solve for H*m_h = m_g
 		// and x += step * m_h
 		DeviceArray<float> m_g;
 		DeviceArray<float> m_h;
+
+		// energy corresponding to Jr part.
+		DeviceArray<float> m_f_r;
 
 		cusparseHandle_t m_cuSparseHandle;
 	};
