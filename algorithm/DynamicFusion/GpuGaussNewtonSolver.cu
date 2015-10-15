@@ -971,75 +971,123 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			return df;
 		}
 
-		__device__ __forceinline__  Tbx::Transfo p_SE3_p_dq_func(Tbx::Dual_quat_cu dq, int i)const
-		{
-			Tbx::Quat_cu q0 = dq.get_non_dual_part();
-			Tbx::Quat_cu q1 = dq.get_dual_part();
-			float x0 = q0.i(), y0 = q0.j(), z0 = q0.k(), w0 = q0.w();
-			float x1 = q1.i(), y1 = q1.j(), z1 = q1.k(), w1 = q1.w();
-			switch (i)
-			{
-			case 0:
-				return Tbx::Transfo(
-					0, -z0, y0, x1,
-					z0, 0, -x0, y1,
-					-y0, x0, 0, z1,
-					0, 0, 0, 0) * 2;
-			case 1:
-				return Tbx::Transfo(
-					0, y0, z0, -w1,
-					y0, -2 * x0, -w0, -z1,
-					z0, w0, -2 * x0, y1,
-					0, 0, 0, 0) * 2;
-			case 2:
-				return Tbx::Transfo(
-					-2 * y0, x0, w0, z1,
-					x0, 0, z0, -w1,
-					-w0, z0, -2 * y0, -x1,
-					0, 0, 0, 0) * 2;
-			case 3:
-				return Tbx::Transfo(
-					-2 * z0, -w0, x0, -y1,
-					w0, -2 * z0, y0, x1,
-					x0, y0, 0, -w1,
-					0, 0, 0, 0) * 2;
-			case 4:
-				return Tbx::Transfo(
-					0, 0, 0, -x0,
-					0, 0, 0, -y0,
-					0, 0, 0, -z0,
-					0, 0, 0, 0) * 2;
-			case 5:
-				return Tbx::Transfo(
-					0, 0, 0, w0,
-					0, 0, 0, z0,
-					0, 0, 0, -y0,
-					0, 0, 0, 0) * 2;
-			case 6:
-				return Tbx::Transfo(
-					0, 0, 0, -z0,
-					0, 0, 0, w0,
-					0, 0, 0, x0,
-					0, 0, 0, 0) * 2;
-			case 7:
-				return Tbx::Transfo(
-					0, 0, 0, y0,
-					0, 0, 0, -x0,
-					0, 0, 0, w0,
-					0, 0, 0, 0) * 2;
-			default:
-				return Tbx::Transfo::identity();
-			}
-		}
-
 		__device__ __forceinline__  Tbx::Transfo p_SE3_p_alpha_func(Tbx::Dual_quat_cu dq, int i)const
 		{
 			Tbx::Transfo T = Tbx::Transfo::empty();
-			Tbx::Dual_quat_cu p_dq_p_alphai = p_qk_p_alpha_func(dq, i);
-			for (int j = 0; j < 8; j++)
-			{
-				T = T + p_SE3_p_dq_func(dq, j)*p_dq_p_alphai[j];
-			}
+			Tbx::Dual_quat_cu p_dq_p_alphai = p_qk_p_alpha_func(dq, i) * 2.f;
+
+			//// evaluate p_dqi_p_alphak, heavily hard code here
+			//// this hard code is crucial to the performance 
+			// 0:
+			// (0, -z0, y0, x1,
+			// z0, 0, -x0, y1,
+			//-y0, x0, 0, z1,
+			// 0, 0, 0, 0) * 2;
+			float p_dqi_p_alphak = p_dq_p_alphai[0];
+			T[1] += -dq[3] * p_dqi_p_alphak;
+			T[2] += dq[2] * p_dqi_p_alphak;
+			T[3] += dq[5] * p_dqi_p_alphak;
+			T[4] += dq[3] * p_dqi_p_alphak;
+			T[6] += -dq[1] * p_dqi_p_alphak;
+			T[7] += dq[6] * p_dqi_p_alphak;
+			T[8] += -dq[2] * p_dqi_p_alphak;
+			T[9] += dq[1] * p_dqi_p_alphak;
+			T[11] += dq[7] * p_dqi_p_alphak;
+
+			// 1
+			//( 0, y0, z0, -w1,
+			//	y0, -2 * x0, -w0, -z1,
+			//	z0, w0, -2 * x0, y1,
+			//	0, 0, 0, 0) * 2;
+			p_dqi_p_alphak = p_dq_p_alphai[1];
+			T[1] += dq[2] * p_dqi_p_alphak;
+			T[2] += dq[3] * p_dqi_p_alphak;
+			T[3] += -dq[4] * p_dqi_p_alphak;
+			T[4] += dq[2] * p_dqi_p_alphak;
+			T[5] += -dq[1] * p_dqi_p_alphak * 2;
+			T[6] += -dq[0] * p_dqi_p_alphak;
+			T[7] += -dq[7] * p_dqi_p_alphak;
+			T[8] += dq[3] * p_dqi_p_alphak;
+			T[9] += dq[0] * p_dqi_p_alphak;
+			T[10] += -dq[1] * p_dqi_p_alphak * 2;
+			T[11] += dq[6] * p_dqi_p_alphak;
+
+			// 2.
+			// (-2 * y0, x0, w0, z1,
+			//	x0, 0, z0, -w1,
+			//	-w0, z0, -2 * y0, -x1,
+			//	0, 0, 0, 0) * 2;
+			p_dqi_p_alphak = p_dq_p_alphai[2];
+			T[0] += -dq[2] * p_dqi_p_alphak * 2;
+			T[1] += dq[1] * p_dqi_p_alphak;
+			T[2] += dq[0] * p_dqi_p_alphak;
+			T[3] += dq[7] * p_dqi_p_alphak;
+			T[4] += dq[1] * p_dqi_p_alphak;
+			T[6] += dq[3] * p_dqi_p_alphak;
+			T[7] += -dq[4] * p_dqi_p_alphak;
+			T[8] += -dq[0] * p_dqi_p_alphak;
+			T[9] += dq[3] * p_dqi_p_alphak;
+			T[10] += -dq[2] * p_dqi_p_alphak * 2;
+			T[11] += -dq[5] * p_dqi_p_alphak;
+
+			// 3.
+			// (-2 * z0, -w0, x0, -y1,
+			//	w0, -2 * z0, y0, x1,
+			//	x0, y0, 0, -w1,
+			//	0, 0, 0, 0) * 2;
+			p_dqi_p_alphak = p_dq_p_alphai[3];
+			T[0] += -dq[3] * p_dqi_p_alphak * 2;
+			T[1] += -dq[0] * p_dqi_p_alphak;
+			T[2] += dq[1] * p_dqi_p_alphak;
+			T[3] += -dq[6] * p_dqi_p_alphak;
+			T[4] += dq[0] * p_dqi_p_alphak;
+			T[5] += -dq[3] * p_dqi_p_alphak * 2;
+			T[6] += dq[2] * p_dqi_p_alphak;
+			T[7] += dq[5] * p_dqi_p_alphak;
+			T[8] += dq[1] * p_dqi_p_alphak;
+			T[9] += dq[2] * p_dqi_p_alphak;
+			T[11] += -dq[4] * p_dqi_p_alphak;
+
+			// 4.
+			//( 0, 0, 0, -x0,
+			//	0, 0, 0, -y0,
+			//	0, 0, 0, -z0,
+			//	0, 0, 0, 0) * 2;
+			p_dqi_p_alphak = p_dq_p_alphai[4];
+			T[3] += -dq[1] * p_dqi_p_alphak;
+			T[7] += -dq[2] * p_dqi_p_alphak;
+			T[11] += -dq[3] * p_dqi_p_alphak;
+
+			// 5. 
+			// (0, 0, 0, w0,
+			//	0, 0, 0, z0,
+			//	0, 0, 0, -y0,
+			//	0, 0, 0, 0) * 2;
+			p_dqi_p_alphak = p_dq_p_alphai[5];
+			T[3] += dq[0] * p_dqi_p_alphak;
+			T[7] += dq[3] * p_dqi_p_alphak;
+			T[11] += -dq[2] * p_dqi_p_alphak;
+
+			// 6. 
+			// (0, 0, 0, -z0,
+			//	0, 0, 0, w0,
+			//	0, 0, 0, x0,
+			//	0, 0, 0, 0) * 2;
+			p_dqi_p_alphak = p_dq_p_alphai[6];
+			T[3] += -dq[3] * p_dqi_p_alphak;
+			T[7] += dq[0] * p_dqi_p_alphak;
+			T[11] += dq[1] * p_dqi_p_alphak;
+
+			// 7.
+			// (0, 0, 0, y0,
+			//	0, 0, 0, -x0,
+			//	0, 0, 0, w0,
+			//	0, 0, 0, 0) * 2;
+			p_dqi_p_alphak = p_dq_p_alphai[7];
+			T[3] += dq[2] * p_dqi_p_alphak;
+			T[7] += -dq[1] * p_dqi_p_alphak;
+			T[11] += dq[0] * p_dqi_p_alphak;
+
 			return T;
 		}
 
@@ -1092,26 +1140,11 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				Tbx::Transfo p_Ti_p_alpha = p_SE3_p_alpha_func(dqi, ialpha);
 				Tbx::Transfo p_Tj_p_alpha = p_SE3_p_alpha_func(dqj, ialpha);
 
-				// partial_h_partial_alpha
-				Tbx::Vec3 p_h_p_alphai_j, p_h_p_alphaj_j;
-				Tbx::Vec3 p_h_p_alphai_i, p_h_p_alphaj_i;
-				for (int ixyz = 0; ixyz < 3; ixyz++)
-				{
-					p_h_p_alphai_j[ixyz] = p_Ti_p_alpha(ixyz, 0) * vj.x + p_Ti_p_alpha(ixyz, 1) * vj.y
-						+ p_Ti_p_alpha(ixyz, 2) * vj.z + p_Ti_p_alpha(ixyz, 3);
-					p_h_p_alphaj_j[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vj.x + p_Tj_p_alpha(ixyz, 1) * vj.y
-						+ p_Tj_p_alpha(ixyz, 2) * vj.z + p_Tj_p_alpha(ixyz, 3));
-					p_h_p_alphai_i[ixyz] = p_Ti_p_alpha(ixyz, 0) * vi.x + p_Ti_p_alpha(ixyz, 1) * vi.y
-						+ p_Ti_p_alpha(ixyz, 2) * vi.z + p_Ti_p_alpha(ixyz, 3);
-					p_h_p_alphaj_i[ixyz] = -(p_Tj_p_alpha(ixyz, 0) * vi.x + p_Tj_p_alpha(ixyz, 1) * vi.y
-						+ p_Tj_p_alpha(ixyz, 2) * vi.z + p_Tj_p_alpha(ixyz, 3));
-				}
-
 				// partial_psi_partial_alpha
-				Tbx::Vec3 p_psi_p_alphai_j = p_h_p_alphai_j * ww;
-				Tbx::Vec3 p_psi_p_alphaj_j = p_h_p_alphaj_j * ww;
-				Tbx::Vec3 p_psi_p_alphai_i = p_h_p_alphai_i * ww;
-				Tbx::Vec3 p_psi_p_alphaj_i = p_h_p_alphaj_i * ww;
+				Tbx::Vec3 p_psi_p_alphai_j = (p_Ti_p_alpha * vj) * ww;
+				Tbx::Vec3 p_psi_p_alphaj_j = (p_Tj_p_alpha * vj) * (-ww);
+				Tbx::Vec3 p_psi_p_alphai_i = (p_Ti_p_alpha * vi) * ww;
+				Tbx::Vec3 p_psi_p_alphaj_i = (p_Tj_p_alpha * vi) * (-ww);
 
 				for (int ixyz = 0; ixyz < 3; ixyz++)
 				{
