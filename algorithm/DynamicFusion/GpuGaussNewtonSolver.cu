@@ -1344,6 +1344,15 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				m_HrRowsCols, m_Brows);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcHr_kernel");
 		}
+
+		// 5. compute g += Jr'*fr
+		float alpha = 1.f;
+		float beta = 1.f;
+		if (CUSPARSE_STATUS_SUCCESS != cusparseScsrmv(
+			m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, m_Jrcols,
+			m_Jrrows, m_Jrnnzs, &alpha, m_Jrt_desc, m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr(),
+			m_Jrt_ColIdx.ptr(), m_f_r.ptr(), &beta, m_g.ptr()))
+			throw std::exception("GpuGaussNewtonSolver::calcHessian::cusparseScsrmv failed!\n");
 	}
 #pragma endregion
 }

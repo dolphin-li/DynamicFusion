@@ -127,6 +127,8 @@ namespace dfusion
 		int m_Jrcols;
 		int m_Jrnnzs;
 
+		cusparseMatDescr_t m_Jrt_desc;
+
 		// let Jr = [Jr0, Jr1]
 		//			[0,   Jr3]
 		// where Jr0 w.r.t. level-0 nodes

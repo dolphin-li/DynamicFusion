@@ -18,11 +18,14 @@ namespace dfusion
 
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
 			throw std::exception("cuSparse creating failed!");
+
+		cusparseCreateMatDescr(&m_Jrt_desc);
 	}
 
 	GpuGaussNewtonSolver::~GpuGaussNewtonSolver()
 	{
 		unBindTextures();
+		cusparseDestroyMatDescr(m_Jrt_desc);
 		cusparseDestroy(m_cuSparseHandle);
 	}
 
@@ -127,6 +130,7 @@ namespace dfusion
 
 
 		// perform Gauss-Newton iteration
+		for (int k = 0; k < 100; k++)
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
