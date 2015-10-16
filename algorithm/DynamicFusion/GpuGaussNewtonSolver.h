@@ -93,6 +93,8 @@ namespace dfusion
 		// it is a dense matrix and symmetric
 		// we allocate ?x? buffer but only touch the lower part.
 		DeviceArray<float> m_Hr;
+		int m_HrRows;
+		int m_HrCols;
 
 		// CSR sparse matrix of B
 		DeviceArray<float> m_B_val;

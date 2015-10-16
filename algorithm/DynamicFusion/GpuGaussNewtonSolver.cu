@@ -3,8 +3,12 @@
 #include "cudpp\cudpp_wrapper.h"
 #include "cudpp\thrust_wrapper.h"
 #include "cudpp\ModerGpuWrapper.h"
+#include <iostream>
 namespace dfusion
 {
+#define CHECK(a, msg){if(!(a)) throw std::exception(msg);} 
+#define CHECK_LE(a, b){if((a) > (b)) {std::cout << "" << #a << "(" << a << ")<=" << #b << "(" << b << ")";throw std::exception(" ###error!");}} 
+
 	texture<WarpField::KnnIdx, cudaTextureType1D, cudaReadModeElementType> g_nodesKnnTex;
 	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_nodesVwTex;
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_twistTex;
@@ -790,6 +794,8 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::compute_row_map_kernel");
 		}
 		{
+			CHECK_LE(m_Jrrows, m_Jr_RowPtr.size());
+			CHECK_LE(m_Jrcols, m_Jrt_RowPtr.size());
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Jrrows, block.x));
 			compute_Jr_rowPtr_colIdx_kernel << <grid, block >> >(m_Jr_RowPtr.ptr(),
@@ -797,6 +803,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::compute_Jr_rowPtr_kernel");
 			cudaSafeCall(cudaMemcpy(&m_Jrnnzs, m_Jr_RowPtr.ptr() + m_Jrrows,
 				sizeof(int), cudaMemcpyDeviceToHost), "copy Jr nnz to host");
+			CHECK_LE(m_Jrnnzs, m_Jr_RowPtr_coo.size());
 		}
 
 		// 2. compute Jrt structure ==============================================
@@ -815,9 +822,12 @@ if (knnNodeId == 390 && i == 5 && j == 1
 
 		// 3. compute B structure ==============================================
 		// 3.1 the row ptr of B is the same with the first L0 rows of Jrt.
+		CHECK_LE(m_Brows, m_B_RowPtr.size());
+		CHECK_LE(m_Bcols, m_Bt_RowPtr.size());
 		cudaMemcpy(m_B_RowPtr.ptr(), m_Jrt_RowPtr.ptr(), (m_Brows + 1)*sizeof(int), cudaMemcpyDeviceToDevice);
 		cudaSafeCall(cudaMemcpy(&m_Bnnzs, m_B_RowPtr.ptr() + m_Brows,
 			sizeof(int), cudaMemcpyDeviceToHost), "copy B nnz to host");
+		CHECK_LE(m_Bnnzs, m_B_RowPtr_coo.size());
 		
 		// 3.2 the col-idx of B
 		{
@@ -1264,6 +1274,14 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		B_val[tid] = sum;
 	}
 
+	__global__ void calcHr_kernel(const int* Jrt_rptr, int nHrRows, int nHrCols)
+	{
+		int x = threadIdx.x + blockIdx.x * blockDim.x;
+		int y = threadIdx.y + blockIdx.y * blockDim.y;
+		if (x >= nHrRows || y >= nHrCols)
+			return;
+	}
+
 	void GpuGaussNewtonSolver::calcHessian()
 	{
 		// 1. compute Jr0'Jr0 and accumulate into Hd
@@ -1289,6 +1307,8 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		cudaMemcpy(m_Bt_val.ptr(), m_B_val.ptr(), m_Bnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
 		modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_val.ptr(), m_Bnnzs);
 		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::mergesort_by_key");
+
+		// 4. compute Hr
 	}
 #pragma endregion
 }

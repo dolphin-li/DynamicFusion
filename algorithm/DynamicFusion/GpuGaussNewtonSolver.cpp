@@ -49,8 +49,9 @@ namespace dfusion
 		m_Jrcols = m_numNodes * VarPerNode;
 		m_Jrnnzs = 0; // unknown now, decided later
 		m_Brows = m_numLv0Nodes * VarPerNode;
-		m_Bcols = m_pWarpField->getNumNodesInLevel(1) * VarPerNode;
+		m_Bcols = notLv0Nodes * VarPerNode;
 		m_Bnnzs = 0; // unknown now, decieded later
+		m_HrRows = m_HrCols = m_Bcols;
 
 		// make larger buffer to prevent malloc/free each frame
 		if (m_nodes_for_buffer < m_numNodes)
@@ -128,11 +129,17 @@ namespace dfusion
 		// perform Gauss-Newton iteration
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
-			// 1. calculate data term: H_d += J_dJ_d'; 
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
+			cudaSafeCall(cudaMemset(m_Hr.ptr(), 0, sizeof(float)*m_Hr.size()));
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
+
+			// 1. calculate data term: Hd += Jd'Jd; g += Jd'fd
 			calcDataTerm();
+
+			// 2. calculate reg term: Jr = [Jr0 Jr1; 0 Jr3]; fr;
 			calcRegTerm();
+
+			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g+=Jr'*fr
 			calcHessian();
 		}// end for iter
 
@@ -215,6 +222,10 @@ namespace dfusion
 				int cb = hr[r], ce = hr[r + 1];
 				for (int ic = cb; ic < ce; ic++)
 					fprintf(pFile, "%d %d %f\n", r, hc[ic], hv[ic]);
+				// if an empty row, fill diag with zero
+				// this is for the convinience when exporting to matlab
+				if (cb == ce)
+					fprintf(pFile, "%d %d %f\n", r, r, 0);
 			}
 			fclose(pFile);
 		}
