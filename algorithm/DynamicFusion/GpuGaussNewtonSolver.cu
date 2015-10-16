@@ -1274,12 +1274,39 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		B_val[tid] = sum;
 	}
 
-	__global__ void calcHr_kernel(const int* Jrt_rptr, int nHrRows, int nHrCols)
+	__global__ void calcHr_kernel(float* Hr, const int* Jrt_rptr, 
+		int HrRowsCols, int nBrows)
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
 		int y = threadIdx.y + blockIdx.y * blockDim.y;
-		if (x >= nHrRows || y >= nHrCols)
+		if (x >= HrRowsCols || y >= HrRowsCols)
 			return;
+
+		int Jrt13_ib = Jrt_rptr[y + nBrows];
+		int Jrt13_ie = Jrt_rptr[y + nBrows + 1];
+		int Jrt13_jb = Jrt_rptr[x + nBrows];
+		int Jrt13_je = Jrt_rptr[x + nBrows + 1];
+
+		float sum = 0.f;
+		for (int i = Jrt13_ib, j = Jrt13_jb; i < Jrt13_ie && j < Jrt13_je;)
+		{
+			int ci = get_JrtCidx(i);
+			int cj = get_JrtCidx(j);
+			if (ci == cj)
+			{
+				float s = 0.f;
+				for (int k = 0; k < GpuGaussNewtonSolver::VarPerNode; k++)
+					s += get_JrtVal(i + k) * get_JrtVal(j + k);
+				sum += s;
+				i += GpuGaussNewtonSolver::VarPerNode;
+				j += GpuGaussNewtonSolver::VarPerNode;
+			}
+
+			i += (ci < cj) * GpuGaussNewtonSolver::VarPerNode;
+			j += (ci > cj) * GpuGaussNewtonSolver::VarPerNode;
+		}// i
+
+		Hr[y*HrRowsCols + x] = sum;
 	}
 
 	void GpuGaussNewtonSolver::calcHessian()
@@ -1309,6 +1336,14 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::mergesort_by_key");
 
 		// 4. compute Hr
+		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Hr.size());
+		{
+			dim3 block(CTA_SIZE_X, CTA_SIZE_Y);
+			dim3 grid(divUp(m_HrRowsCols, block.x), divUp(m_HrRowsCols, block.y));
+			calcHr_kernel << <grid, block >> >(m_Hr.ptr(), m_Jrt_RowPtr.ptr(),
+				m_HrRowsCols, m_Brows);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcHr_kernel");
+		}
 	}
 #pragma endregion
 }

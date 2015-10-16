@@ -45,11 +45,13 @@ namespace dfusion
 		void bindTextures();
 		void unBindTextures();
 
-		void dumpSparseMatrix(
+		static void dumpSparseMatrix(
 			std::string name,
 			const DeviceArray<int>& rptr, 
 			const DeviceArray<int>& cidx,
 			const DeviceArray<float>& val, int nRow);
+
+		static void dumpSymLowerMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
 	private:
 		WarpField* m_pWarpField;
 		const MapArr* m_vmap_cano;
@@ -93,8 +95,7 @@ namespace dfusion
 		// it is a dense matrix and symmetric
 		// we allocate ?x? buffer but only touch the lower part.
 		DeviceArray<float> m_Hr;
-		int m_HrRows;
-		int m_HrCols;
+		int m_HrRowsCols;
 
 		// CSR sparse matrix of B
 		DeviceArray<float> m_B_val;

@@ -51,7 +51,7 @@ namespace dfusion
 		m_Brows = m_numLv0Nodes * VarPerNode;
 		m_Bcols = notLv0Nodes * VarPerNode;
 		m_Bnnzs = 0; // unknown now, decieded later
-		m_HrRows = m_HrCols = m_Bcols;
+		m_HrRowsCols = m_Bcols;
 
 		// make larger buffer to prevent malloc/free each frame
 		if (m_nodes_for_buffer < m_numNodes)
@@ -127,10 +127,10 @@ namespace dfusion
 
 
 		// perform Gauss-Newton iteration
+		for (int k = 0; k < 100; k++)
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
-			cudaSafeCall(cudaMemset(m_Hr.ptr(), 0, sizeof(float)*m_Hr.size()));
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
 
 			// 1. calculate data term: Hd += Jd'Jd; g += Jd'fd
@@ -201,6 +201,7 @@ namespace dfusion
 		dumpSparseMatrix("D:/tmp/gpu_Jrt.txt", m_Jrt_RowPtr, m_Jrt_ColIdx, m_Jrt_val, m_Jrcols);
 		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
 		dumpSparseMatrix("D:/tmp/gpu_Bt.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_val, m_Bcols);
+		dumpSymLowerMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
 	}
 
 	void GpuGaussNewtonSolver::dumpSparseMatrix(
@@ -226,6 +227,30 @@ namespace dfusion
 				// this is for the convinience when exporting to matlab
 				if (cb == ce)
 					fprintf(pFile, "%d %d %f\n", r, r, 0);
+			}
+			fclose(pFile);
+		}
+	}
+
+	void GpuGaussNewtonSolver::dumpSymLowerMat(std::string name, 
+		const DeviceArray<float>& A, int nRowsCols)
+	{
+		std::vector<float> hA;
+		A.download(hA);
+
+		FILE* pFile = fopen(name.c_str(), "w");
+		if (pFile)
+		{
+			for (int y = 0; y < nRowsCols; y++)
+			{
+				for (int x = 0; x < nRowsCols; x++)
+				{
+					int x1 = x, y1 = y;
+					if (x1 > y1)
+						std::swap(x1, y1);
+					fprintf(pFile, "%f ", hA[y1*nRowsCols + x1]);
+				}
+				fprintf(pFile, "\n");
 			}
 			fclose(pFile);
 		}
