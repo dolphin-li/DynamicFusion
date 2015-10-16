@@ -1279,7 +1279,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
 		int y = threadIdx.y + blockIdx.y * blockDim.y;
-		if (x >= HrRowsCols || y >= HrRowsCols)
+		if (x >= HrRowsCols || y >= HrRowsCols || x>y)
 			return;
 
 		int Jrt13_ib = Jrt_rptr[y + nBrows];

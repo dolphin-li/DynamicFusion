@@ -127,7 +127,6 @@ namespace dfusion
 
 
 		// perform Gauss-Newton iteration
-		for (int k = 0; k < 100; k++)
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
