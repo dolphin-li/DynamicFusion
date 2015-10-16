@@ -8,6 +8,7 @@ namespace dfusion
 	texture<WarpField::KnnIdx, cudaTextureType1D, cudaReadModeElementType> g_nodesKnnTex;
 	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_nodesVwTex;
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_twistTex;
+	texture<float, cudaTextureType1D, cudaReadModeElementType> g_JrtValTex;
 
 	__device__ __forceinline__ float4 get_nodesVw(int i)
 	{
@@ -28,6 +29,11 @@ namespace dfusion
 		t.x = tex1Dfetch(g_twistTex, i6++);
 		t.y = tex1Dfetch(g_twistTex, i6++);
 		t.z = tex1Dfetch(g_twistTex, i6++);
+	}
+
+	__device__ __forceinline__ float get_JrtVal(int i)
+	{
+		return tex1Dfetch(g_JrtValTex, i);
 	}
 
 	// map the lower part to full 6x6 matrix
@@ -137,6 +143,15 @@ namespace dfusion
 			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
 			cudaBindTexture(&offset, &g_twistTex, m_twist.ptr(), &desc,
 				m_twist.size() * sizeof(float));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+			cudaBindTexture(&offset, &g_JrtValTex, m_Jrt_val.ptr(), &desc,
+				m_Jrt_val.size() * sizeof(float));
 			if (offset != 0)
 				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
 		}
@@ -1200,7 +1215,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 
 #pragma region --calc Hessian
 #define ENABLE_GPU_DUMP_DEBUG_H
-	__global__ void calcJr0tJr0_add_to_Hd_kernel(float* Hd, int nLv0Nodes, const float* Jrt, const int* Jrt_rptr)
+	__global__ void calcJr0tJr0_add_to_Hd_kernel(float* Hd, int nLv0Nodes, const int* Jrt_rptr)
 	{
 		enum
 		{
@@ -1224,11 +1239,11 @@ if (knnNodeId == 390 && i == 5 && j == 1
 
 		float sum = 0.f;
 		for (int i = 0; i < row_len; i++)
-			sum += Jrt[row1_begin + i] * Jrt[row0_begin + i];
+			sum += get_JrtVal(row1_begin + i) * get_JrtVal(row0_begin + i);
 
 		Hd[iNode * VarPerNode2 + g_lower_2_full_6x6[eleLowerShift]] += sum;
 	}
-
+	
 	void GpuGaussNewtonSolver::calcHessian()
 	{
 		// 1. compute Jr0'Jr0 and accumulate into Hd
@@ -1236,7 +1251,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
 			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes, 
-				m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr());
+				m_Jrt_RowPtr.ptr());
 		}
 	}
 #pragma endregion
