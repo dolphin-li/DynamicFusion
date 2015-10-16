@@ -318,6 +318,7 @@ namespace dfusion
 			Eigen::VectorXf debugX;
 			debugX.resize(m_warpField->getNumAllNodes()*6);
 			debugX.setRandom();
+			debugX *= 0.1f;
 			m_gsSolver->debug_set_init_x(debugX.data(), debugX.size());
 			solver.debug_set_init_x(debugX.data(), debugX.size());
 

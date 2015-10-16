@@ -52,6 +52,7 @@ namespace dfusion
 			const DeviceArray<float>& val, int nRow);
 
 		static void dumpSymLowerMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
+		static void dumpVec(std::string name, const DeviceArray<float>& A, int n);
 	private:
 		WarpField* m_pWarpField;
 		const MapArr* m_vmap_cano;

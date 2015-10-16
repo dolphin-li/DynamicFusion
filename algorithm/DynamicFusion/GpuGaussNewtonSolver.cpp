@@ -201,6 +201,8 @@ namespace dfusion
 		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
 		dumpSparseMatrix("D:/tmp/gpu_Bt.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_val, m_Bcols);
 		dumpSymLowerMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
+		dumpVec("D:/tmp/gpu_fr.txt", m_f_r, m_Jrrows);
+		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jrcols);
 	}
 
 	void GpuGaussNewtonSolver::dumpSparseMatrix(
@@ -251,6 +253,20 @@ namespace dfusion
 				}
 				fprintf(pFile, "\n");
 			}
+			fclose(pFile);
+		}
+	}
+
+	void GpuGaussNewtonSolver::dumpVec(std::string name, const DeviceArray<float>& A, int n)
+	{
+		std::vector<float> hA;
+		A.download(hA);
+
+		FILE* pFile = fopen(name.c_str(), "w");
+		if (pFile)
+		{
+			for (int y = 0; y < n; y++)
+				fprintf(pFile, "%f\n", hA[y]);
 			fclose(pFile);
 		}
 	}

@@ -712,6 +712,25 @@ namespace dfusion
 					}
 				}
 			}// end for iNode
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+			{
+				static int a = 0;
+				{
+					std::string name = ("D:/tmp/cpu_f_" + std::to_string(a) + ".txt").c_str();
+					dumpVec(f, name.c_str());
+				}
+				{
+					std::string name = ("D:/tmp/cpu_gd_" + std::to_string(a) + ".txt").c_str();
+					dumpVec(jact_.leftCols(nPixel_rows_) * f.topRows(nPixel_rows_), name.c_str());
+				}
+				{
+					std::string name = ("D:/tmp/cpu_g_" + std::to_string(a) + ".txt").c_str();
+					dumpVec(jact_* f, name.c_str());
+				}
+
+				a++;
+			}
+#endif
 		}
 
 		real evaluateTotalEnergy(const Vec& x)const
