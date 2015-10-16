@@ -9,6 +9,7 @@ namespace dfusion
 	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_nodesVwTex;
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_twistTex;
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_JrtValTex;
+	texture<int, cudaTextureType1D, cudaReadModeElementType> g_JrtCidxTex;
 
 	__device__ __forceinline__ float4 get_nodesVw(int i)
 	{
@@ -34,6 +35,10 @@ namespace dfusion
 	__device__ __forceinline__ float get_JrtVal(int i)
 	{
 		return tex1Dfetch(g_JrtValTex, i);
+	}
+	__device__ __forceinline__ int get_JrtCidx(int i)
+	{
+		return tex1Dfetch(g_JrtCidxTex, i);
 	}
 
 	// map the lower part to full 6x6 matrix
@@ -152,6 +157,15 @@ namespace dfusion
 			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
 			cudaBindTexture(&offset, &g_JrtValTex, m_Jrt_val.ptr(), &desc,
 				m_Jrt_val.size() * sizeof(float));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<int>();
+			cudaBindTexture(&offset, &g_JrtCidxTex, m_Jrt_ColIdx.ptr(), &desc,
+				m_Jrt_ColIdx.size() * sizeof(int));
 			if (offset != 0)
 				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
 		}
@@ -642,9 +656,6 @@ if (knnNodeId == 390 && i == 5 && j == 1
 #pragma endregion
 
 #pragma region --define sparse structure
-
-#define ENABLE_GPU_DUMP_DEBUG_B
-
 	__global__ void count_Jr_rows_kernel(int* rctptr, int nMaxNodes)
 	{
 		int i = threadIdx.x + blockIdx.x*blockDim.x;
@@ -792,6 +803,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		// 2.1. fill (row, col) as (col, row) from Jr and sort.
 		cudaMemcpy(m_Jrt_RowPtr_coo.ptr(), m_Jr_ColIdx.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
 		cudaMemcpy(m_Jrt_ColIdx.ptr(), m_Jr_RowPtr_coo.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+		// !!!NOTE: we must use mergesort here, it can guarentees the order of values of the same key
 		modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_ColIdx.ptr(), m_Jrnnzs);
 		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key");
 
@@ -1179,84 +1191,6 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		cudaMemcpy(m_Jrt_val.ptr(), m_Jr_val.ptr(), m_Jrnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
 		modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_val.ptr(), m_Jrnnzs);
 		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcRegTerm::mergesort_by_key");
-
-#ifdef ENABLE_GPU_DUMP_DEBUG_B
-		{
-			std::vector<int> host_Jr_rowptr, host_Jr_colIdx, host_Jr_rowptr_coo;
-			std::vector<int> host_Jrt_rowptr, host_Jrt_colIdx, host_Jrt_rowptr_coo;
-			std::vector<int> host_B_rowptr, host_B_colIdx, host_B_rowptr_coo;
-			std::vector<int> host_Bt_rowptr, host_Bt_colIdx, host_Bt_rowptr_coo;
-			std::vector<float> host_Jr_val, host_Jrt_val, host_B_val, host_Bt_val;
-
-			m_Jr_RowPtr.download(host_Jr_rowptr);
-			m_Jr_ColIdx.download(host_Jr_colIdx);
-			m_Jr_RowPtr_coo.download(host_Jr_rowptr_coo);
-			m_Jr_val.download(host_Jr_val);
-
-			m_Jrt_RowPtr.download(host_Jrt_rowptr);
-			m_Jrt_ColIdx.download(host_Jrt_colIdx);
-			m_Jrt_RowPtr_coo.download(host_Jrt_rowptr_coo);
-			m_Jrt_val.download(host_Jrt_val);
-
-			m_B_RowPtr.download(host_B_rowptr);
-			m_B_ColIdx.download(host_B_colIdx);
-			m_B_RowPtr_coo.download(host_B_rowptr_coo);
-			m_B_val.download(host_B_val);
-
-			m_Bt_RowPtr.download(host_Bt_rowptr);
-			m_Bt_ColIdx.download(host_Bt_colIdx);
-			m_Bt_RowPtr_coo.download(host_Bt_rowptr_coo);
-			m_Bt_val.download(host_Bt_val);
-
-			FILE* pFile = fopen("D:/tmp/gpu_Jr.txt", "w");
-			if (pFile)
-			{
-				for (int r = 0; r < m_Jrrows; r++)
-				{
-					int cb = host_Jr_rowptr[r], ce = host_Jr_rowptr[r + 1];
-					for (int ic = cb; ic < ce; ic++)
-						fprintf(pFile, "%d %d %f\n", r, host_Jr_colIdx[ic], host_Jr_val[ic]);
-				}
-				fclose(pFile);
-			}
-
-			FILE* pFile1 = fopen("D:/tmp/gpu_Jrt.txt", "w");
-			if (pFile1)
-			{
-				for (int r = 0; r < m_Jrcols; r++)
-				{
-					int cb = host_Jrt_rowptr[r], ce = host_Jrt_rowptr[r + 1];
-					for (int ic = cb; ic < ce; ic++)
-						fprintf(pFile1, "%d %d %f\n", r, host_Jrt_colIdx[ic], host_Jrt_val[ic]);
-				}
-				fclose(pFile1);
-			}
-
-			FILE* pFile2 = fopen("D:/tmp/gpu_B.txt", "w");
-			if (pFile2)
-			{
-				for (int r = 0; r < m_Brows; r++)
-				{
-					int cb = host_B_rowptr[r], ce = host_B_rowptr[r + 1];
-					for (int ic = cb; ic < ce; ic++)
-						fprintf(pFile2, "%d %d %f\n", r, host_B_colIdx[ic], host_B_val[ic]);
-				}
-				fclose(pFile2);
-			}
-
-			FILE* pFile3 = fopen("D:/tmp/gpu_Bt.txt", "w");
-			if (pFile3)
-			{
-				for (int r = 0; r < m_Bcols; r++)
-				{
-					int cb = host_Bt_rowptr[r], ce = host_Bt_rowptr[r + 1];
-					for (int ic = cb; ic < ce; ic++)
-						fprintf(pFile3, "%d %d %f\n", r, host_Bt_colIdx[ic], host_Bt_val[ic]);
-				}
-				fclose(pFile3);
-			}
-		}
-#endif
 	}
 #pragma endregion
 
@@ -1291,6 +1225,45 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		Hd[iNode * VarPerNode2 + g_lower_2_full_6x6[eleLowerShift]] += sum;
 	}
 	
+	__global__ void calcB_kernel(
+		float* B_val, const int* B_rptr_coo, const int* B_cidx, 
+		int nBrows, int Bnnz, const int* Jrt_rptr)
+	{
+		enum{VarPerNode = GpuGaussNewtonSolver::VarPerNode};
+
+		int tid = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tid >= Bnnz)
+			return;
+
+		int iBrow = B_rptr_coo[tid];
+		int iBcol = B_cidx[tid];
+
+		int Jr0t_cb = Jrt_rptr[iBrow];
+		int Jr0t_ce = Jrt_rptr[iBrow + 1];
+
+		int Jr1_rb = Jrt_rptr[iBcol + nBrows];
+		int Jr1_re = Jrt_rptr[iBcol + nBrows + 1];
+
+		float sum = 0.f;
+		for (int i0 = Jr0t_cb, i1 = Jr1_rb; i0 < Jr0t_ce && i1 < Jr1_re; )
+		{
+			int Jr0t_c = get_JrtCidx(i0);
+			int Jr1_r = get_JrtCidx(i1);
+			if (Jr0t_c == Jr1_r)
+			{
+				for (int k = 0; k < VarPerNode; k++)
+					sum += get_JrtVal(i0 + k) * get_JrtVal(i1 + k);
+				i0 += VarPerNode;
+				i1 += VarPerNode;
+			}
+
+			i0 += (Jr0t_c < Jr1_r) * VarPerNode;
+			i1 += (Jr0t_c > Jr1_r) * VarPerNode;
+		}// i
+
+		B_val[tid] = sum;
+	}
+
 	void GpuGaussNewtonSolver::calcHessian()
 	{
 		// 1. compute Jr0'Jr0 and accumulate into Hd
@@ -1299,9 +1272,23 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
 			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes, 
 				m_Jrt_RowPtr.ptr());
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcJr0tJr0_add_to_Hd_kernel");
 		}
 
 		// 2. compute B = Jr0'Jr1
+		{
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_Bnnzs, block.x));
+			calcB_kernel << <grid, block >> >(m_B_val.ptr(), m_B_RowPtr_coo.ptr(), 
+				m_B_ColIdx.ptr(), m_Brows, m_Bnnzs, m_Jrt_RowPtr.ptr());
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcB_kernel");
+		}
+
+		// 3. compute Bt
+		cudaMemcpy(m_Bt_RowPtr_coo.ptr(), m_B_ColIdx.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_Bt_val.ptr(), m_B_val.ptr(), m_Bnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
+		modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_val.ptr(), m_Bnnzs);
+		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::mergesort_by_key");
 	}
 #pragma endregion
 }

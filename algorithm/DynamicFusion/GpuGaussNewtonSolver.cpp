@@ -185,11 +185,38 @@ namespace dfusion
 			if (pFile)
 			{
 				for (int i = 0; i < m_numLv0Nodes*VarPerNode; i++)
-				{
 					fprintf(pFile, "%f\n", host_g[i]);
-				}
 			}
 			fclose(pFile);
 		}// dump the g
+
+		dumpSparseMatrix("D:/tmp/gpu_Jr.txt", m_Jr_RowPtr, m_Jr_ColIdx, m_Jr_val, m_Jrrows);
+		dumpSparseMatrix("D:/tmp/gpu_Jrt.txt", m_Jrt_RowPtr, m_Jrt_ColIdx, m_Jrt_val, m_Jrcols);
+		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
+		dumpSparseMatrix("D:/tmp/gpu_Bt.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_val, m_Bcols);
+	}
+
+	void GpuGaussNewtonSolver::dumpSparseMatrix(
+		std::string name, const DeviceArray<int>& rptr,
+		const DeviceArray<int>& cidx, const DeviceArray<float>& val, int nRow)
+	{
+		std::vector<int> hr, hc;
+		std::vector<float> hv;
+
+		rptr.download(hr);
+		cidx.download(hc);
+		val.download(hv);
+
+		FILE* pFile = fopen(name.c_str(), "w");
+		if (pFile)
+		{
+			for (int r = 0; r < nRow; r++)
+			{
+				int cb = hr[r], ce = hr[r + 1];
+				for (int ic = cb; ic < ce; ic++)
+					fprintf(pFile, "%d %d %f\n", r, hc[ic], hv[ic]);
+			}
+			fclose(pFile);
+		}
 	}
 }

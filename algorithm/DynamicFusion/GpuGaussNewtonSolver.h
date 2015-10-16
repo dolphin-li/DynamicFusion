@@ -44,6 +44,12 @@ namespace dfusion
 
 		void bindTextures();
 		void unBindTextures();
+
+		void dumpSparseMatrix(
+			std::string name,
+			const DeviceArray<int>& rptr, 
+			const DeviceArray<int>& cidx,
+			const DeviceArray<float>& val, int nRow);
 	private:
 		WarpField* m_pWarpField;
 		const MapArr* m_vmap_cano;
