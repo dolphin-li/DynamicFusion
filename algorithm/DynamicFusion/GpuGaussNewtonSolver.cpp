@@ -46,10 +46,11 @@ namespace dfusion
 
 		// sparse matrix info
 		m_Jrrows = 0; // unknown now, decided later
-		m_Jrcols = m_numNodes*VarPerNode;
+		m_Jrcols = m_numNodes * VarPerNode;
 		m_Jrnnzs = 0; // unknown now, decided later
 		m_Brows = m_numLv0Nodes * VarPerNode;
 		m_Bcols = m_pWarpField->getNumNodesInLevel(1) * VarPerNode;
+		m_Bnnzs = 0; // unknown now, decieded later
 
 		// make larger buffer to prevent malloc/free each frame
 		if (m_nodes_for_buffer < m_numNodes)
@@ -78,10 +79,18 @@ namespace dfusion
 			m_Jrt_val.create(m_Jr_ColIdx.size());
 			m_Jrt_RowPtr_coo.create(m_Jr_ColIdx.size());
 
+			// B = Jr0'Jr1
 			m_B_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
-			m_B_ColIdx.create(VarPerNode * VarPerNode*WarpField::KnnK*m_nodes_for_buffer);
+			m_B_ColIdx.create(WarpField::KnnK * VarPerNode * m_B_RowPtr.size());
+			m_B_RowPtr_coo.create(m_B_ColIdx.size());
 			m_B_val.create(m_B_ColIdx.size());
 
+			m_Bt_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
+			m_Bt_ColIdx.create(m_B_ColIdx.size());
+			m_Bt_RowPtr_coo.create(m_B_ColIdx.size());
+			m_Bt_val.create(m_B_ColIdx.size());
+
+			// the energy function of reg term
 			m_f_r.create(m_Jr_RowPtr.size());
 		}
 

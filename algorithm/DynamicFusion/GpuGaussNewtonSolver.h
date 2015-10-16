@@ -125,7 +125,7 @@ namespace dfusion
 		// Jr0 is a block diagonal matrix, thus the computation
 		// of Jr'Jr can be greatly simplified:
 		// we simply accumulate Jr0'Jr0 into Hd as the block-diagonal part
-		// and B = Jr0'Jr1, which has the same sparse pattern as Jr1
+		// and B = Jr0'Jr1, which the structure should be evaluated 
 		// finally Hd = Jr1'Jr1 + Jr3'Jr3. we accumulate it into a dense matrix
 
 		// m_g = -J^t * f

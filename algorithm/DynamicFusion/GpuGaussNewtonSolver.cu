@@ -643,7 +643,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 
 #pragma region --define sparse structure
 
-//#define ENABLE_GPU_DUMP_DEBUG_B
+#define ENABLE_GPU_DUMP_DEBUG_B
 
 	__global__ void count_Jr_rows_kernel(int* rctptr, int nMaxNodes)
 	{
@@ -726,6 +726,32 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			rptr[nRows] = nRows * ColPerRow;
 	}
 
+	__global__ void calc_B_cidx_kernel(int* B_rptr_coo, int* B_cidx, 
+		const int* B_rptr, int nRows, int nMaxNodes, int nLv0Nodes)
+	{
+		int iRow = threadIdx.x + blockIdx.x*blockDim.x;
+		if (iRow < nRows)
+		{
+			int iNode = iRow / GpuGaussNewtonSolver::VarPerNode;
+
+			WarpField::KnnIdx knn = get_nodesKnn(iNode);
+			int col_b = B_rptr[iRow];
+			for (int k = 0; k < WarpField::KnnK; ++k)
+			{
+				int knnNodeId = knn_k(knn, k);
+				if (knnNodeId < nMaxNodes)
+				{
+					// 2. neighbor
+					for (int j = 0; j < GpuGaussNewtonSolver::VarPerNode; j++, col_b++)
+					{
+						B_rptr_coo[col_b] = iRow;
+						B_cidx[col_b] = (knnNodeId-nLv0Nodes)*GpuGaussNewtonSolver::VarPerNode + j;
+					}// j
+				}
+			}
+		}
+	}
+
 	void GpuGaussNewtonSolver::initSparseStructure()
 	{
 		// 1. compute Jr structure ==============================================
@@ -775,47 +801,30 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			m_Jrt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))
 			throw std::exception("GpuGaussNewtonSolver::initSparseStructure::cusparseXcoo2csr failed");
 
-
-
-#ifdef ENABLE_GPU_DUMP_DEBUG_B
+		// 3. compute B structure ==============================================
+		// 3.1 the row ptr of B is the same with the first L0 rows of Jrt.
+		cudaMemcpy(m_B_RowPtr.ptr(), m_Jrt_RowPtr.ptr(), (m_Brows + 1)*sizeof(int), cudaMemcpyDeviceToDevice);
+		cudaSafeCall(cudaMemcpy(&m_Bnnzs, m_B_RowPtr.ptr() + m_Brows,
+			sizeof(int), cudaMemcpyDeviceToHost), "copy B nnz to host");
+		
+		// 3.2 the col-idx of B
 		{
-			std::vector<int> host_Jr_rowptr, host_Jr_colIdx, host_Jr_rowptr_coo;
-			std::vector<int> host_Jrt_rowptr, host_Jrt_colIdx, host_Jrt_rowptr_coo;
-			std::vector<float> host_Jr_val, host_Jrt_val;
-			m_Jr_RowPtr.download(host_Jr_rowptr);
-			m_Jr_ColIdx.download(host_Jr_colIdx);
-			m_Jr_RowPtr_coo.download(host_Jr_rowptr_coo);
-			m_Jr_val.download(host_Jr_val);
-			m_Jrt_RowPtr.download(host_Jrt_rowptr);
-			m_Jrt_ColIdx.download(host_Jrt_colIdx);
-			m_Jrt_RowPtr_coo.download(host_Jrt_rowptr_coo);
-			m_Jrt_val.download(host_Jrt_val);
-
-			FILE* pFile = fopen("D:/tmp/gpu_Jr.txt", "w");
-			if (pFile)
-			{
-				for (int r = 0; r < m_Jrrows; r++)
-				{
-					int cb = host_Jr_rowptr[r], ce = host_Jr_rowptr[r + 1];
-					for (int ic = cb; ic < ce; ic++)
-						fprintf(pFile, "%d %d %f\n", r, host_Jr_colIdx[ic], host_Jr_val[ic]);
-				}
-				fclose(pFile);
-			}
-
-			FILE* pFile1 = fopen("D:/tmp/gpu_Jrt.txt", "w");
-			if (pFile1)
-			{
-				for (int r = 0; r < m_Jrcols; r++)
-				{
-					int cb = host_Jrt_rowptr[r], ce = host_Jrt_rowptr[r + 1];
-					for (int ic = cb; ic < ce; ic++)
-						fprintf(pFile1, "%d %d %f\n", r, host_Jrt_colIdx[ic], host_Jrt_val[ic]);
-				}
-				fclose(pFile1);
-			}
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_Brows, block.x));
+			calc_B_cidx_kernel << <grid, block >> >(m_B_RowPtr_coo.ptr(),
+				m_B_ColIdx.ptr(), m_B_RowPtr.ptr(), m_Brows, m_numNodes, m_numLv0Nodes);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::calc_B_cidx_kernel");
 		}
-#endif
+
+		// 3.3 sort to compute Bt
+		cudaMemcpy(m_Bt_RowPtr_coo.ptr(), m_B_ColIdx.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_Bt_ColIdx.ptr(), m_B_RowPtr_coo.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+		modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_ColIdx.ptr(), m_Bnnzs);
+		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key");
+		if (CUSPARSE_STATUS_SUCCESS != cusparseXcoo2csr(m_cuSparseHandle,
+			m_Bt_RowPtr_coo.ptr(), m_Bnnzs, m_Bcols,
+			m_Bt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))
+			throw std::exception("GpuGaussNewtonSolver::initSparseStructure::cusparseXcoo2csr failed");
 	}
 
 #pragma endregion
@@ -1175,15 +1184,29 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		{
 			std::vector<int> host_Jr_rowptr, host_Jr_colIdx, host_Jr_rowptr_coo;
 			std::vector<int> host_Jrt_rowptr, host_Jrt_colIdx, host_Jrt_rowptr_coo;
-			std::vector<int> host_JrtJr_rowptr, host_JrtJr_colIdx;
+			std::vector<int> host_B_rowptr, host_B_colIdx, host_B_rowptr_coo;
+			std::vector<int> host_Bt_rowptr, host_Bt_colIdx, host_Bt_rowptr_coo;
+			std::vector<float> host_Jr_val, host_Jrt_val, host_B_val, host_Bt_val;
+
 			m_Jr_RowPtr.download(host_Jr_rowptr);
 			m_Jr_ColIdx.download(host_Jr_colIdx);
 			m_Jr_RowPtr_coo.download(host_Jr_rowptr_coo);
 			m_Jr_val.download(host_Jr_val);
+
 			m_Jrt_RowPtr.download(host_Jrt_rowptr);
 			m_Jrt_ColIdx.download(host_Jrt_colIdx);
 			m_Jrt_RowPtr_coo.download(host_Jrt_rowptr_coo);
 			m_Jrt_val.download(host_Jrt_val);
+
+			m_B_RowPtr.download(host_B_rowptr);
+			m_B_ColIdx.download(host_B_colIdx);
+			m_B_RowPtr_coo.download(host_B_rowptr_coo);
+			m_B_val.download(host_B_val);
+
+			m_Bt_RowPtr.download(host_Bt_rowptr);
+			m_Bt_ColIdx.download(host_Bt_colIdx);
+			m_Bt_RowPtr_coo.download(host_Bt_rowptr_coo);
+			m_Bt_val.download(host_Bt_val);
 
 			FILE* pFile = fopen("D:/tmp/gpu_Jr.txt", "w");
 			if (pFile)
@@ -1207,6 +1230,30 @@ if (knnNodeId == 390 && i == 5 && j == 1
 						fprintf(pFile1, "%d %d %f\n", r, host_Jrt_colIdx[ic], host_Jrt_val[ic]);
 				}
 				fclose(pFile1);
+			}
+
+			FILE* pFile2 = fopen("D:/tmp/gpu_B.txt", "w");
+			if (pFile2)
+			{
+				for (int r = 0; r < m_Brows; r++)
+				{
+					int cb = host_B_rowptr[r], ce = host_B_rowptr[r + 1];
+					for (int ic = cb; ic < ce; ic++)
+						fprintf(pFile2, "%d %d %f\n", r, host_B_colIdx[ic], host_B_val[ic]);
+				}
+				fclose(pFile2);
+			}
+
+			FILE* pFile3 = fopen("D:/tmp/gpu_Bt.txt", "w");
+			if (pFile3)
+			{
+				for (int r = 0; r < m_Bcols; r++)
+				{
+					int cb = host_Bt_rowptr[r], ce = host_Bt_rowptr[r + 1];
+					for (int ic = cb; ic < ce; ic++)
+						fprintf(pFile3, "%d %d %f\n", r, host_Bt_colIdx[ic], host_Bt_val[ic]);
+				}
+				fclose(pFile3);
 			}
 		}
 #endif
@@ -1253,6 +1300,8 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes, 
 				m_Jrt_RowPtr.ptr());
 		}
+
+		// 2. compute B = Jr0'Jr1
 	}
 #pragma endregion
 }
