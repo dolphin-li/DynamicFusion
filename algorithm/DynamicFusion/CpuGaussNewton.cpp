@@ -831,6 +831,10 @@ namespace dfusion
 					dumpSparseMatrix(jacReg, name.c_str());
 				}
 				{
+					std::string name = ("D:/tmp/cpu_Jrt_" + std::to_string(a) + ".txt").c_str();
+					dumpSparseMatrix(jacReg.transpose(), name.c_str());
+				}
+				{
 					std::string name = ("D:/tmp/cpu_Hd_"+std::to_string(a)+".txt").c_str();
 					FILE*pFile = fopen(name.c_str(), "w");
 					for(int i=0; i<m_diagBlocks.size(); i++)

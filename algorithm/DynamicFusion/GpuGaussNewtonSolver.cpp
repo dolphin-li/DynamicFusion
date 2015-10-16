@@ -136,6 +136,7 @@ namespace dfusion
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
 			calcDataTerm();
+			for (int k = 0; k < 100; k++)
 			calcRegTerm();
 		}// end for iter
 

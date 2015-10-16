@@ -612,7 +612,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 
 #pragma region --define sparse structure
 
-#define ENABLE_GPU_DUMP_DEBUG_B
+//#define ENABLE_GPU_DUMP_DEBUG_B
 
 	__global__ void count_Jr_rows_kernel(int* rctptr, int nMaxNodes)
 	{
@@ -624,11 +624,11 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			for (int k = 0; k < WarpField::KnnK; ++k)
 			{
 				if (knn_k(knn, k) < nMaxNodes)
-					numK = k + 1;
+					numK = k;
 			}
 
 			// each node generate 6*maxK rows
-			rctptr[i] = numK * 6;
+			rctptr[i] = (numK+1) * 6;
 		}
 		if (i == nMaxNodes)
 			rctptr[i] = 0;
