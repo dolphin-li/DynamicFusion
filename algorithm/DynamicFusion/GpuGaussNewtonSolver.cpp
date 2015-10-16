@@ -18,18 +18,11 @@ namespace dfusion
 
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
 			throw std::exception("cuSparse creating failed!");
-
-		cusparseCreateMatDescr(&m_Jr_desc);
-		cusparseCreateMatDescr(&m_Jrt_desc);
-		cusparseCreateMatDescr(&m_JrtJr_desc);
 	}
 
 	GpuGaussNewtonSolver::~GpuGaussNewtonSolver()
 	{
 		unBindTextures();
-		cusparseDestroyMatDescr(m_Jr_desc);
-		cusparseDestroyMatDescr(m_Jrt_desc);
-		cusparseDestroyMatDescr(m_JrtJr_desc);
 		cusparseDestroy(m_cuSparseHandle);
 	}
 
@@ -55,7 +48,6 @@ namespace dfusion
 		m_Jrrows = 0; // unknown now, decided later
 		m_Jrcols = m_numNodes*VarPerNode;
 		m_Jrnnzs = 0; // unknown now, decided later
-		m_JrtJr_nnzs = 0; // unknown now, decides later
 		m_Brows = m_numLv0Nodes * VarPerNode;
 		m_Bcols = m_pWarpField->getNumNodesInLevel(1) * VarPerNode;
 
@@ -85,11 +77,6 @@ namespace dfusion
 			m_Jrt_ColIdx.create(m_Jr_ColIdx.size());
 			m_Jrt_val.create(m_Jr_ColIdx.size());
 			m_Jrt_RowPtr_coo.create(m_Jr_ColIdx.size());
-
-			m_JrtJr_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
-			m_JrtJr_ColIdx.create(VarPerNode * VarPerNode*(1+WarpField::KnnK)*m_nodes_for_buffer
-				+ notLv0Nodes * notLv0Nodes * VarPerNode * VarPerNode);
-			m_JrtJr_val.create(m_Jr_ColIdx.size());
 
 			m_B_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
 			m_B_ColIdx.create(VarPerNode * VarPerNode*WarpField::KnnK*m_nodes_for_buffer);
@@ -136,8 +123,8 @@ namespace dfusion
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
 			calcDataTerm();
-			for (int k = 0; k < 100; k++)
 			calcRegTerm();
+			calcHessian();
 		}// end for iter
 
 		// finally, write results back

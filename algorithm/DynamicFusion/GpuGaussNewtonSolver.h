@@ -40,6 +40,7 @@ namespace dfusion
 		void initSparseStructure();
 		void calcDataTerm();
 		void calcRegTerm();
+		void calcHessian();
 
 		void bindTextures();
 		void unBindTextures();
@@ -72,8 +73,8 @@ namespace dfusion
 		// H = Jd'Jd + Jr'Jr
 		// Jd is the data term jacobi, approximated by diagonal blocks
 		// Jr is the regularization term jacobi, sparse.
-		// H =	[ H_d B  ]
-		//		[ B^t H_r]
+		// H =	[ Hd  B  ]
+		//		[ B^t Hr ]
 		// note H is symmetric, thus it is enough to evaluate the lower triangular
 
 		// Hessian of the left-top of data+reg term, 
@@ -90,9 +91,15 @@ namespace dfusion
 		// CSR sparse matrix of B
 		DeviceArray<float> m_B_val;
 		DeviceArray<int> m_B_RowPtr;
+		DeviceArray<int> m_B_RowPtr_coo;
 		DeviceArray<int> m_B_ColIdx;
+		DeviceArray<float> m_Bt_val;
+		DeviceArray<int> m_Bt_RowPtr;
+		DeviceArray<int> m_Bt_RowPtr_coo;
+		DeviceArray<int> m_Bt_ColIdx;
 		int m_Brows;
 		int m_Bcols;
+		int m_Bnnzs;
 
 		// CSR sparse matrix of Jr
 		DeviceArray<float> m_Jr_val;
@@ -101,7 +108,6 @@ namespace dfusion
 		DeviceArray<int> m_Jr_RowPtr;
 		DeviceArray<int> m_Jr_RowPtr_coo;
 		DeviceArray<int> m_Jr_ColIdx;
-		cusparseMatDescr_t m_Jr_desc;
 
 		DeviceArray<float> m_Jrt_val;
 		DeviceArray<int> m_Jrt_RowPtr;
@@ -110,14 +116,17 @@ namespace dfusion
 		int m_Jrrows;
 		int m_Jrcols;
 		int m_Jrnnzs;
-		cusparseMatDescr_t m_Jrt_desc;
 
-		// rows = cols = numNodes*VarPerNode
-		DeviceArray<float> m_JrtJr_val;
-		DeviceArray<int> m_JrtJr_RowPtr;
-		DeviceArray<int> m_JrtJr_ColIdx;
-		int m_JrtJr_nnzs;
-		cusparseMatDescr_t m_JrtJr_desc;
+		// let Jr = [Jr0, Jr1]
+		//			[0,   Jr3]
+		// where Jr0 w.r.t. level-0 nodes
+		// thus Jr'Jr = [Jr0'Jr0, Jr0'Jr1          ]
+		//				[Jr1'Jr0, Jr1'Jr1 + Jr3'Jr3]
+		// Jr0 is a block diagonal matrix, thus the computation
+		// of Jr'Jr can be greatly simplified:
+		// we simply accumulate Jr0'Jr0 into Hd as the block-diagonal part
+		// and B = Jr0'Jr1, which has the same sparse pattern as Jr1
+		// finally Hd = Jr1'Jr1 + Jr3'Jr3. we accumulate it into a dense matrix
 
 		// m_g = -J^t * f
 		// we will solve for H*m_h = m_g

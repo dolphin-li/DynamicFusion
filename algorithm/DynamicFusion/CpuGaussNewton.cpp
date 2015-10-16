@@ -823,59 +823,7 @@ namespace dfusion
 				SpMat jacDataBlock = jacData.middleCols(iNode * 6, 6);
 				m_diagBlocks[iNode] = (jacDataBlock.transpose() * jacDataBlock).eval().toDense();
 			}// end for ix
-#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
-			{
-				static int a = 0;
-				{
-					std::string name = ("D:/tmp/cpu_Jr_" + std::to_string(a) + ".txt").c_str();
-					dumpSparseMatrix(jacReg, name.c_str());
-				}
-				{
-					std::string name = ("D:/tmp/cpu_Jrt_" + std::to_string(a) + ".txt").c_str();
-					dumpSparseMatrix(jacReg.transpose(), name.c_str());
-				}
-				{
-					std::string name = ("D:/tmp/cpu_Hd_"+std::to_string(a)+".txt").c_str();
-					FILE*pFile = fopen(name.c_str(), "w");
-					for(int i=0; i<m_diagBlocks.size(); i++)
-					{
-						for (int y = 0; y < 6; y++)
-						for (int x = 0; x < 6; x++)
-							fprintf(pFile, "%f ", m_diagBlocks[i](y, x));
-						fprintf(pFile, "\n");
-					}
-					fclose(pFile);
-				}
-				{
-					std::vector<float> px(imgWidth_*imgHeight_*6, 0.f);
-					SpMat subJacData = jacData.middleCols(390 * 6, 6);
-					for (int c = 0; c < subJacData.outerSize(); c++)
-					{
-						int cs = subJacData.outerIndexPtr()[c];
-						int ce = subJacData.outerIndexPtr()[c + 1];
-						for (int r = cs; r < ce; r++)
-						{
-							int row = subJacData.innerIndexPtr()[r];
-							int pixelId = pixel_index_of_row_[row];
-							float val = subJacData.valuePtr()[r];
-							if (pixelId >= 0)
-								px[pixelId * 6 + c] = val;
-						}
-					}
 
-					std::string name = ("D:/tmp/cpu_pixel" + std::to_string(a) + ".txt").c_str();
-					FILE*pFile = fopen(name.c_str(), "w");
-					for (int i = 0; i<imgWidth_*imgHeight_; i++)
-					{
-						fprintf(pFile, "%ef %ef %ef %ef %ef %ef\n", 
-							px[i * 6 + 0], px[i * 6 + 1], px[i * 6 + 2],
-							px[i * 6 + 3], px[i * 6 + 4], px[i * 6 + 5]);
-					}
-					fclose(pFile);
-				}
-				a++;
-			}
-#endif
 			// traverse H to adding blocks on
 			for (int row = 0; row < H.outerSize(); row ++)
 			{
@@ -899,6 +847,32 @@ namespace dfusion
 					}
 				}
 			}
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+			{
+				static int a = 0;
+				{
+					std::string name = ("D:/tmp/cpu_Jr_" + std::to_string(a) + ".txt").c_str();
+					dumpSparseMatrix(jacReg, name.c_str());
+				}
+				{
+					std::string name = ("D:/tmp/cpu_Jrt_" + std::to_string(a) + ".txt").c_str();
+					dumpSparseMatrix(jacReg.transpose(), name.c_str());
+				}
+				{
+					std::string name = ("D:/tmp/cpu_Hd_"+std::to_string(a)+".txt").c_str();
+					FILE*pFile = fopen(name.c_str(), "w");
+					for(int i=0; i<m_diagBlocks.size(); i++)
+					{
+						for (int y = 0; y < 6; y++)
+						for (int x = 0; x < 6; x++)
+							fprintf(pFile, "%f ", m_diagBlocks[i](y, x));
+						fprintf(pFile, "\n");
+					}
+					fclose(pFile);
+				}
+				a++;
+			}
+#endif
 
 			// ldp debug
 #ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
