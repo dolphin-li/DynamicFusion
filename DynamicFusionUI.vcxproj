@@ -335,6 +335,7 @@
     <ClInclude Include="algorithm\DynamicFusion\DynamicFusionProcessor.h" />
     <ClInclude Include="algorithm\DynamicFusion\glsl\glsl.h" />
     <ClInclude Include="algorithm\DynamicFusion\glsl\glslprogram.h" />
+    <ClInclude Include="algorithm\DynamicFusion\GpuCholeSky.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuHeap.h" />
     <ClInclude Include="algorithm\DynamicFusion\GpuKdTree.h" />
@@ -438,6 +439,7 @@
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\ModerGpuWrapper.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\thrust_wrapper.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\DynamicFusionProcessor.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\GpuCholesky.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\GpuKdTree.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\GpuMesh.cu" />

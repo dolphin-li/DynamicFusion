@@ -572,6 +572,9 @@
     <ClInclude Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\GpuCholeSky.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
@@ -608,6 +611,9 @@
       <Filter>algorithm\DynamicFusion\cudpp</Filter>
     </CudaCompile>
     <CudaCompile Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\GpuCholesky.cu">
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
   </ItemGroup>

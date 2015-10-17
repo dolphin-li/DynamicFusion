@@ -1,7 +1,9 @@
 #include "GpuGaussNewtonSolver.h"
+#include <cublas.h>
 namespace dfusion
 {
 #pragma comment(lib, "cusparse.lib")
+#pragma comment(lib, "cublas.lib")
 	GpuGaussNewtonSolver::GpuGaussNewtonSolver()
 	{
 		m_vmap_cano = nullptr;
@@ -18,6 +20,15 @@ namespace dfusion
 
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
 			throw std::exception("cuSparse creating failed!");
+
+		static bool blas_init = false;
+		if (!blas_init)
+		{
+			cublasStatus_t t = cublasInit();
+			if (t != CUBLAS_STATUS_SUCCESS)
+				throw std::exception("cuBlas creating failed!");
+			blas_init = true;
+		}
 
 		cusparseCreateMatDescr(&m_Jrt_desc);
 	}
@@ -144,6 +155,12 @@ namespace dfusion
 
 			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g+=Jr'*fr
 			calcHessian();
+
+			// 4. solve H*h = g
+			blockSolve();
+
+			// 5. accumulate: x += step * h;
+			cublasSaxpy(m_Jrcols, m_param->fusion_GaussNewton_fixedStep, m_h.ptr(), 1, m_twist.ptr(), 1);
 		}// end for iter
 
 		// finally, write results back
@@ -174,13 +191,7 @@ namespace dfusion
 					const float* data = host_Hd.data() + i*VarPerNode*VarPerNode;
 					for (int y = 0; y < VarPerNode; y++)
 					for (int x = 0; x < VarPerNode; x++)
-					{
-						int x1 = x, y1 = y;
-						if (x1 > y1)
-							std::swap(x1, y1);
-						float v = data[y1*VarPerNode+x1];
-						fprintf(pFile, "%f ", v);
-					}
+						fprintf(pFile, "%f ", data[y*VarPerNode + x]);
 					fprintf(pFile, "\n");
 				}
 			}
@@ -204,7 +215,7 @@ namespace dfusion
 		dumpSparseMatrix("D:/tmp/gpu_Jrt.txt", m_Jrt_RowPtr, m_Jrt_ColIdx, m_Jrt_val, m_Jrcols);
 		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
 		dumpSparseMatrix("D:/tmp/gpu_Bt.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_val, m_Bcols);
-		dumpSymLowerMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
+		dumpMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
 		dumpVec("D:/tmp/gpu_fr.txt", m_f_r, m_Jrrows);
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jrcols);
 	}
@@ -255,6 +266,25 @@ namespace dfusion
 						std::swap(x1, y1);
 					fprintf(pFile, "%f ", hA[y1*nRowsCols + x1]);
 				}
+				fprintf(pFile, "\n");
+			}
+			fclose(pFile);
+		}
+	}
+
+	void GpuGaussNewtonSolver::dumpMat(std::string name,
+		const DeviceArray<float>& A, int nRowsCols)
+	{
+		std::vector<float> hA;
+		A.download(hA);
+
+		FILE* pFile = fopen(name.c_str(), "w");
+		if (pFile)
+		{
+			for (int y = 0; y < nRowsCols; y++)
+			{
+				for (int x = 0; x < nRowsCols; x++)
+					fprintf(pFile, "%f ", hA[y*nRowsCols + x]);
 				fprintf(pFile, "\n");
 			}
 			fclose(pFile);

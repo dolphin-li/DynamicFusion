@@ -4,6 +4,7 @@
 #include "cudpp\thrust_wrapper.h"
 #include "cudpp\ModerGpuWrapper.h"
 #include <iostream>
+#include "GpuCholeSky.h"
 namespace dfusion
 {
 #define CHECK(a, msg){if(!(a)) throw std::exception(msg);} 
@@ -1235,6 +1236,27 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		Hd[iNode * VarPerNode2 + g_lower_2_full_6x6[eleLowerShift]] += sum;
 	}
 	
+	__global__ void fill_Hd_upper_kernel(float* Hd, int nLv0Nodes)
+	{
+		enum
+		{
+			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
+			VarPerNode2 = VarPerNode*VarPerNode,
+			LowerPartNum = GpuGaussNewtonSolver::LowerPartNum
+		};
+
+		int tid = threadIdx.x + blockIdx.x * blockDim.x;
+		int iNode = tid / LowerPartNum;
+		if (iNode >= nLv0Nodes)
+			return;
+		int eleLowerShift = tid - iNode*LowerPartNum;
+		int rowShift = g_lower_2_rowShift_6x6[eleLowerShift];
+		int colShift = g_lower_2_colShift_6x6[eleLowerShift];
+		
+		Hd[iNode * VarPerNode2 + colShift * VarPerNode + rowShift] = 
+			Hd[iNode * VarPerNode2 + rowShift * VarPerNode + colShift];
+	}
+
 	__global__ void calcB_kernel(
 		float* B_val, const int* B_rptr_coo, const int* B_cidx, 
 		int nBrows, int Bnnz, const int* Jrt_rptr)
@@ -1274,13 +1296,19 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		B_val[tid] = sum;
 	}
 
-	__global__ void calcHr_kernel(float* Hr, const int* Jrt_rptr, 
+	__global__ void calcHr_kernel(float* Hr, const int* Jrt_rptr,
 		int HrRowsCols, int nBrows)
 	{
-		int x = threadIdx.x + blockIdx.x * blockDim.x;
-		int y = threadIdx.y + blockIdx.y * blockDim.y;
-		if (x >= HrRowsCols || y >= HrRowsCols || x>y)
+		int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+		if (tid >= (HrRowsCols + 1)*HrRowsCols / 2)
 			return;
+
+		// y is the triangular number
+		int y = floor(-0.5 + sqrt(0.25 + 2 * tid));
+		int triangularNumber = y * (y + 1) / 2;
+		// x should <= y
+		int x = tid - triangularNumber;
 
 		int Jrt13_ib = Jrt_rptr[y + nBrows];
 		int Jrt13_ie = Jrt_rptr[y + nBrows + 1];
@@ -1306,7 +1334,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			j += (ci > cj) * GpuGaussNewtonSolver::VarPerNode;
 		}// i
 
-		Hr[y*HrRowsCols + x] = sum;
+		Hr[y*HrRowsCols + x] = Hr[x*HrRowsCols + y] = sum;
 	}
 
 	void GpuGaussNewtonSolver::calcHessian()
@@ -1318,6 +1346,12 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes, 
 				m_Jrt_RowPtr.ptr());
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcJr0tJr0_add_to_Hd_kernel");
+
+			// 1.1 fill the upper tri part of Hd
+			// previously, we only calculate the lower triangular pert of Hd;
+			// now that the computation of Hd is ready, we fill the mission upper part
+			fill_Hd_upper_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::fill_Hd_upper_kernel");
 		}
 
 		// 2. compute B = Jr0'Jr1
@@ -1338,8 +1372,8 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		// 4. compute Hr
 		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Hr.size());
 		{
-			dim3 block(CTA_SIZE_X, CTA_SIZE_Y);
-			dim3 grid(divUp(m_HrRowsCols, block.x), divUp(m_HrRowsCols, block.y));
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_HrRowsCols*(m_HrRowsCols+1)/2, block.x));
 			calcHr_kernel << <grid, block >> >(m_Hr.ptr(), m_Jrt_RowPtr.ptr(),
 				m_HrRowsCols, m_Brows);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcHr_kernel");
@@ -1353,6 +1387,13 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			m_Jrrows, m_Jrnnzs, &alpha, m_Jrt_desc, m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr(),
 			m_Jrt_ColIdx.ptr(), m_f_r.ptr(), &beta, m_g.ptr()))
 			throw std::exception("GpuGaussNewtonSolver::calcHessian::cusparseScsrmv failed!\n");
+	}
+#pragma endregion
+
+#pragma region --block solve
+	void GpuGaussNewtonSolver::blockSolve()
+	{
+
 	}
 #pragma endregion
 }

@@ -41,6 +41,7 @@ namespace dfusion
 		void calcDataTerm();
 		void calcRegTerm();
 		void calcHessian();
+		void blockSolve();
 
 		void bindTextures();
 		void unBindTextures();
@@ -52,6 +53,7 @@ namespace dfusion
 			const DeviceArray<float>& val, int nRow);
 
 		static void dumpSymLowerMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
+		static void dumpMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
 		static void dumpVec(std::string name, const DeviceArray<float>& A, int n);
 	private:
 		WarpField* m_pWarpField;
@@ -88,15 +90,19 @@ namespace dfusion
 
 		// Hessian of the left-top of data+reg term, 
 		// it is a 6x6x? block diags.
-		// It is symmetric, we only touch the lower part of each block
-		// But for convinence, we allocate 6x6 buffer for each block
+		// It is symmetric, during calculation, 
+		// we thus only touch the lower part of each block
+		// after calculation finished, we filled the upper part then.
 		DeviceArray<float> m_Hd;
 
 		// Hessian of the bottom-right of the data+reg term, 
 		// it is a dense matrix and symmetric
-		// we allocate ?x? buffer but only touch the lower part.
+		// It is symmetric, during calculation, 
+		// we thus only touch the lower part of each block
+		// after calculation finished, we filled the upper part then.
 		DeviceArray<float> m_Hr;
 		int m_HrRowsCols;
+
 
 		// CSR sparse matrix of B
 		DeviceArray<float> m_B_val;
@@ -149,6 +155,17 @@ namespace dfusion
 		// energy corresponding to Jr part.
 		DeviceArray<float> m_f_r;
 
+		//// params used in block solver
+
+		// Q = Hr - Bt * Hd^(-1) * B
+		DeviceArray<float> m_Q;
+
+		// m_Hd_L: Hd = L*Lt
+		DeviceArray<float> m_Hd_L;
+		DeviceArray<float> m_Hd_Linv;
+		DeviceArray<float> m_Hd_inv;
+
+		//// cusparse handl
 		cusparseHandle_t m_cuSparseHandle;
 	};
 }
