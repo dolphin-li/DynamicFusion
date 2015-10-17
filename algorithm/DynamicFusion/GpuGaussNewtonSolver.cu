@@ -1393,7 +1393,30 @@ if (knnNodeId == 390 && i == 5 && j == 1
 #pragma region --block solve
 	void GpuGaussNewtonSolver::blockSolve()
 	{
+		CHECK_LE(m_numLv0Nodes*VarPerNode*VarPerNode, m_Hd_Linv.size());
+		CHECK_LE(m_numLv0Nodes*VarPerNode*VarPerNode, m_Hd_LLtinv.size());
+		// 1. batch LLt the diag blocks Hd
+		cudaSafeCall(cudaMemcpy(m_Hd_Linv.ptr(), m_Hd.ptr(), m_numLv0Nodes*VarPerNode
+			*VarPerNode*m_Hd.elem_size, cudaMemcpyDeviceToDevice), 
+			"GpuGaussNewtonSolver::blockSolve::copy Hd to Hd_L");
+		{
+			// 1.1 Hd = L*L'
+			dim3 block(16);
+			dim3 grid(divUp(m_numLv0Nodes, block.x));
+			gpu_cholesky::__single_thread_cholesky_batched<float, VarPerNode> << <grid, block >> >(
+				m_Hd_Linv.ptr(), VarPerNode*VarPerNode, m_numLv0Nodes);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::blockSolve::__single_thread_cholesky_batched");
 
+			// 1.2 inv(L)
+			gpu_cholesky::__single_thread_tril_inv_batched<float, VarPerNode> << <grid, block >> >(
+				m_Hd_Linv.ptr(), VarPerNode*VarPerNode, m_numLv0Nodes);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::blockSolve::__single_thread_tril_inv_batched");
+
+			// 1.3 inv(L*L') = inv(L')*inv(L) = inv(L)'*inv(L)
+			gpu_cholesky::__single_thread_LtL_batched<float, VarPerNode> << <grid, block >> >(
+				m_Hd_LLtinv.ptr(), VarPerNode*VarPerNode,  m_Hd_Linv.ptr(), VarPerNode*VarPerNode, m_numLv0Nodes);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::blockSolve::__single_thread_LLt_batched");
+		}
 	}
 #pragma endregion
 }

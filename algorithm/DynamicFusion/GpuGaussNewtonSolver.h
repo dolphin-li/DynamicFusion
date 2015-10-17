@@ -55,6 +55,7 @@ namespace dfusion
 		static void dumpSymLowerMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
 		static void dumpMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
 		static void dumpVec(std::string name, const DeviceArray<float>& A, int n);
+		static void dumpBlocks(std::string name, const DeviceArray<float>& A, int nBlocks, int blockRowCol);
 	private:
 		WarpField* m_pWarpField;
 		const MapArr* m_vmap_cano;
@@ -161,9 +162,11 @@ namespace dfusion
 		DeviceArray<float> m_Q;
 
 		// m_Hd_L: Hd = L*Lt
-		DeviceArray<float> m_Hd_L;
 		DeviceArray<float> m_Hd_Linv;
-		DeviceArray<float> m_Hd_inv;
+		DeviceArray<float> m_Hd_LLtinv;
+		// m_Hd_L: Hr = L*Lt
+		DeviceArray<float> m_Hr_L;
+		DeviceArray<float> m_Hr_Linv;
 
 		//// cusparse handl
 		cusparseHandle_t m_cuSparseHandle;

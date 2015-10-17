@@ -107,6 +107,12 @@ namespace dfusion
 
 			// the energy function of reg term
 			m_f_r.create(m_Jr_RowPtr.size());
+
+			// for block solver
+			m_Hd_Linv.create(m_Hd.size());
+			m_Hd_LLtinv.create(m_Hd.size());
+			m_Hr_L.create(m_Hr.size());
+			m_Hr_Linv.create(m_Hr.size());
 		}
 
 		if (m_not_lv0_nodes_for_buffer < notLv0Nodes)
@@ -179,38 +185,10 @@ namespace dfusion
 
 	void GpuGaussNewtonSolver::debug_print()
 	{
-		// dump the diagonal block
-		{
-			std::vector<float> host_Hd;
-			m_Hd.download(host_Hd);
-			FILE* pFile = fopen("D:/tmp/gpu_Hd.txt", "w");
-			if (pFile)
-			{
-				for (int i = 0; i < m_numLv0Nodes; i++)
-				{
-					const float* data = host_Hd.data() + i*VarPerNode*VarPerNode;
-					for (int y = 0; y < VarPerNode; y++)
-					for (int x = 0; x < VarPerNode; x++)
-						fprintf(pFile, "%f ", data[y*VarPerNode + x]);
-					fprintf(pFile, "\n");
-				}
-			}
-			fclose(pFile);
-		}// dump the diaonal block
-
-		// dump g
-		{
-			std::vector<float> host_g;
-			m_g.download(host_g);
-			FILE* pFile = fopen("D:/tmp/gpu_g.txt", "w");
-			if (pFile)
-			{
-				for (int i = 0; i < m_numLv0Nodes*VarPerNode; i++)
-					fprintf(pFile, "%f\n", host_g[i]);
-			}
-			fclose(pFile);
-		}// dump the g
-
+		dumpBlocks("D:/tmp/gpu_Hd.txt", m_Hd, m_numLv0Nodes, VarPerNode);
+		dumpBlocks("D:/tmp/gpu_Hd_Linv.txt", m_Hd_Linv, m_numLv0Nodes, VarPerNode);
+		dumpBlocks("D:/tmp/gpu_Hd_LLtinv.txt", m_Hd_LLtinv, m_numLv0Nodes, VarPerNode);
+		dumpVec("D:/tmp/gpu_g.txt", m_g, m_numNodes*VarPerNode);
 		dumpSparseMatrix("D:/tmp/gpu_Jr.txt", m_Jr_RowPtr, m_Jr_ColIdx, m_Jr_val, m_Jrrows);
 		dumpSparseMatrix("D:/tmp/gpu_Jrt.txt", m_Jrt_RowPtr, m_Jrt_ColIdx, m_Jrt_val, m_Jrcols);
 		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
@@ -301,6 +279,26 @@ namespace dfusion
 		{
 			for (int y = 0; y < n; y++)
 				fprintf(pFile, "%f\n", hA[y]);
+			fclose(pFile);
+		}
+	}
+
+	void GpuGaussNewtonSolver::dumpBlocks(std::string name, const DeviceArray<float>& A, 
+		int nBlocks, int blockRowCol)
+	{
+		std::vector<float> hA;
+		A.download(hA);
+
+		FILE* pFile = fopen(name.c_str(), "w");
+		if (pFile)
+		{
+			int sz = blockRowCol*blockRowCol;
+			for (int i = 0; i < nBlocks; i++)
+			{
+				for (int x = 0; x < sz; x++)
+					fprintf(pFile, "%f ", hA[i*sz + x]);
+				fprintf(pFile, "\n");
+			}
 			fclose(pFile);
 		}
 	}
