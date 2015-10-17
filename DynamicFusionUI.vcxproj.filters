@@ -190,9 +190,6 @@
     <ClCompile Include="algorithm\DynamicFusion\WarpField.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
-    <ClCompile Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.cpp">
-      <Filter>algorithm\DynamicFusion\cudpp</Filter>
-    </ClCompile>
     <ClCompile Include="algorithm\DynamicFusion\kinect_util.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
@@ -400,18 +397,6 @@
     </ClInclude>
     <ClInclude Include="algorithm\DynamicFusion\dualquaternion\vec3.hpp">
       <Filter>algorithm\DynamicFusion\dual_quat</Filter>
-    </ClInclude>
-    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp.h">
-      <Filter>algorithm\DynamicFusion\cudpp</Filter>
-    </ClInclude>
-    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_hash.h">
-      <Filter>algorithm\DynamicFusion\cudpp</Filter>
-    </ClInclude>
-    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_wrapper.h">
-      <Filter>algorithm\DynamicFusion\cudpp</Filter>
-    </ClInclude>
-    <ClInclude Include="algorithm\DynamicFusion\cudpp\cudpp_config.h">
-      <Filter>algorithm\DynamicFusion\cudpp</Filter>
     </ClInclude>
     <ClInclude Include="algorithm\DynamicFusion\device_utils.h">
       <Filter>algorithm\DynamicFusion</Filter>

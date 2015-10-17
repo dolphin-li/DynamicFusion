@@ -1,6 +1,5 @@
 #include "GpuKdTree.h"
 #include "cudpp\thrust_wrapper.h"
-#include "cudpp\cudpp_wrapper.h"
 #include "helper_math.h"
 #include "cudpp\ModerGpuWrapper.h"
 #include "GpuHeap.h"

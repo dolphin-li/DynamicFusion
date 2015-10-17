@@ -3,7 +3,9 @@
 #include "definations.h"
 #include "DynamicFusionParam.h"
 #include "WarpField.h"
+#include <cublas_v2.h>
 #include <cusparse.h>
+#include <cusolverDn.h>
 namespace dfusion
 {
 	class GpuGaussNewtonSolver
@@ -166,9 +168,11 @@ namespace dfusion
 		DeviceArray<float> m_Hd_LLtinv;
 		// m_Hd_L: Hr = L*Lt
 		DeviceArray<float> m_Hr_L;
-		DeviceArray<float> m_Hr_Linv;
 
 		//// cusparse handl
+		cublasHandle_t m_cublasHandle;
 		cusparseHandle_t m_cuSparseHandle;
+		cusolverDnHandle_t m_cuSolverHandle;
+		DeviceArray<float> m_cuSolverWorkSpace;
 	};
 }

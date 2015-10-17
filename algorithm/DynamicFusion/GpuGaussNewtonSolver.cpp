@@ -1,9 +1,9 @@
 #include "GpuGaussNewtonSolver.h"
-#include <cublas.h>
 namespace dfusion
 {
 #pragma comment(lib, "cusparse.lib")
 #pragma comment(lib, "cublas.lib")
+#pragma comment(lib, "cusolver.lib")
 	GpuGaussNewtonSolver::GpuGaussNewtonSolver()
 	{
 		m_vmap_cano = nullptr;
@@ -21,14 +21,11 @@ namespace dfusion
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
 			throw std::exception("cuSparse creating failed!");
 
-		static bool blas_init = false;
-		if (!blas_init)
-		{
-			cublasStatus_t t = cublasInit();
-			if (t != CUBLAS_STATUS_SUCCESS)
-				throw std::exception("cuBlas creating failed!");
-			blas_init = true;
-		}
+		if (CUBLAS_STATUS_SUCCESS != cublasCreate(&m_cublasHandle))
+			throw std::exception("cuSparse creating failed!");
+
+		if (CUSOLVER_STATUS_SUCCESS != cusolverDnCreate(&m_cuSolverHandle))
+			throw std::exception("cusolverDnCreatefailed!");
 
 		cusparseCreateMatDescr(&m_Jrt_desc);
 	}
@@ -36,6 +33,8 @@ namespace dfusion
 	GpuGaussNewtonSolver::~GpuGaussNewtonSolver()
 	{
 		unBindTextures();
+		cusolverDnDestroy(m_cuSolverHandle);
+		cublasDestroy(m_cublasHandle);
 		cusparseDestroyMatDescr(m_Jrt_desc);
 		cusparseDestroy(m_cuSparseHandle);
 	}
@@ -111,8 +110,6 @@ namespace dfusion
 			// for block solver
 			m_Hd_Linv.create(m_Hd.size());
 			m_Hd_LLtinv.create(m_Hd.size());
-			m_Hr_L.create(m_Hr.size());
-			m_Hr_Linv.create(m_Hr.size());
 		}
 
 		if (m_not_lv0_nodes_for_buffer < notLv0Nodes)
@@ -122,6 +119,9 @@ namespace dfusion
 			m_not_lv0_nodes_for_buffer = notLv0Nodes * 1.2;
 			m_Hr.create(m_not_lv0_nodes_for_buffer*m_not_lv0_nodes_for_buffer*
 				VarPerNode * VarPerNode);
+
+			// for block solver
+			m_Hr_L.create(m_Hr.size());
 		}
 
 		bindTextures();
@@ -166,7 +166,8 @@ namespace dfusion
 			blockSolve();
 
 			// 5. accumulate: x += step * h;
-			cublasSaxpy(m_Jrcols, m_param->fusion_GaussNewton_fixedStep, m_h.ptr(), 1, m_twist.ptr(), 1);
+			cublasSaxpy(m_cublasHandle, m_Jrcols, &m_param->fusion_GaussNewton_fixedStep, 
+				m_h.ptr(), 1, m_twist.ptr(), 1);
 		}// end for iter
 
 		// finally, write results back
@@ -194,6 +195,7 @@ namespace dfusion
 		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
 		dumpSparseMatrix("D:/tmp/gpu_Bt.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_val, m_Bcols);
 		dumpMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
+		dumpMat("D:/tmp/gpu_Hr_L.txt", m_Hr_L, m_HrRowsCols);
 		dumpVec("D:/tmp/gpu_fr.txt", m_f_r, m_Jrrows);
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jrcols);
 	}
