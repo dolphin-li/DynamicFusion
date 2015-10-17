@@ -3,27 +3,6 @@
 GlobalDataHolder g_dataholder;
 using namespace ldp;
 
-#include <cusolverDn.h>
-
-static int test()
-{
-	cudaStream_t stm;
-	cudaStreamCreate(&stm);
-	cusolverDnHandle_t hd;
-	cusolverDnCreate(&hd);
-	cusolverDnSetStream(hd, stm);
-	DeviceArray<float> test(5030);
-	int devinfo = 0;
-	cusolverStatus_t fst = cusolverDnSpotrf(hd, CUBLAS_FILL_MODE_UPPER, 2,
-		test.ptr(), 2, test.ptr() + 1000, 3, &devinfo);
-	if (CUSOLVER_STATUS_SUCCESS != fst || devinfo)
-	{
-		printf("cusolverDnSpotrf failed: status: %d devinfo: %d\n", fst, devinfo);
-		throw std::exception();
-	}
-}
-static int a = test();
-
 void GlobalDataHolder::init()
 {
 	m_kinect.InitKinect(1);
@@ -36,7 +15,6 @@ void GlobalDataHolder::init()
 	m_lights.spec = make_float3(0, 0, 0);
 
 	m_processor.init(m_dparam);
-
 }
 
 void GlobalDataHolder::saveDepth(const std::vector<dfusion::depthtype>& depth_h, std::string filename)

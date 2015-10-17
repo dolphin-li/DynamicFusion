@@ -1423,21 +1423,23 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			"GpuGaussNewtonSolver::blockSolve::copy Hr to Hr_L");
 
 		// 2.1 decide the working space of the solver
-		int lwork = 0, devinfo = 0;
+		int lwork = 0;
 		cusolverDnSpotrf_bufferSize(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER,
 			m_HrRowsCols, m_Hr.ptr(), m_HrRowsCols, &lwork);
 		if (lwork > m_cuSolverWorkSpace.size())
 		{
-			m_cuSolverWorkSpace.create(lwork * 1.5);
+			// we store dev info in the last element
+			m_cuSolverWorkSpace.create(lwork * 1.5 + 1);
 			printf("cusolverDnSpotrf_bufferSize: %d\n", lwork);
 		}
 
 		// 2.2 Cholesky decomposition
 		cusolverStatus_t fst = cusolverDnSpotrf(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER, m_HrRowsCols,
-			m_Hr_L.ptr(), m_HrRowsCols, m_cuSolverWorkSpace.ptr(), lwork, &devinfo);
-		if (CUSOLVER_STATUS_SUCCESS != fst || devinfo)
+			m_Hr_L.ptr(), m_HrRowsCols, m_cuSolverWorkSpace.ptr(), lwork, 
+			(int*)m_cuSolverWorkSpace.ptr() + m_cuSolverWorkSpace.size()-1);
+		if (CUSOLVER_STATUS_SUCCESS != fst)
 		{
-			printf("cusolverDnSpotrf failed: status: %d devinfo: %d\n", fst, devinfo);
+			printf("cusolverDnSpotrf failed: status: %d\n", fst);
 			throw std::exception();
 		}
 	}
