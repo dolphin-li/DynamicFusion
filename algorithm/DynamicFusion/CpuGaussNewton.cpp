@@ -286,6 +286,17 @@ namespace dfusion
 				- L0L0tinv.transpose() * (Bt.transpose() *
 				L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()))).eval();
 			x.bottomRows(L1.cols()) = L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()));
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+			{
+				static int a = 0;
+				{
+					std::string name = ("D:/tmp/cpu_Q_" + std::to_string(a) + ".txt").c_str();
+					dumpMat(Q, name.c_str());
+				}
+
+				a++;
+			}
+#endif
 		}
 
 		inline real data_term_energy(real f)const
@@ -1304,6 +1315,20 @@ namespace dfusion
 			for (int r = 0; r < A.size(); r++)
 			{
 				fprintf(pFile, "%f\n", A[r]);
+			}
+			fclose(pFile);
+		}
+
+		static void dumpMat(const Mat& A, const char* filename)
+		{
+			FILE* pFile = fopen(filename, "w");
+			if (!pFile)
+				throw std::exception("dumpMat: create file failed!");
+			for (int r = 0; r < A.rows(); r++)
+			{
+				for (int c = 0; c < A.cols(); c++)
+					fprintf(pFile, "%f ", A(r, c));
+				fprintf(pFile, "\n");
 			}
 			fclose(pFile);
 		}

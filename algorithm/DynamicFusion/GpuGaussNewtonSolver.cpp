@@ -42,6 +42,9 @@ namespace dfusion
 	void GpuGaussNewtonSolver::init(WarpField* pWarpField, const MapArr& vmap_cano, 
 		const MapArr& nmap_cano, Param param, Intr intr)
 	{
+		if (pWarpField->getNumLevels() < 2)
+			throw std::exception("non-supported levels of warp field!");
+
 		m_pWarpField = pWarpField;
 		m_param = &param;
 		m_intr = intr;
@@ -103,6 +106,7 @@ namespace dfusion
 			m_Bt_ColIdx.create(m_B_ColIdx.size());
 			m_Bt_RowPtr_coo.create(m_B_ColIdx.size());
 			m_Bt_val.create(m_B_ColIdx.size());
+			m_Bt_Ltinv_val.create(m_B_ColIdx.size());
 
 			// the energy function of reg term
 			m_f_r.create(m_Jr_RowPtr.size());
@@ -119,9 +123,7 @@ namespace dfusion
 			m_not_lv0_nodes_for_buffer = notLv0Nodes * 1.2;
 			m_Hr.create(m_not_lv0_nodes_for_buffer*m_not_lv0_nodes_for_buffer*
 				VarPerNode * VarPerNode);
-
-			// for block solver
-			m_Hr_L.create(m_Hr.size());
+			m_Q.create(m_Hr.size());
 		}
 
 		bindTextures();
@@ -194,8 +196,9 @@ namespace dfusion
 		dumpSparseMatrix("D:/tmp/gpu_Jrt.txt", m_Jrt_RowPtr, m_Jrt_ColIdx, m_Jrt_val, m_Jrcols);
 		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
 		dumpSparseMatrix("D:/tmp/gpu_Bt.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_val, m_Bcols);
+		dumpSparseMatrix("D:/tmp/gpu_BtLtinv.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_Ltinv_val, m_Bcols);
 		dumpMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
-		dumpMat("D:/tmp/gpu_Hr_L.txt", m_Hr_L, m_HrRowsCols);
+		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_HrRowsCols);
 		dumpVec("D:/tmp/gpu_fr.txt", m_f_r, m_Jrrows);
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jrcols);
 	}

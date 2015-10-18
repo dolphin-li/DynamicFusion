@@ -14,6 +14,10 @@ namespace dfusion
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_twistTex;
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_JrtValTex;
 	texture<int, cudaTextureType1D, cudaReadModeElementType> g_JrtCidxTex;
+	texture<float, cudaTextureType1D, cudaReadModeElementType> g_BtValTex;
+	texture<int, cudaTextureType1D, cudaReadModeElementType> g_BtCidxTex;
+	texture<float, cudaTextureType1D, cudaReadModeElementType> g_BtLtinvValTex;
+	texture<float, cudaTextureType1D, cudaReadModeElementType> g_LinvTex;
 
 	__device__ __forceinline__ float4 get_nodesVw(int i)
 	{
@@ -43,6 +47,29 @@ namespace dfusion
 	__device__ __forceinline__ int get_JrtCidx(int i)
 	{
 		return tex1Dfetch(g_JrtCidxTex, i);
+	}
+
+	__device__ __forceinline__ float get_BtVal(int i)
+	{
+		return tex1Dfetch(g_BtValTex, i);
+	}
+	__device__ __forceinline__ int get_BtCidx(int i)
+	{
+		return tex1Dfetch(g_BtCidxTex, i);
+	}
+
+	__device__ __forceinline__ float get_Linv(int i)
+	{
+		return tex1Dfetch(g_LinvTex, i);
+	}
+
+	__device__ __forceinline__ float get_BtLtinvVal(int i)
+	{
+		return tex1Dfetch(g_BtLtinvValTex, i);
+	}
+	__device__ __forceinline__ int get_BtLtinvCidx(int i)
+	{
+		return tex1Dfetch(g_BtCidxTex, i);
 	}
 
 	// map the lower part to full 6x6 matrix
@@ -173,6 +200,42 @@ namespace dfusion
 			if (offset != 0)
 				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
 		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+			cudaBindTexture(&offset, &g_BtLtinvValTex, m_Bt_Ltinv_val.ptr(), &desc,
+				m_Bt_Ltinv_val.size() * sizeof(float));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<int>();
+			cudaBindTexture(&offset, &g_BtCidxTex, m_Bt_ColIdx.ptr(), &desc,
+				m_Bt_ColIdx.size() * sizeof(int));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+			cudaBindTexture(&offset, &g_BtValTex, m_Bt_val.ptr(), &desc,
+				m_Bt_val.size() * sizeof(float));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
+		if (1)
+		{
+			size_t offset;
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+			cudaBindTexture(&offset, &g_LinvTex, m_Hd_Linv.ptr(), &desc,
+				m_Hd_Linv.size() * sizeof(float));
+			if (offset != 0)
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+		}
 	}
 
 	void GpuGaussNewtonSolver::unBindTextures()
@@ -180,6 +243,12 @@ namespace dfusion
 		cudaUnbindTexture(g_twistTex);
 		cudaUnbindTexture(g_nodesVwTex);
 		cudaUnbindTexture(g_nodesKnnTex);
+		cudaUnbindTexture(g_JrtValTex);
+		cudaUnbindTexture(g_JrtCidxTex);
+		cudaUnbindTexture(g_BtValTex);
+		cudaUnbindTexture(g_BtCidxTex);
+		cudaUnbindTexture(g_BtLtinvValTex);
+		cudaUnbindTexture(g_LinvTex);
 	}
 #pragma endregion
 
@@ -1390,11 +1459,94 @@ if (knnNodeId == 390 && i == 5 && j == 1
 #pragma endregion
 
 #pragma region --block solve
+	__global__ void calcBtLtinv_kernel(float* BtLtinv, const int* Bt_rptr, 
+		const int* Bt_rptr_coo, int nLv0Nodes, int nnz)
+	{
+		enum{ VarPerNode = GpuGaussNewtonSolver::VarPerNode };
+		int tid = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tid >= nnz)
+			return;
+
+		int row = Bt_rptr_coo[tid];
+		int col = get_BtLtinvCidx(tid);
+		int iNodeCol = col / VarPerNode;
+		int cshift = col - iNodeCol * VarPerNode;
+
+		float sum = 0.f;
+		int Hd_row_b = iNodeCol * VarPerNode;
+		int Bt_b = Bt_rptr[row] / VarPerNode;
+		int Bt_e = Bt_rptr[row + 1] / VarPerNode;
+		int Bt_col_b = -1;
+
+		// binary search Hd_row_b in the range col of [Bt_b, Bt_e]
+		while (Bt_b < Bt_e)
+		{
+			int imid = ((Bt_b + Bt_e) >> 1);
+			Bt_col_b = get_BtCidx(imid*VarPerNode);
+			if (Bt_col_b < Hd_row_b)
+				Bt_b = imid + 1;
+			else
+				Bt_e = imid;
+		}
+		Bt_b *= VarPerNode;
+		Bt_e *= VarPerNode;
+		Bt_col_b = get_BtCidx(Bt_b);
+		if (Bt_col_b == Hd_row_b && Bt_b == Bt_e)
+		{
+			Hd_row_b = (Hd_row_b + cshift) * VarPerNode;
+			for (int k = 0; k <= cshift; k++)
+				sum += get_BtVal(Bt_b + k) * get_Linv(Hd_row_b + k);
+		}
+
+		// write the result
+		BtLtinv[tid] = sum;
+	}
+
+	__global__ void calcQ_kernel(float* Q, const float* Hr,
+		const int* Bt_rptr, int HrRowsCols, int nBrows)
+	{
+		int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+		if (tid >= (HrRowsCols + 1)*HrRowsCols / 2)
+			return;
+
+		// y is the triangular number
+		int y = floor(-0.5 + sqrt(0.25 + 2 * tid));
+		int triangularNumber = y * (y + 1) / 2;
+		// x should <= y
+		int x = tid - triangularNumber;
+
+		int Bt_ib = Bt_rptr[y];
+		int Bt_ie = Bt_rptr[y + 1];
+		int Bt_jb = Bt_rptr[x];
+		int Bt_je = Bt_rptr[x + 1];
+
+		float sum = 0.f;
+		for (int i = Bt_ib, j = Bt_jb; i < Bt_ie && j < Bt_je;)
+		{
+			int ci = get_BtLtinvCidx(i);
+			int cj = get_BtLtinvCidx(j);
+			if (ci == cj)
+			{
+				float s = 0.f;
+				for (int k = 0; k < GpuGaussNewtonSolver::VarPerNode; k++)
+					s += get_BtLtinvVal(i + k) * get_BtLtinvVal(j + k);
+				sum += s;
+				i += GpuGaussNewtonSolver::VarPerNode;
+				j += GpuGaussNewtonSolver::VarPerNode;
+			}
+
+			i += (ci < cj) * GpuGaussNewtonSolver::VarPerNode;
+			j += (ci > cj) * GpuGaussNewtonSolver::VarPerNode;
+		}// i
+
+		Q[y*HrRowsCols + x] = Q[x*HrRowsCols + y] = Hr[y*HrRowsCols + x] - sum;
+	}
+
 	void GpuGaussNewtonSolver::blockSolve()
 	{
 		CHECK_LE(m_numLv0Nodes*VarPerNode*VarPerNode, m_Hd_Linv.size());
 		CHECK_LE(m_numLv0Nodes*VarPerNode*VarPerNode, m_Hd_LLtinv.size());
-		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Hr_L.size());
 
 		// 1. batch LLt the diag blocks Hd==================================================
 
@@ -1416,16 +1568,32 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			m_Hd_LLtinv.ptr(), VarPerNode*VarPerNode, m_Hd_Linv.ptr(), 
 			VarPerNode*VarPerNode, VarPerNode, m_numLv0Nodes);
 
+		// 2. compute Q = Hr - Bt * inv(Hd) * B ======================================
+		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Q.size());
+		// 2.1 compute Bt*Ltinv
+		{
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_Bnnzs, block.x));
+			calcBtLtinv_kernel << <grid, block >> >(m_Bt_Ltinv_val.ptr(),
+				m_Bt_RowPtr.ptr(), m_Bt_RowPtr_coo.ptr(), m_numLv0Nodes, m_Bnnzs);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcBtLtinv_kernel");
+		}
 
-		// 2. llt decompostion of Hr ==================================================
-		cudaSafeCall(cudaMemcpy(m_Hr_L.ptr(), m_Hr.ptr(), m_HrRowsCols*m_HrRowsCols
-			*m_Hr.elem_size, cudaMemcpyDeviceToDevice),
-			"GpuGaussNewtonSolver::blockSolve::copy Hr to Hr_L");
+		// 2.2 compute Q
+		{
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_HrRowsCols*(m_HrRowsCols+1)/2, block.x));
+			calcQ_kernel << <grid, block >> >(m_Q.ptr(), m_Hr.ptr(), m_Bt_RowPtr.ptr(),
+				m_HrRowsCols, m_Brows);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcQ_kernel");
+		}
 
-		// 2.1 decide the working space of the solver
+#if 0
+		// 3. llt decompostion of Q ==================================================
+		// 3.1 decide the working space of the solver
 		int lwork = 0;
 		cusolverDnSpotrf_bufferSize(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER,
-			m_HrRowsCols, m_Hr.ptr(), m_HrRowsCols, &lwork);
+			m_HrRowsCols, m_Q.ptr(), m_HrRowsCols, &lwork);
 		if (lwork > m_cuSolverWorkSpace.size())
 		{
 			// we store dev info in the last element
@@ -1433,15 +1601,17 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			printf("cusolverDnSpotrf_bufferSize: %d\n", lwork);
 		}
 
-		// 2.2 Cholesky decomposition
+		// 3.2 Cholesky decomposition
 		cusolverStatus_t fst = cusolverDnSpotrf(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER, m_HrRowsCols,
-			m_Hr_L.ptr(), m_HrRowsCols, m_cuSolverWorkSpace.ptr(), lwork, 
-			(int*)m_cuSolverWorkSpace.ptr() + m_cuSolverWorkSpace.size()-1);
+			m_Q.ptr(), m_HrRowsCols, m_cuSolverWorkSpace.ptr(), lwork,
+			(int*)m_cuSolverWorkSpace.ptr() + m_cuSolverWorkSpace.size() - 1);
 		if (CUSOLVER_STATUS_SUCCESS != fst)
 		{
 			printf("cusolverDnSpotrf failed: status: %d\n", fst);
 			throw std::exception();
 		}
+#endif
+		
 	}
 #pragma endregion
 }

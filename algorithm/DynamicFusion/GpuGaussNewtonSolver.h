@@ -166,10 +166,13 @@ namespace dfusion
 		// m_Hd_L: Hd = L*Lt
 		DeviceArray<float> m_Hd_Linv;
 		DeviceArray<float> m_Hd_LLtinv;
-		// m_Hd_L: Hr = L*Lt
-		DeviceArray<float> m_Hr_L;
 
-		//// cusparse handl
+		// inv(Lt) * Bt; 
+		// its sparse pattern is the same with Bt
+		// we use the same sparse structure with Bt for it
+		DeviceArray<float> m_Bt_Ltinv_val;
+
+		//// cusparse handle
 		cublasHandle_t m_cublasHandle;
 		cusparseHandle_t m_cuSparseHandle;
 		cusolverDnHandle_t m_cuSolverHandle;
