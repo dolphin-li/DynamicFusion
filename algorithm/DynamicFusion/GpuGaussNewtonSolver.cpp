@@ -6,18 +6,6 @@ namespace dfusion
 #pragma comment(lib, "cusolver.lib")
 	GpuGaussNewtonSolver::GpuGaussNewtonSolver()
 	{
-		m_vmap_cano = nullptr;
-		m_nmap_cano = nullptr;
-		m_vmap_warp = nullptr;
-		m_nmap_warp = nullptr;
-		m_vmap_live = nullptr;
-		m_nmap_live = nullptr;
-		m_param = nullptr;
-		m_nodes_for_buffer = 0;
-		m_numNodes = 0;
-		m_not_lv0_nodes_for_buffer = 0;
-		m_numLv0Nodes = 0;
-
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
 			throw std::exception("cuSparse creating failed!");
 
@@ -30,6 +18,8 @@ namespace dfusion
 		cusparseCreateMatDescr(&m_Jrt_desc);
 		cusparseCreateMatDescr(&m_Bt_desc);
 		cusparseCreateMatDescr(&m_B_desc);
+
+		reset();
 	}
 
 	GpuGaussNewtonSolver::~GpuGaussNewtonSolver()
@@ -55,6 +45,8 @@ namespace dfusion
 		if (pWarpField->getNumLevels() < 2)
 			throw std::exception("non-supported levels of warp field!");
 
+		bool nodesUpdated = false;
+
 		m_pWarpField = pWarpField;
 		m_param = &param;
 		m_intr = intr;
@@ -64,6 +56,9 @@ namespace dfusion
 
 		m_vmapKnn.create(vmap_cano.rows(), vmap_cano.cols());
 
+		if (pWarpField->getNumNodesInLevel(0) != m_numLv0Nodes
+			|| pWarpField->getNumAllNodes() != m_numNodes)
+			nodesUpdated = true;
 		m_numNodes = pWarpField->getNumAllNodes();
 		m_numLv0Nodes = pWarpField->getNumNodesInLevel(0);
 		int notLv0Nodes = m_numNodes - m_numLv0Nodes;
@@ -71,13 +66,16 @@ namespace dfusion
 			throw std::exception("not supported, too much nodes!");
 
 		// sparse matrix info
-		m_Jrrows = 0; // unknown now, decided later
-		m_Jrcols = m_numNodes * VarPerNode;
-		m_Jrnnzs = 0; // unknown now, decided later
-		m_Brows = m_numLv0Nodes * VarPerNode;
-		m_Bcols = notLv0Nodes * VarPerNode;
-		m_Bnnzs = 0; // unknown now, decieded later
-		m_HrRowsCols = m_Bcols;
+		if (nodesUpdated)
+		{
+			m_Jrrows = 0; // unknown now, decided later
+			m_Jrcols = m_numNodes * VarPerNode;
+			m_Jrnnzs = 0; // unknown now, decided later
+			m_Brows = m_numLv0Nodes * VarPerNode;
+			m_Bcols = notLv0Nodes * VarPerNode;
+			m_Bnnzs = 0; // unknown now, decieded later
+			m_HrRowsCols = m_Bcols;
+		}
 
 		// make larger buffer to prevent malloc/free each frame
 		if (m_nodes_for_buffer < m_numNodes)
@@ -179,7 +177,73 @@ namespace dfusion
 		m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
 
 		// the sparse block B
-		initSparseStructure();
+		if (nodesUpdated)
+			initSparseStructure();
+	}
+
+	void GpuGaussNewtonSolver::reset()
+	{
+		m_vmap_cano = nullptr;
+		m_nmap_cano = nullptr;
+		m_vmap_warp = nullptr;
+		m_nmap_warp = nullptr;
+		m_vmap_live = nullptr;
+		m_nmap_live = nullptr;
+		m_param = nullptr;
+		m_numNodes = 0;
+		m_numLv0Nodes = 0;
+
+		m_Jrrows = 0;
+		m_Jrcols = 0;
+		m_Jrnnzs = 0;
+		m_Brows = 0;
+		m_Bcols = 0;
+		m_Bnnzs = 0;
+		m_HrRowsCols = 0;
+
+		setzero(m_nodesKnn);
+		setzero(m_twist);
+		setzero(m_nodesVw);
+		setzero(m_h);
+		setzero(m_g);
+		setzero(m_u);
+		setzero(m_tmpvec);
+		setzero(m_Hd);
+
+		// each node create 2*3*k rows and each row create at most VarPerNode*2 cols
+		setzero(m_Jr_RowCounter);
+		setzero(m_Jr_RowMap2NodeId);
+		setzero(m_Jr_RowPtr);
+		setzero(m_Jr_ColIdx);
+		setzero(m_Jr_val);
+		setzero(m_Jr_RowPtr_coo);
+
+		setzero(m_Jrt_RowPtr);
+		setzero(m_Jrt_ColIdx);
+		setzero(m_Jrt_val);
+		setzero(m_Jrt_RowPtr_coo);
+
+		// B = Jr0'Jr1
+		setzero(m_B_RowPtr);
+		setzero(m_B_ColIdx);
+		setzero(m_B_RowPtr_coo);
+		setzero(m_B_val);
+
+		setzero(m_Bt_RowPtr);
+		setzero(m_Bt_ColIdx);
+		setzero(m_Bt_RowPtr_coo);
+		setzero(m_Bt_val);
+		setzero(m_Bt_Ltinv_val);
+
+		// the energy function of reg term
+		setzero(m_f_r);
+
+		// for block solver
+		setzero(m_Hd_Linv);
+		setzero(m_Hd_LLtinv);
+
+		setzero(m_Hr);
+		setzero(m_Q);
 	}
 
 	void GpuGaussNewtonSolver::solve(const MapArr& vmap_live, const MapArr& nmap_live,

@@ -36,6 +36,8 @@ namespace dfusion
 			const MapArr& vmap_warp, const MapArr& nmap_warp,
 			bool factor_rigid_out = false);
 
+		void reset();
+
 		void debug_print();
 		void debug_set_init_x(const float* x_host, int n);
 	protected:

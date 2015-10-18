@@ -156,9 +156,6 @@ namespace dfusion
 		if (m_param.voxels_per_meter != param.voxels_per_meter)
 			reCreate = true;
 
-		if (reCreate)
-			throw std::exception("Dynamic Resizing Not Allowed Now!");
-
 		m_param = param;
 		if (m_warpField)
 			m_warpField->setActiveVisualizeNodeId(m_param.view_activeNode_id);
@@ -183,6 +180,9 @@ namespace dfusion
 
 		// warp fields
 		m_warpField->init(m_volume, m_param);
+
+		// solver
+		m_gsSolver->reset();
 
 		m_frame_id = 0;
 	}
@@ -300,21 +300,18 @@ namespace dfusion
 		if (!m_param.fusion_enable_nonRigidSolver)
 			return;
 
-		CpuGaussNewton solver;
 
 		// icp iteration
-		ldp::tic();
-		for (int k = 0; k < 1; k++)
-			m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
-		ldp::toc("gpu init");
-		solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
+		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{
 			// 1. find correspondence
 			// m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
 
 			// 2. Gauss-Newton Optimization
-#if 1
+#if 0
+			CpuGaussNewton solver;
+			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 			Eigen::VectorXf debugX;
 			debugX.resize(m_warpField->getNumAllNodes()*6);
 			debugX.setRandom();
@@ -331,6 +328,8 @@ namespace dfusion
 			ldp::toc("gpu solver");
 			m_gsSolver->debug_print();
 			system("pause");
+#else
+			m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
 #endif
 
 			// 3. update warped mesh and render for visiblity

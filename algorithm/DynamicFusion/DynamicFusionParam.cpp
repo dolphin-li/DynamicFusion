@@ -43,24 +43,24 @@ namespace dfusion
 		fusion_nonRigid_distThre = 0.03f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 
-		fusion_nonRigidICP_maxIter = 1;
-		fusion_GaussNewton_maxIter = 1;
+		fusion_nonRigidICP_maxIter = 3;
+		fusion_GaussNewton_maxIter = 3;
 		fusion_GaussNewton_diag_regTerm = 1e-5;
 		fusion_GaussNewton_fixedStep = 0.5;
 
 		fusion_post_rigid_factor = false;
 
 		// debuging related
-		fusion_dumping_each_frame = true;
+		fusion_dumping_each_frame = false;
 		fusion_enable_nonRigidSolver = true;
-		fusion_loading_mode = true;
+		fusion_loading_mode = false;
 		fusion_dumping_max_frame = 800;
 
 		/** *****************************************************
 		* visualization related
 		* ******************************************************/
 		view_show_mesh = true;
-		view_show_nodes = true;
+		view_show_nodes = false;
 		view_show_graph = false;
 		view_show_corr = false;
 		view_show_graph_level = 0;

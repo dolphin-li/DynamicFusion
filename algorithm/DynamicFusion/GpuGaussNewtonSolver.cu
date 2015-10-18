@@ -732,21 +732,22 @@ if (knnNodeId == 390 && i == 5 && j == 1
 	__global__ void count_Jr_rows_kernel(int* rctptr, int nMaxNodes)
 	{
 		int i = threadIdx.x + blockIdx.x*blockDim.x;
-		if (i < nMaxNodes)
+		if (i >= nMaxNodes)
+			return;
+	
+		WarpField::KnnIdx knn = get_nodesKnn(i);
+		int numK = -1;
+		for (int k = 0; k < WarpField::KnnK; ++k)
 		{
-			WarpField::KnnIdx knn = get_nodesKnn(i);
-			int numK = -1;
-			for (int k = 0; k < WarpField::KnnK; ++k)
-			{
-				if (knn_k(knn, k) < nMaxNodes)
-					numK = k;
-			}
-
-			// each node generate 6*maxK rows
-			rctptr[i] = (numK+1) * 6;
+			if (knn_k(knn, k) < nMaxNodes)
+				numK = k;
 		}
-		if (i == nMaxNodes)
-			rctptr[i] = 0;
+
+		// each node generate 6*maxK rows
+		rctptr[i] = (numK+1) * 6;
+		
+		if (i == 0)
+			rctptr[nMaxNodes] = 0;
 	}
 
 	__global__ void compute_row_map_kernel(GpuGaussNewtonSolver::JrRow2NodeMapper* row2nodeId, 
@@ -778,35 +779,37 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			ColPerRow = VarPerNode * 2
 		};
 		const int iRow = threadIdx.x + blockIdx.x*blockDim.x;
-		if (iRow < nRows)
-		{
-			const int iNode = row2nodeId[iRow].nodeId;
-			if (iNode < nMaxNodes)
-			{
-				WarpField::KnnIdx knn = get_nodesKnn(iNode);
-				int knnNodeId = knn_k(knn, row2nodeId[iRow].k);
-				if (knnNodeId < nMaxNodes)
-				{
-					int col_b = iRow*ColPerRow;
-					rptr[iRow] = col_b;
+		if (iRow >= nRows)
+			return;
 
-					// each row 2*VerPerNode Cols
-					// 1. self
-					for (int j = 0; j < VarPerNode; j++, col_b++)
-					{
-						rptr_coo[col_b] = iRow;
-						colIdx[col_b] = iNode*VarPerNode + j;
-					}// j
-					// 2. neighbor
-					for (int j = 0; j < VarPerNode; j++, col_b++)
-					{
-						rptr_coo[col_b] = iRow;
-						colIdx[col_b] = knnNodeId*VarPerNode + j;
-					}// j
-				}// end if knnNodeId
-			}
-		}// end if iRow < nRows
-		if (iRow == nRows)
+		const int iNode = row2nodeId[iRow].nodeId;
+		if (iNode < nMaxNodes)
+		{
+			WarpField::KnnIdx knn = get_nodesKnn(iNode);
+			int knnNodeId = knn_k(knn, row2nodeId[iRow].k);
+			if (knnNodeId < nMaxNodes)
+			{
+				int col_b = iRow*ColPerRow;
+				rptr[iRow] = col_b;
+
+				// each row 2*VerPerNode Cols
+				// 1. self
+				for (int j = 0; j < VarPerNode; j++, col_b++)
+				{
+					rptr_coo[col_b] = iRow;
+					colIdx[col_b] = iNode*VarPerNode + j;
+				}// j
+				// 2. neighbor
+				for (int j = 0; j < VarPerNode; j++, col_b++)
+				{
+					rptr_coo[col_b] = iRow;
+					colIdx[col_b] = knnNodeId*VarPerNode + j;
+				}// j
+			}// end if knnNodeId
+		}
+
+		// the 1st thread also write the last value
+		if (iRow == 0)
 			rptr[nRows] = nRows * ColPerRow;
 	}
 
@@ -863,8 +866,8 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::compute_row_map_kernel");
 		}
 		{
-			CHECK_LE(m_Jrrows, m_Jr_RowPtr.size());
-			CHECK_LE(m_Jrcols, m_Jrt_RowPtr.size());
+			CHECK_LE(m_Jrrows + 1, m_Jr_RowPtr.size());
+			CHECK_LE(m_Jrcols + 1, m_Jrt_RowPtr.size());
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Jrrows, block.x));
 			compute_Jr_rowPtr_colIdx_kernel << <grid, block >> >(m_Jr_RowPtr.ptr(),
@@ -873,6 +876,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			cudaSafeCall(cudaMemcpy(&m_Jrnnzs, m_Jr_RowPtr.ptr() + m_Jrrows,
 				sizeof(int), cudaMemcpyDeviceToHost), "copy Jr nnz to host");
 			CHECK_LE(m_Jrnnzs, m_Jr_RowPtr_coo.size());
+			CHECK_LE(0, m_Jrnnzs);
 		}
 
 		// 2. compute Jrt structure ==============================================
@@ -881,7 +885,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		cudaMemcpy(m_Jrt_ColIdx.ptr(), m_Jr_RowPtr_coo.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
 		// !!!NOTE: we must use mergesort here, it can guarentees the order of values of the same key
 		modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_ColIdx.ptr(), m_Jrnnzs);
-		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key");
+		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key1");
 
 		// 2.2. extract CSR rowptr info.
 		if (CUSPARSE_STATUS_SUCCESS != cusparseXcoo2csr(m_cuSparseHandle,
@@ -911,7 +915,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		cudaMemcpy(m_Bt_RowPtr_coo.ptr(), m_B_ColIdx.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
 		cudaMemcpy(m_Bt_ColIdx.ptr(), m_B_RowPtr_coo.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
 		modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_ColIdx.ptr(), m_Bnnzs);
-		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key");
+		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key2");
 		if (CUSPARSE_STATUS_SUCCESS != cusparseXcoo2csr(m_cuSparseHandle,
 			m_Bt_RowPtr_coo.ptr(), m_Bnnzs, m_Bcols,
 			m_Bt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))

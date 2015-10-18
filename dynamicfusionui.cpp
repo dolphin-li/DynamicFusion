@@ -168,6 +168,7 @@ void DynamicFusionUI::frameLoading()
 	}
 	catch (std::exception e)
 	{
+		setState(Pause);
 		std::cout << e.what() << std::endl;
 	}
 }
