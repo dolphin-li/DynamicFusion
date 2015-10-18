@@ -137,6 +137,8 @@ namespace dfusion
 		int m_Jrnnzs;
 
 		cusparseMatDescr_t m_Jrt_desc;
+		cusparseMatDescr_t m_Bt_desc;
+		cusparseMatDescr_t m_B_desc;
 
 		// let Jr = [Jr0, Jr1]
 		//			[0,   Jr3]
@@ -155,12 +157,20 @@ namespace dfusion
 		DeviceArray<float> m_g;
 		DeviceArray<float> m_h;
 
+		// let H = L*L'
+		// we first solve for L*m_u = m_g
+		// and then L'*m_h = m_u
+		DeviceArray<float> m_u;
+		DeviceArray<float> m_tmpvec;
+
 		// energy corresponding to Jr part.
 		DeviceArray<float> m_f_r;
 
 		//// params used in block solver
 
 		// Q = Hr - Bt * Hd^(-1) * B
+		// to save storage and a memcpy, 
+		// we factor Q = Lq*Lq' and directly store Lq in Q
 		DeviceArray<float> m_Q;
 
 		// m_Hd_L: Hd = L*Lt

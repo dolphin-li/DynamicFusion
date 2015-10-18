@@ -293,6 +293,14 @@ namespace dfusion
 					std::string name = ("D:/tmp/cpu_Q_" + std::to_string(a) + ".txt").c_str();
 					dumpMat(Q, name.c_str());
 				}
+				{
+					std::string name = ("D:/tmp/cpu_u_" + std::to_string(a) + ".txt").c_str();
+					dumpVec(u, name.c_str());
+				}
+				{
+					std::string name = ("D:/tmp/cpu_h_" + std::to_string(a) + ".txt").c_str();
+					dumpVec(x, name.c_str());
+				}
 
 				a++;
 			}
@@ -1302,7 +1310,7 @@ namespace dfusion
 				int rs = A.outerIndexPtr()[r];
 				int re = A.outerIndexPtr()[r+1];
 				for (int c = rs; c < re; c++)
-					fprintf(pFile, "%d %d %f\n", A.innerIndexPtr()[c], r, A.valuePtr()[c]);
+					fprintf(pFile, "%d %d %ef\n", A.innerIndexPtr()[c], r, A.valuePtr()[c]);
 			}
 			fclose(pFile);
 		}
@@ -1314,7 +1322,7 @@ namespace dfusion
 				throw std::exception("dumpVec: create file failed!");
 			for (int r = 0; r < A.size(); r++)
 			{
-				fprintf(pFile, "%f\n", A[r]);
+				fprintf(pFile, "%ef\n", A[r]);
 			}
 			fclose(pFile);
 		}
@@ -1327,7 +1335,7 @@ namespace dfusion
 			for (int r = 0; r < A.rows(); r++)
 			{
 				for (int c = 0; c < A.cols(); c++)
-					fprintf(pFile, "%f ", A(r, c));
+					fprintf(pFile, "%ef ", A(r, c));
 				fprintf(pFile, "\n");
 			}
 			fclose(pFile);
