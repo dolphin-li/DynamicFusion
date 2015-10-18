@@ -897,7 +897,10 @@ namespace dfusion
 			|| c != nmap_live.cols() || c != vmap_warp.cols() || c != nmap_warp.cols())
 			throw std::exception("error: size not matched in computeErrorMap()");
 
-		errMap.create(r, c);
+		if (errMap.cols() != c || errMap.rows() != r)
+		{
+			errMap.create(r, c);
+		}
 
 		dim3 block(32, 8);
 		dim3 grid(divUp(c, block.x), divUp(r, block.y));

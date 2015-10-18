@@ -131,6 +131,7 @@ namespace dfusion
 		DFUSION_SAFE_DELETE(m_warpField);
 		DFUSION_SAFE_DELETE(m_gsSolver);
 		m_frame_id = 0;
+		m_depth_input.release();
 		m_depth_curr_pyd.clear();
 		m_vmap_curr_pyd.clear();
 		m_nmap_curr_pyd.clear();
@@ -141,6 +142,8 @@ namespace dfusion
 		m_nmap_cano.release();
 		m_vmap_warp.release();
 		m_nmap_warp.release();
+		m_rigid_sumbuf.release();
+		m_rigid_gbuf.release();
 	}
 
 	void DynamicFusionProcessor::updateParam(const Param& param)

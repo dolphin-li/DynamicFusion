@@ -19,6 +19,9 @@ namespace dfusion
 		cusparseCreateMatDescr(&m_Bt_desc);
 		cusparseCreateMatDescr(&m_B_desc);
 
+		m_nodes_for_buffer = 0;
+		m_not_lv0_nodes_for_buffer = 0;
+
 		reset();
 	}
 

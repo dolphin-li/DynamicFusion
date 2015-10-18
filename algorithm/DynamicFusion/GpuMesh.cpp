@@ -618,6 +618,7 @@ namespace dfusion
 	{
 		if (m_render_fbo_id != 0)
 		{
+			wglMakeCurrent(g_hdc, g_glrc);
 			glDeleteTextures(1, &m_render_texture_id);
 			glDeleteRenderbuffers(1, &m_render_depth_id);
 			glDeleteFramebuffers(1, &m_render_fbo_id);
@@ -635,6 +636,7 @@ namespace dfusion
 
 	void GpuMesh::releaseRendererForWarpField()
 	{
+		wglMakeCurrent(g_hdc, g_glrc);
 		if (m_vbo_id_warpnodes != 0)
 			glDeleteBuffers(1, &m_vbo_id_warpnodes);
 		if (m_cuda_res)
