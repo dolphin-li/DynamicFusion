@@ -736,7 +736,7 @@ namespace dfusion
 				}
 				{
 					std::string name = ("D:/tmp/cpu_g_" + std::to_string(a) + ".txt").c_str();
-					dumpVec(jact_* f, name.c_str());
+					dumpVec(-jact_* f, name.c_str());
 				}
 
 				a++;

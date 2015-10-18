@@ -1447,9 +1447,9 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcHr_kernel");
 		}
 
-		// 5. compute g += Jr'*fr
-		float alpha = 1.f;
-		float beta = 1.f;
+		// 5. compute g = -(g + Jr'*fr)
+		float alpha = -1.f;
+		float beta = -1.f;
 		if (CUSPARSE_STATUS_SUCCESS != cusparseScsrmv(
 			m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, m_Jrcols,
 			m_Jrrows, m_Jrnnzs, &alpha, m_Jrt_desc, m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr(),
@@ -1588,7 +1588,6 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcQ_kernel");
 		}
 
-#if 0
 		// 3. llt decompostion of Q ==================================================
 		// 3.1 decide the working space of the solver
 		int lwork = 0;
@@ -1610,8 +1609,9 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			printf("cusolverDnSpotrf failed: status: %d\n", fst);
 			throw std::exception();
 		}
-#endif
-		
+
+		// 4. solve H*m_h = m_g =============================================================
+
 	}
 #pragma endregion
 }

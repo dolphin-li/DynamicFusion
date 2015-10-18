@@ -161,7 +161,7 @@ namespace dfusion
 			// 2. calculate reg term: Jr = [Jr0 Jr1; 0 Jr3]; fr;
 			calcRegTerm();
 
-			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g+=Jr'*fr
+			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g=-(g+Jr'*fr)
 			calcHessian();
 
 			// 4. solve H*h = g
