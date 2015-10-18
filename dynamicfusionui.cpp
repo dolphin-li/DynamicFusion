@@ -151,6 +151,13 @@ void DynamicFusionUI::updateUiFromParam()
 	ui.sbShowGraphLevel->setMaximum(dfusion::WarpField::GraphLevelNum);
 	ui.sbShowGraphLevel->setValue(g_dataholder.m_dparam.view_show_graph_level);
 	ui.sbActiveNode->setValue(g_dataholder.m_dparam.view_activeNode_id);
+
+	ui.sbNodeRadius->setValue(g_dataholder.m_dparam.warp_radius_search_epsilon*1000);
+	ui.dbDwLvScale->setValue(g_dataholder.m_dparam.warp_param_dw_lvup_scale);
+	ui.sbICPIter->setValue(g_dataholder.m_dparam.fusion_nonRigidICP_maxIter);
+	ui.sbGSIter->setValue(g_dataholder.m_dparam.fusion_GaussNewton_maxIter);
+	ui.cbDumpFrames->setChecked(g_dataholder.m_dparam.fusion_dumping_each_frame);
+	ui.cbEnableNonRigid->setChecked(g_dataholder.m_dparam.fusion_enable_nonRigidSolver);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -305,6 +312,7 @@ void DynamicFusionUI::on_actionPause_triggered()
 
 void DynamicFusionUI::on_pbReset_clicked()
 {
+	g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 	g_dataholder.m_processor.reset();
 }
 
@@ -643,4 +651,35 @@ void DynamicFusionUI::on_sbActiveNode_valueChanged(int v)
 	{
 		std::cout << e.what() << std::endl;
 	}
+}
+
+void DynamicFusionUI::on_sbNodeRadius_valueChanged(int v)
+{
+	g_dataholder.m_dparam.warp_radius_search_epsilon = float(v)/1000;
+}
+
+void DynamicFusionUI::on_dbDwLvScale_valueChanged(double v)
+{
+	g_dataholder.m_dparam.warp_param_dw_lvup_scale = v;
+}
+
+void DynamicFusionUI::on_sbICPIter_valueChanged(int v)
+{
+	g_dataholder.m_dparam.fusion_nonRigidICP_maxIter = v;
+}
+
+void DynamicFusionUI::on_sbGSIter_valueChanged(int v)
+{
+	g_dataholder.m_dparam.fusion_GaussNewton_maxIter = v;
+}
+
+void DynamicFusionUI::on_cbDumpFrames_clicked()
+{
+	g_dataholder.m_dparam.fusion_dumping_each_frame = ui.cbDumpFrames->isChecked();
+}
+
+void DynamicFusionUI::on_cbEnableNonRigid_clicked()
+{
+	g_dataholder.m_dparam.fusion_enable_nonRigidSolver = ui.cbEnableNonRigid->isChecked();
+	g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 }

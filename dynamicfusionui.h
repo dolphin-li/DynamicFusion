@@ -48,6 +48,13 @@ public:
 	void on_cbShowCorr_clicked();
 	void on_sbShowGraphLevel_valueChanged(int);
 	void on_sbActiveNode_valueChanged(int v);
+
+	void on_sbNodeRadius_valueChanged(int v);
+	void on_dbDwLvScale_valueChanged(double v);
+	void on_sbICPIter_valueChanged(int v);
+	void on_sbGSIter_valueChanged(int v);
+	void on_cbDumpFrames_clicked();
+	void on_cbEnableNonRigid_clicked();
 protected:
 	void updateUiFromParam();
 

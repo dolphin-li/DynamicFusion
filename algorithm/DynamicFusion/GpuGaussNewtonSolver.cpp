@@ -57,7 +57,11 @@ namespace dfusion
 		m_vmap_cano = &vmap_cano;
 		m_nmap_cano = &nmap_cano;
 
-		m_vmapKnn.create(vmap_cano.rows(), vmap_cano.cols());
+		if (vmap_cano.rows() != m_vmapKnn.rows() || vmap_cano.cols() != m_vmapKnn.cols())
+		{
+			m_vmapKnn.create(vmap_cano.rows(), vmap_cano.cols());
+			cudaMemset2D(m_vmapKnn.ptr(), m_vmapKnn.step(), 0, m_vmapKnn.cols(), m_vmapKnn.rows());
+		}
 
 		if (pWarpField->getNumNodesInLevel(0) != m_numLv0Nodes
 			|| pWarpField->getNumAllNodes() != m_numNodes)
@@ -203,6 +207,9 @@ namespace dfusion
 		m_Bcols = 0;
 		m_Bnnzs = 0;
 		m_HrRowsCols = 0;
+
+		cudaMemset2D(m_vmapKnn.ptr(), m_vmapKnn.step(), 0, 
+			m_vmapKnn.cols(), m_vmapKnn.rows());
 
 		setzero(m_nodesKnn);
 		setzero(m_twist);

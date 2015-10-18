@@ -24,7 +24,7 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		warp_radius_search_epsilon = 0.025;
-		warp_param_dw = warp_radius_search_epsilon * 1.732 * 0.5; // sqrt(3)/2
+		warp_param_dw = warp_radius_search_epsilon * 1.732 * 1; // sqrt(3)/2
 		warp_radius_search_beta = 4;
 		warp_param_dw_lvup_scale = 1.f / warp_radius_search_beta;
 		warp_point_step_before_update_node = 1;
@@ -45,7 +45,7 @@ namespace dfusion
 
 		fusion_nonRigidICP_maxIter = 3;
 		fusion_GaussNewton_maxIter = 3;
-		fusion_GaussNewton_diag_regTerm = 1e-5;
+		fusion_GaussNewton_diag_regTerm = 0;
 		fusion_GaussNewton_fixedStep = 0.5;
 
 		fusion_post_rigid_factor = false;
