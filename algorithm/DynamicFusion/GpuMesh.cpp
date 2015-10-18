@@ -652,7 +652,8 @@ namespace dfusion
 		GpuMesh* canoMesh, 
 		const float3* canoPosActive,
 		const WarpField::KnnIdx* knnIdxActiveView,
-		const Intr* intr)
+		const Intr* intr, 
+		bool warp_nodes)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
@@ -738,7 +739,7 @@ namespace dfusion
 			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0),
 				"GpuMesh::renderToImg::mapWarpFieldRes");
 			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
-			copy_warp_node_to_gl_buffer(gldata, warpField);
+			copy_warp_node_to_gl_buffer(gldata, warpField, warp_nodes);
 			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0), 
 				"GpuMesh::renderToImg::unMapWarpFieldRes");
 
@@ -762,7 +763,7 @@ namespace dfusion
 
 				for (int level = 0; level < WarpField::GraphLevelNum; level++)
 				{
-					g_shader_node->setUniform1f("pointRadius", 0.005*(level+1));
+					g_shader_node->setUniform1f("pointRadius", 0.002*(level+1));
 					glVertexPointer(3, GL_FLOAT, sizeof(float4), 
 						(void*)(WarpField::MaxNodeNum*sizeof(float4)*level));
 					glColor3fv(colors[level].ptr());
@@ -772,7 +773,7 @@ namespace dfusion
 				if (showColorVert)
 				{
 					int id = warpField->getActiveVisualizeNodeId();
-					g_shader_node->setUniform1f("pointRadius", 0.0051);
+					g_shader_node->setUniform1f("pointRadius", 0.0021);
 					glColor3f(1, 0, 1);
 					glVertexPointer(3, GL_FLOAT, sizeof(float4),
 						(void*)(id*sizeof(float4)));
@@ -786,7 +787,7 @@ namespace dfusion
 
 					glDisable(GL_DEPTH_TEST);
 					// render knn
-					g_shader_node->setUniform1f("pointRadius", 0.0051);
+					g_shader_node->setUniform1f("pointRadius", 0.0021);
 					glColor3f(1, 0, 1);
 					for (int k = 0; k < WarpField::KnnK; k++)
 					{

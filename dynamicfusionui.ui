@@ -533,6 +533,55 @@
        <string>enable non rig</string>
       </property>
      </widget>
+     <widget class="QDoubleSpinBox" name="dbBeta">
+      <property name="geometry">
+       <rect>
+        <x>220</x>
+        <y>80</y>
+        <width>62</width>
+        <height>22</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_7">
+      <property name="geometry">
+       <rect>
+        <x>160</x>
+        <y>80</y>
+        <width>61</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>beta</string>
+      </property>
+     </widget>
+     <widget class="QDoubleSpinBox" name="dbLambda">
+      <property name="geometry">
+       <rect>
+        <x>220</x>
+        <y>110</y>
+        <width>62</width>
+        <height>22</height>
+       </rect>
+      </property>
+      <property name="maximum">
+       <double>9999.000000000000000</double>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_8">
+      <property name="geometry">
+       <rect>
+        <x>160</x>
+        <y>110</y>
+        <width>61</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>lambda</string>
+      </property>
+     </widget>
     </widget>
    </widget>
   </widget>

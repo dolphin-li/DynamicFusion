@@ -158,6 +158,8 @@ void DynamicFusionUI::updateUiFromParam()
 	ui.sbGSIter->setValue(g_dataholder.m_dparam.fusion_GaussNewton_maxIter);
 	ui.cbDumpFrames->setChecked(g_dataholder.m_dparam.fusion_dumping_each_frame);
 	ui.cbEnableNonRigid->setChecked(g_dataholder.m_dparam.fusion_enable_nonRigidSolver);
+	ui.dbBeta->setValue(g_dataholder.m_dparam.warp_radius_search_beta);
+	ui.dbLambda->setValue(g_dataholder.m_dparam.fusion_lambda);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -682,4 +684,14 @@ void DynamicFusionUI::on_cbEnableNonRigid_clicked()
 {
 	g_dataholder.m_dparam.fusion_enable_nonRigidSolver = ui.cbEnableNonRigid->isChecked();
 	g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+}
+
+void DynamicFusionUI::on_dbBeta_valueChanged(double v)
+{
+	g_dataholder.m_dparam.warp_radius_search_beta = v;
+}
+
+void DynamicFusionUI::on_dbLambda_valueChanged(double v)
+{
+	g_dataholder.m_dparam.fusion_lambda = v;
 }

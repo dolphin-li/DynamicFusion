@@ -55,6 +55,8 @@ public:
 	void on_sbGSIter_valueChanged(int v);
 	void on_cbDumpFrames_clicked();
 	void on_cbEnableNonRigid_clicked();
+	void on_dbBeta_valueChanged(double v);
+	void on_dbLambda_valueChanged(double v);
 protected:
 	void updateUiFromParam();
 
