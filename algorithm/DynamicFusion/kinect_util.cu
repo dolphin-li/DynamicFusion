@@ -646,7 +646,6 @@ namespace dfusion
 			float3 vcurr_g = Rcurr * vcurr + tcurr;
 			float3 ncurr_g = Rcurr * ncurr;
 			float3 vcurr_cp = Rprev_inv * (vcurr_g - tprev);	// prev camera coo space
-			float3 ncurr_cp = Rprev_inv * ncurr_g;				// prev camera coo space
 
 			float3 uvd = intr.xyz2uvd(vcurr_cp);
 			int2 ukr = make_int2(__float2int_rn(uvd.x), __float2int_rn(uvd.y));
@@ -655,24 +654,24 @@ namespace dfusion
 			if (ukr.x < 0 || ukr.y < 0 || ukr.x >= cols || ukr.y >= rows || vcurr_cp.z >= 0)
 				return (false);
 
-			float3 nprev = read_float3_4(nmap_prev(ukr.y, ukr.x));
+			float3 nprev_g = Rprev * read_float3_4(nmap_prev(ukr.y, ukr.x));
 
-			if (isnan(nprev.x))
+			if (isnan(nprev_g.x))
 				return (false);
 
-			float3 vprev = read_float3_4(vmap_prev(ukr.y, ukr.x));
+			float3 vprev_g = Rprev * read_float3_4(vmap_prev(ukr.y, ukr.x)) + tprev;
 
-			float dist = norm(vprev - vcurr_cp);
+			float dist = norm(vprev_g - vcurr_g);
 			if (dist > distThres)
 				return (false);
 
-			float sine = norm(cross(ncurr_cp, nprev));
+			float sine = norm(cross(ncurr_g, nprev_g));
 			if (sine >= angleThres)
 				return (false);
 
-			n = nprev;
-			d = vprev;
-			s = vcurr_cp;
+			n = nprev_g;
+			d = vprev_g;
+			s = vcurr_g;
 			return (true);
 		}
 
