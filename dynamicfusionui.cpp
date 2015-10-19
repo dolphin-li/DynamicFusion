@@ -179,6 +179,7 @@ void DynamicFusionUI::updateUiFromParam()
 
 	ui.gbAutoReset->setChecked(g_dataholder.m_dparam.view_autoreset);
 	ui.sbAutoResetSeconds->setValue(g_dataholder.m_dparam.view_autoreset_seconds);
+	ui.sbMaxWeights->setValue(g_dataholder.m_dparam.fusion_max_weight);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -725,4 +726,9 @@ void DynamicFusionUI::on_sbAutoResetSeconds_valueChanged(int v)
 	killTimer(m_autoResetTimerId);
 	m_autoResetTimerId = startTimer(g_dataholder.m_dparam.view_autoreset_seconds * 1000);
 	m_autoResetRemaingTime = g_dataholder.m_dparam.view_autoreset_seconds;
+}
+
+void DynamicFusionUI::on_sbMaxWeights_valueChanged(int v)
+{
+	g_dataholder.m_dparam.fusion_max_weight = v;
 }

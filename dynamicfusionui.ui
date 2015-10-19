@@ -589,7 +589,7 @@
        <x>350</x>
        <y>40</y>
        <width>120</width>
-       <height>80</height>
+       <height>61</height>
       </rect>
      </property>
      <property name="title">
@@ -627,6 +627,32 @@
        <number>9999</number>
       </property>
      </widget>
+    </widget>
+    <widget class="QLabel" name="label_10">
+     <property name="geometry">
+      <rect>
+       <x>350</x>
+       <y>120</y>
+       <width>61</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>max weight</string>
+     </property>
+    </widget>
+    <widget class="QSpinBox" name="sbMaxWeights">
+     <property name="geometry">
+      <rect>
+       <x>420</x>
+       <y>120</y>
+       <width>42</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="maximum">
+      <number>9999</number>
+     </property>
     </widget>
    </widget>
   </widget>

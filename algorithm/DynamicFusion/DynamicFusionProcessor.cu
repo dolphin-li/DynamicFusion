@@ -14,9 +14,7 @@ namespace dfusion
 	{
 		Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 		fusion_weight = 0.f;
-#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
 		int numK = 0;
-#endif
 
 		float3 p = make_float3(x*voxelSize, y*voxelSize, z*voxelSize) + origion;
 		WarpField::KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
@@ -53,10 +51,8 @@ namespace dfusion
 							w = -w;
 					}
 					dq_blend = dq_blend + dq*w;
-#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
 					fusion_weight += sqrt(dist2);
 					numK++;
-#endif
 				}
 			}
 			float norm = dq_blend.get_non_dual_part().norm();
@@ -64,12 +60,7 @@ namespace dfusion
 				dq_blend = dq0;
 			else
 				dq_blend = dq_blend * (1.f/norm);
-#ifdef ENABLE_ADAPTIVE_FUSION_WEIGHT
-			fusion_weight /= float(numK);
-			fusion_weight = nodeRadius / fusion_weight;
-#else
-			fusion_weight = 1.f;
-#endif
+			fusion_weight /= float(numK) * nodeRadius;
 		}
 
 		return dq_blend;
