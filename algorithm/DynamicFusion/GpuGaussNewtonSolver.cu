@@ -560,7 +560,10 @@ namespace dfusion
 				}
 
 				Tbx::Dual_quat_cu dq_bar = dq;
-				float inv_norm_dq_bar = 1.f / dq_bar.get_non_dual_part().norm();
+				float norm_dq_bar = dq_bar.get_non_dual_part().norm();
+				if (norm_dq_bar < Tbx::Dual_quat_cu::epsilon())
+					return;
+				float inv_norm_dq_bar = 1.f / norm_dq_bar;
 
 				dq = dq * inv_norm_dq_bar; // normalize
 
@@ -715,7 +718,11 @@ if (knnNodeId == 390 && i == 5 && j == 1
 					}
 				}
 
-				dq.normalize();
+				float norm_dq = dq.get_non_dual_part().norm();
+				if (norm_dq < Tbx::Dual_quat_cu::epsilon())
+					return;
+				float inv_norm_dq = 1.f / norm_dq;
+				dq = dq * inv_norm_dq; // normalize
 
 				// the grad energy f
 				const float f = data_term_energy((Tlw*dq.rotate(n)).dot(Tlw*dq.transform(v) - vl));

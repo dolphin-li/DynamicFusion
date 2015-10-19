@@ -2,7 +2,7 @@
 #include <string>
 namespace dfusion
 {
-#define ENABLE_NAN_CHECKING
+//#define ENABLE_NAN_CHECKING
 #pragma comment(lib, "cusparse.lib")
 #pragma comment(lib, "cublas.lib")
 #pragma comment(lib, "cusolver.lib")
@@ -314,9 +314,12 @@ namespace dfusion
 			// 1. calculate data term: Hd += Jd'Jd; g += Jd'fd
 			calcDataTerm();
 			checkNan(m_Hd, m_numLv0Nodes*VarPerNode*VarPerNode, ("Hd_data_" + std::to_string(iter)).c_str());
+			checkNan(m_g, m_numLv0Nodes*VarPerNode, ("g_data_" + std::to_string(iter)).c_str());
 
 			// 2. calculate reg term: Jr = [Jr0 Jr1; 0 Jr3]; fr;
 			calcRegTerm();
+			checkNan(m_Jrt_val, m_Jrnnzs, ("Jr_" + std::to_string(iter)).c_str());
+			checkNan(m_f_r, m_Jrrows, ("fr_" + std::to_string(iter)).c_str());
 
 			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g=-(g+Jr'*fr)
 			calcHessian();
