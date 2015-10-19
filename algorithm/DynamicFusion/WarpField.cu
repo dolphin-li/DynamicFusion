@@ -239,6 +239,7 @@ namespace dfusion
 		int step;
 		float3 origion;
 		int numNodes;
+		float inv_search_radius_sqr;
 
 		// for volume index
 		float vol_invVoxelSize;
@@ -292,8 +293,11 @@ namespace dfusion
 
 					float3 nearestV = make_float3(nearestVw.x, nearestVw.y, nearestVw.z);
 
+					// DIFFERENT from the paper ldp:
+					// here we insert a node if the point is outside the search radius, 
+					//  but NOT 1/dw
 					// note .w store 1/radius
-					float dif = dot(nearestV - p, nearestV - p) * (nearestVw.w * nearestVw.w);
+					float dif = dot(nearestV - p, nearestV - p) * inv_search_radius_sqr;
 					flag = (dif > 1.f);
 				}
 			}
@@ -599,6 +603,8 @@ namespace dfusion
 			counter.key_invGridSize = 1.f / m_param.warp_radius_search_epsilon;
 			counter.vol_invVoxelSize = 1.f / m_volume->getVoxelSize();
 			counter.vol_res = m_volume->getResolution();
+			counter.inv_search_radius_sqr = 1.f / (m_param.warp_radius_search_epsilon * 
+				m_param.warp_radius_search_epsilon);
 
 			counter.input_points = src.verts();
 			counter.out_points = m_meshPointsSorted.ptr();

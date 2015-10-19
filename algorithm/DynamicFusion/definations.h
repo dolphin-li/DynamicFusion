@@ -13,6 +13,7 @@
 #include "dualquaternion\dual_quat_cu.hpp"
 namespace dfusion
 {
+//#define ENABLE_KINECT_20
 	//// use float2 or short2 or half2 as TsdfData
 	//// NOTE:
 	////	short2.x will be converted to float[-1,1] and then calculate, 
@@ -217,17 +218,28 @@ namespace dfusion
 	}
 #endif
 
+#ifdef ENABLE_KINECT_20
+	enum{
+		KINECT_WIDTH = 512,
+		KINECT_HEIGHT = 424
+	};
+
+#define KINECT_DEPTH_H_FOV 70.6
+#define KINECT_DEPTH_V_FOV 60.0
+#define KINECT_IMAGE_H_FOV 70.6
+#define KINECT_IMAGE_V_FOV 60.0
+#define KINECT_NEAREST_METER 0.5
+#else
 	enum{
 		KINECT_WIDTH = 640,
 		KINECT_HEIGHT = 480
 	};
-
-#define KINECT_DEPTH_FOCAL_LEN 571.26
 #define KINECT_DEPTH_H_FOV 58.5
 #define KINECT_DEPTH_V_FOV 45.6
 #define KINECT_IMAGE_H_FOV 62.0
 #define KINECT_IMAGE_V_FOV 48.6
 #define KINECT_NEAREST_METER 0.3
+#endif
 
 	__device__ __host__ __forceinline__  Tbx::Vec3 convert(float3 a)
 	{

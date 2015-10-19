@@ -9,8 +9,6 @@
 #define __MICROSOFT_KINECT_H__
 
 //	the following control version of kinect
-#define ENABLE_KINECT_10
-//#define ENABLE_KINECT_20
 
 #include <iostream>
 #include <string>
@@ -18,6 +16,9 @@
 #include <math.h>
 #include <vector>
 #include "definations.h"
+#ifndef ENABLE_KINECT_20
+#define ENABLE_KINECT_10
+#endif
 
 #ifdef ENABLE_KINECT_10
 #	include <NuiApi.h>
@@ -27,6 +28,7 @@
 #ifdef ENABLE_KINECT_20
 #	include <Kinect.h>
 #	pragma comment(lib, "kinect20.lib")
+typedef unsigned short NUI_DEPTH_IMAGE_PIXEL;
 #endif
 
 struct Point3D{

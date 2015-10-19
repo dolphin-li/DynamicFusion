@@ -105,9 +105,9 @@ void DepthViewer::initializeGL()
 void DepthViewer::resizeGL(int w, int h)
 {
 	float aspect = w / (float)(h ? h : 1);
-	float scale = std::min(float(w) / float(640), float(h) / float(480));
-	float w1 = float(640 * scale);
-	float h1 = float(480 * scale);
+	float scale = std::min(float(w) / float(dfusion::KINECT_WIDTH), float(h) / float(dfusion::KINECT_HEIGHT));
+	float w1 = float(dfusion::KINECT_WIDTH * scale);
+	float h1 = float(dfusion::KINECT_HEIGHT * scale);
 	m_camera.setViewPort((w - w1) / 2, (w - w1) / 2 + w1, (h - h1) / 2, (h - h1) / 2 + h1);
 }
 

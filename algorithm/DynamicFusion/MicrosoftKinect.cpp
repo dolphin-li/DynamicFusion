@@ -64,7 +64,7 @@ int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigne
 	{
 		for (int y = 0; y < dep_height; y++)
 		for (int x = 0; x < dep_width; x++)
-			*depth++ = depth_map[y*dep_width + dep_width-1-x].depth;
+			*depth++ = depth_map[y*dep_width + x].depth;
 	}
 
 	// get color

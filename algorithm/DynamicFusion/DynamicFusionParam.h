@@ -74,6 +74,7 @@ namespace dfusion
 		
 		// 
 		int fusion_nonRigidICP_maxIter;
+		int fusion_rigid_ICP_iter[3];
 		float fusion_rigid_distThre;
 		float fusion_rigid_angleThreSin;
 		float fusion_nonRigid_distThre;

@@ -1,6 +1,5 @@
 #include "MarchingCubes.h"
 #include "TsdfVolume.h"
-#include "cudpp\cudpp_wrapper.h"
 #include "cudpp\thrust_wrapper.h"
 #include "GpuMesh.h"
 #include "device_utils.h"
