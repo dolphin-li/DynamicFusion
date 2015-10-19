@@ -46,6 +46,9 @@ namespace dfusion
 		void calcRegTerm();
 		void calcHessian();
 		void blockSolve();
+		float calcTotalEnergy();
+
+		void checkNan(const DeviceArray<float>& x, int n, const char* msg);
 
 		void bindTextures();
 		void unBindTextures();

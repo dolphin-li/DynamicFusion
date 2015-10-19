@@ -1,6 +1,8 @@
 #include "GpuGaussNewtonSolver.h"
+#include <string>
 namespace dfusion
 {
+#define ENABLE_NAN_CHECKING
 #pragma comment(lib, "cusparse.lib")
 #pragma comment(lib, "cublas.lib")
 #pragma comment(lib, "cusolver.lib")
@@ -40,6 +42,25 @@ namespace dfusion
 	static void setzero(DeviceArray<T>& A)
 	{
 		cudaSafeCall(cudaMemset(A.ptr(), 0, A.sizeBytes()), "GpuGaussNewtonSolver::setZero");
+	}
+
+	void GpuGaussNewtonSolver::checkNan(const DeviceArray<float>& x, int n, const char* msg)
+	{
+#ifdef ENABLE_NAN_CHECKING
+		static int a = 0;
+		std::vector<float> hx;
+		x.download(hx);
+		for (size_t i = 0; i < n; i++)
+		{
+			if (isnan(hx.at(i)))
+			{
+				printf("[%d]nan(%s): %d %f\n", a, msg, i, hx[i]);
+				debug_print();
+				system("pause");
+			}
+		}
+		a++;
+#endif
 	}
 
 	void GpuGaussNewtonSolver::init(WarpField* pWarpField, const MapArr& vmap_cano, 
@@ -280,29 +301,59 @@ namespace dfusion
 		m_vmap_live = &vmap_live;
 		m_nmap_live = &nmap_live;
 
-
 		// perform Gauss-Newton iteration
 		//for (int k = 0; k < 100; k++)
+		float totalEnergy = 0.f;
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
 			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
 
+			checkNan(m_twist, m_numNodes, ("twist_" + std::to_string(iter)).c_str());
+
 			// 1. calculate data term: Hd += Jd'Jd; g += Jd'fd
 			calcDataTerm();
+			checkNan(m_Hd, m_numLv0Nodes*VarPerNode*VarPerNode, ("Hd_data_" + std::to_string(iter)).c_str());
 
 			// 2. calculate reg term: Jr = [Jr0 Jr1; 0 Jr3]; fr;
 			calcRegTerm();
 
 			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g=-(g+Jr'*fr)
 			calcHessian();
+			checkNan(m_Hd, m_numLv0Nodes*VarPerNode*VarPerNode, ("Hd_reg_" + std::to_string(iter)).c_str());
 
 			// 4. solve H*h = g
 			blockSolve();
+			checkNan(m_twist, m_Jrcols, ("h_" + std::to_string(iter)).c_str());
 
-			// 5. accumulate: x += step * h;
-			cublasSaxpy(m_cublasHandle, m_Jrcols, &m_param->fusion_GaussNewton_fixedStep, 
-				m_h.ptr(), 1, m_twist.ptr(), 1);
+			// if not fix step, we perform line search
+			if (m_param->fusion_GaussNewton_fixedStep <= 0.f)
+			{
+				float old_energy = calcTotalEnergy();
+				float new_energy = 0.f;
+				float alpha = 1.f;
+				cudaSafeCall(cudaMemcpy(m_tmpvec.ptr(), m_twist.ptr(), m_Jrcols*sizeof(float),
+					cudaMemcpyDeviceToDevice), "copy tmp vec to twist");
+				for (; alpha > 0.1; alpha *= 0.5)
+				{
+					// x += alpha * h
+					cublasSaxpy(m_cublasHandle, m_Jrcols, &alpha,
+						m_h.ptr(), 1, m_twist.ptr(), 1);
+					new_energy = calcTotalEnergy();
+					if (new_energy < old_energy)
+						break;
+					// reset x
+					cudaSafeCall(cudaMemcpy(m_twist.ptr(), m_tmpvec.ptr(), 
+					m_Jrcols*sizeof(float), cudaMemcpyDeviceToDevice), "copy twist to tmp vec");
+				}
+			}
+			// else, we perform fixed step update.
+			else
+			{
+				// 5. accumulate: x += step * h;
+				cublasSaxpy(m_cublasHandle, m_Jrcols, &m_param->fusion_GaussNewton_fixedStep,
+					m_h.ptr(), 1, m_twist.ptr(), 1);
+			}
 		}// end for iter
 
 		// finally, write results back

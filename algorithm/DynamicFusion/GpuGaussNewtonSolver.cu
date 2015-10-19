@@ -256,6 +256,8 @@ namespace dfusion
 
 //#define ENABLE_GPU_DUMP_DEBUG
 
+	__device__ float g_totalEnergy;
+
 	struct DataTermCombined
 	{
 		typedef WarpField::KnnIdx KnnIdx;
@@ -292,11 +294,21 @@ namespace dfusion
 		float angleThres;
 		float psi_data;
 
+
 #ifdef ENABLE_GPU_DUMP_DEBUG
 		// for debug
 		float* debug_buffer_pixel_sum2;
 		float* debug_buffer_pixel_val;
 #endif
+
+		__device__ __forceinline__ float data_term_energy(float f)const
+		{
+			// the robust Tukey penelty gradient
+			if (abs(f) <= psi_data)
+				return psi_data*psi_data / 6.f *(1 - pow(1 - sqr(f / psi_data), 3));
+			else
+				return psi_data*psi_data / 6.f;
+		}
 
 		__device__ __forceinline__ float data_term_penalty(float f)const
 		{
@@ -549,6 +561,7 @@ namespace dfusion
 
 				Tbx::Dual_quat_cu dq_bar = dq;
 				float inv_norm_dq_bar = 1.f / dq_bar.get_non_dual_part().norm();
+
 				dq = dq * inv_norm_dq_bar; // normalize
 
 				// the grad energy f
@@ -660,6 +673,55 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				}// end for knnK
 			}// end if found corr
 		}// end function ()
+
+		__device__ __forceinline__ void calcTotalEnergy()const
+		{
+			const int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
+			const int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
+
+			Tbx::Point3 vl;
+			bool found_coresp = false;
+			if (x < imgWidth && y < imgHeight)
+				found_coresp = search(x, y, vl);
+
+			if (found_coresp)
+			{
+				Tbx::Point3 v(convert(read_float3_4(vmap_cano(y, x))));
+				Tbx::Vec3 n(convert(read_float3_4(nmap_cano(y, x))));
+
+				const KnnIdx knn = vmapKnn(y, x);
+				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
+				Tbx::Dual_quat_cu dqk_0;
+				float wk[KnnK];
+				for (int k = 0; k < KnnK; k++)
+				{
+					int knnNodeId = knn_k(knn, k);
+					if (knnNodeId < nNodes)
+					{
+						Tbx::Vec3 r, t;
+						get_twist(knnNodeId, r, t);
+						float4 nodeVw = get_nodesVw(knnNodeId);
+						Tbx::Point3 nodesV(convert(read_float3_4(nodeVw)));
+						float invNodesW = nodeVw.w;
+						Tbx::Dual_quat_cu dqk_k;
+						dqk_k.from_twist(r, t);
+						// note: we store inv radius as vw.w, thus using * instead of / here
+						wk[k] = __expf(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+						if (k == 0)
+							dqk_0 = dqk_k;
+						if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
+							wk[k] = -wk[k];
+						dq = dq + dqk_k * wk[k];
+					}
+				}
+
+				dq.normalize();
+
+				// the grad energy f
+				const float f = data_term_energy((Tlw*dq.rotate(n)).dot(Tlw*dq.transform(v) - vl));
+				atomicAdd(&g_totalEnergy, f);
+			}//end if find corr
+		}
 	};
 
 	__global__ void dataTermCombinedKernel(const DataTermCombined cs)
@@ -726,6 +788,12 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		}
 #endif
 	}
+
+	__global__ void calcDataTermTotalEnergyKernel(const DataTermCombined cs)
+	{
+		cs.calcTotalEnergy();
+	}
+
 #pragma endregion
 
 #pragma region --define sparse structure
@@ -1043,6 +1111,19 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			}
 		}
 
+		__device__ __forceinline__  float reg_term_energy(Tbx::Vec3 f)const
+		{
+			// the robust Huber penelty gradient
+			float s = 0;
+			float norm = f.norm();
+			if (norm < psi_reg)
+				s = norm * norm * 0.5f;
+			else
+			for (int k = 0; k < 3; k++)
+				s += psi_reg*(abs(f[k]) - psi_reg*0.5f);
+			return s;
+		}
+
 		__device__ __forceinline__  Tbx::Vec3 reg_term_penalty(Tbx::Vec3 f)const
 		{
 			// the robust Huber penelty gradient
@@ -1242,11 +1323,49 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				}
 			}// end for ialpha
 		}// end function ()
+
+		__device__ __forceinline__ void calcTotalEnergy () const
+		{
+			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x) * 6;
+
+			if (iRow >= nRows)
+				return;
+
+			Mapper mapper = rows2nodeIds[iRow];
+			int knnNodeId = knn_k(get_nodesKnn(mapper.nodeId), mapper.k);
+
+			if (knnNodeId >= nNodes)
+				return;
+
+			Tbx::Dual_quat_cu dqi, dqj;
+			Tbx::Vec3 ri, ti, rj, tj;
+			get_twist(mapper.nodeId, ri, ti);
+			get_twist(knnNodeId, rj, tj);
+			dqi.from_twist(ri, ti);
+			dqj.from_twist(rj, tj);
+
+			float4 nodeVwi = get_nodesVw(mapper.nodeId);
+			float4 nodeVwj = get_nodesVw(knnNodeId);
+			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
+			Tbx::Point3 vj(convert(read_float3_4(nodeVwj)));
+			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
+			float ww2 = lambda * alpha_ij;
+
+			// energy=============================================
+			Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+			float eg = ww2 * reg_term_energy(val);
+
+			atomicAdd(&g_totalEnergy, eg);
+		}
 	};
 
 	__global__ void calcRegTerm_kernel(RegTermJacobi rj)
 	{
 		rj();
+	}
+	__global__ void calcRegTermTotalEnergy_kernel(RegTermJacobi rj)
+	{
+		rj.calcTotalEnergy();
 	}
 
 	void GpuGaussNewtonSolver::calcRegTerm()
@@ -1279,7 +1398,8 @@ if (knnNodeId == 390 && i == 5 && j == 1
 
 #pragma region --calc Hessian
 #define ENABLE_GPU_DUMP_DEBUG_H
-	__global__ void calcJr0tJr0_add_to_Hd_kernel(float* Hd, int nLv0Nodes, const int* Jrt_rptr)
+	__global__ void calcJr0tJr0_add_to_Hd_kernel(float* Hd, int nLv0Nodes, 
+		const int* Jrt_rptr, float diag_eps)
 	{
 		enum
 		{
@@ -1301,11 +1421,11 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		const int row_len = Jrt_rptr[row0 + rowShift + 1] - row0_begin;
 		const int row1_begin = Jrt_rptr[row0 + colShift];
 
-		float sum = 0.f;
+		float sum = diag_eps * (rowShift == colShift);
 		for (int i = 0; i < row_len; i++)
 			sum += get_JrtVal(row1_begin + i) * get_JrtVal(row0_begin + i);
 
-		Hd[iNode * VarPerNode2 + g_lower_2_full_6x6[eleLowerShift]] += sum;
+		Hd[iNode * VarPerNode2 + rowShift*VarPerNode+colShift] += sum;
 	}
 	
 	__global__ void fill_Hd_upper_kernel(float* Hd, int nLv0Nodes)
@@ -1369,7 +1489,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 	}
 
 	__global__ void calcHr_kernel(float* Hr, const int* Jrt_rptr,
-		int HrRowsCols, int nBrows)
+		int HrRowsCols, int nBrows, float diag_eps)
 	{
 		int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -1387,7 +1507,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		int Jrt13_jb = Jrt_rptr[x + nBrows];
 		int Jrt13_je = Jrt_rptr[x + nBrows + 1];
 
-		float sum = 0.f;
+		float sum = diag_eps * (x == y);
 		for (int i = Jrt13_ib, j = Jrt13_jb; i < Jrt13_ie && j < Jrt13_je;)
 		{
 			int ci = get_JrtCidx(i);
@@ -1416,7 +1536,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
 			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes, 
-				m_Jrt_RowPtr.ptr());
+				m_Jrt_RowPtr.ptr(), m_param->fusion_GaussNewton_diag_regTerm);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcJr0tJr0_add_to_Hd_kernel");
 
 			// 1.1 fill the upper tri part of Hd
@@ -1447,7 +1567,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_HrRowsCols*(m_HrRowsCols+1)/2, block.x));
 			calcHr_kernel << <grid, block >> >(m_Hr.ptr(), m_Jrt_RowPtr.ptr(),
-				m_HrRowsCols, m_Brows);
+				m_HrRowsCols, m_Brows, m_param->fusion_GaussNewton_diag_regTerm);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcHr_kernel");
 		}
 
@@ -1725,6 +1845,67 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				m_u.ptr(), sz0);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
 		}
+	}
+
+	float GpuGaussNewtonSolver::calcTotalEnergy()
+	{
+		float total_energy = 0.f;
+		{
+			DataTermCombined cs;
+			cs.angleThres = m_param->fusion_nonRigid_angleThreSin;
+			cs.distThres = m_param->fusion_nonRigid_distThre;
+			cs.Hd_ = m_Hd;
+			cs.g_ = m_g;
+			cs.imgHeight = m_vmap_cano->rows();
+			cs.imgWidth = m_vmap_cano->cols();
+			cs.intr = m_intr;
+			cs.nmap_cano = *m_nmap_cano;
+			cs.nmap_live = *m_nmap_live;
+			cs.nmap_warp = *m_nmap_warp;
+			cs.vmap_cano = *m_vmap_cano;
+			cs.vmap_live = *m_vmap_live;
+			cs.vmap_warp = *m_vmap_warp;
+			cs.vmapKnn = m_vmapKnn;
+			cs.nNodes = m_numNodes;
+			cs.Tlw = m_pWarpField->get_rigidTransform();
+			cs.psi_data = m_param->fusion_psi_data;
+
+			int zero_mem_symbol = 0;
+			cudaMemcpyToSymbol(g_totalEnergy, &zero_mem_symbol, sizeof(int));
+
+			// 1. data term
+			//////////////////////////////
+			dim3 block(CTA_SIZE_X, CTA_SIZE_Y);
+			dim3 grid(1, 1, 1);
+			grid.x = divUp(cs.imgWidth, block.x);
+			grid.y = divUp(cs.imgHeight, block.y);
+			calcDataTermTotalEnergyKernel << <grid, block >> >(cs);
+			cudaSafeCall(cudaGetLastError(), "calcDataTermTotalEnergyKernel");
+		}
+
+		{
+			RegTermJacobi rj;
+			rj.cidx = m_Jr_ColIdx.ptr();
+			rj.lambda = m_param->fusion_lambda;
+			rj.nNodes = m_numNodes;
+			rj.nRows = m_Jrrows;
+			rj.psi_reg = m_param->fusion_psi_reg;
+			rj.rows2nodeIds = m_Jr_RowMap2NodeId;
+			rj.rptr = m_Jr_RowPtr.ptr();
+			rj.vptr = m_Jr_val.ptr();
+			rj.fptr = m_f_r.ptr();
+
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_Jrrows / 6, block.x));
+
+			calcRegTermTotalEnergy_kernel << <grid, block >> >(rj);
+			cudaSafeCall(cudaGetLastError(), "calcRegTermTotalEnergy_kernel");
+		}
+
+		cudaSafeCall(cudaMemcpyFromSymbol(&total_energy,
+			g_totalEnergy, sizeof(int)), "copy reg totalEnergy to host");
+
+		return total_energy;
 	}
 #pragma endregion
 }
