@@ -7,17 +7,17 @@
 #include <string>
 #include <windows.h>
 #include <math.h>
-#include <NuiApi.h>
 
 #include "MicrosoftKinect.h"
 using namespace std;
 
 
 Microsoft_Kinect::Microsoft_Kinect(){
-	kinect_version_id	= 0;
 	frame_id	= 0;
 	ref_kinect	= NULL;
+#ifdef ENABLE_KINECT_10
 	pMapper = NULL;
+#endif
 
 	dep_width	= 0;
 	dep_height	= 0;
@@ -32,15 +32,12 @@ Microsoft_Kinect::Microsoft_Kinect(){
 	image_map	= NULL;
 }
 
-int Microsoft_Kinect::InitKinect(int version){
-	if( version == 1 )
+int Microsoft_Kinect::InitKinect(){
+#ifdef ENABLE_KINECT_10
 		return InitKinect10();
-	else if( version == 2 )
+#else
 		return InitKinect20();
-	else{
-		std::cout << "error: Microsoft_Kinect::InitKinect, unsupported version: " << version << std::endl;
-		return 0;
-	}
+#endif
 }
 
 Microsoft_Kinect::~Microsoft_Kinect(){
@@ -48,31 +45,43 @@ Microsoft_Kinect::~Microsoft_Kinect(){
 }
 
 void Microsoft_Kinect::FreeSpace(){
-	if( kinect_version_id == 1 )
+#ifdef ENABLE_KINECT_10
 		FreeSpace10();
-	else if( kinect_version_id == 2 )
+#else
 		FreeSpace20();
+#endif
 }
 
 int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, bool map2depth)
 {
 	GetDepthMap();
-	GetColorMap();
 
 	// get depth
 	if (depth)
 	{
 		for (int y = 0; y < dep_height; y++)
 		for (int x = 0; x < dep_width; x++)
+#ifdef ENABLE_KINECT_10
 			*depth++ = depth_map[y*dep_width + x].depth;
+#else
+			*depth++ = depth_map[y*dep_width + x];
+#endif
 	}
 
+#ifdef ENABLE_KINECT_20
+	// ldp: currently colormap not implmented for kinect 2
+	// thus we return here when kinect 2
+	return 1;
+#endif
+
+	GetColorMap();
 	// get color
 	if (pBGRA)
 	{
 		memset(pBGRA, 0, dep_width*dep_height * 4 * sizeof(char));
 		if (map2depth)
 		{
+#ifdef ENABLE_KINECT_10
 			// Get the coordinates to convert color to depth space
 			coordMapping.resize(dep_width*dep_height);
 			HRESULT hr = pMapper->MapDepthFrameToColorFrame(
@@ -111,13 +120,16 @@ int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigne
 					}
 				}
 			}// end for y
+#else
+			throw std::exception("kinect 2 color mapper not implemented!");
+#endif
 		}// end if map2depth
 		else
 		{
-			memcpy(pBGRA, image_map, dep_width*dep_height * 4);
+			memcpy(pBGRA, image_map, img_width*img_height * 4);
 		}// end if not map2depth
 
-		for (int i = 0; i < dep_width*dep_height; i++)
+		for (int i = 0; i < img_width*img_height; i++)
 			pBGRA[i * 4 + 3] = 255;
 	}// end if pBGRA
 
@@ -126,6 +138,7 @@ int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigne
 
 //	interface functions =======================================================
 int Microsoft_Kinect::GetColorMap(){
+#ifdef ENABLE_KINECT_10
 	NUI_IMAGE_FRAME imageFrame;
 
 	HRESULT hr = pNuiSensor->NuiImageStreamGetNextFrame(pColorStreamHandle, 0, &imageFrame);
@@ -147,168 +160,36 @@ int Microsoft_Kinect::GetColorMap(){
 	ErrorCheck(hr, "GetColorMap: release frame");
 
 	return 1;
+#else
+	throw std::exception("kinect 2 color map not implemented!");
+#endif
 }
 
-int Microsoft_Kinect::GetDepthMap(){
-	if( ref_kinect && kinect_version_id == 1 ){
-		return CopyDepth20to10();
-	}
-
-	if( kinect_version_id == 1 )
+int Microsoft_Kinect::GetDepthMap()
+{
+#ifdef ENABLE_KINECT_10
 		return GetDepthMap10();
-	else if( kinect_version_id == 2 )
+#else
 		return GetDepthMap20();
-
-	return 0;
-}
-
-int Microsoft_Kinect::CalculatePointCloud(float* xyz_ptr){
-	const float DegreesToRadians = 3.14159265359f / 180.0f;
-	const float fov = dep_h_fov;
-	const float xyScale = tanf(fov * DegreesToRadians * 0.5f) / (dep_width * 0.5f);
-	int	half_width	= dep_width / 2;
-	int	half_height	= dep_height / 2;
-	for(int j=0; j<dep_height; j++){
-		for(int i=0; i<dep_width; i++){
-			int idx = j*dep_width+i;
-			unsigned short pixel_depth = depth_map[idx].depth;
-			float	depth = - pixel_depth * 0.001;	//	unit in meters
-			xyz_ptr[idx*3  ] = -(i + 0.5 - half_width) * xyScale * depth;
-			xyz_ptr[idx*3+1] = (j + 0.5 - half_height) * xyScale * depth;
-			xyz_ptr[idx*3+2] = depth;		//	in OpenGL coordinate
-		}
-	}
-
-	return 1;
+#endif
 }
 
 int	Microsoft_Kinect::ReadAccelerometer(float gravity[3]){
+#ifdef ENABLE_KINECT_10
 	Vector4 grav;
 	HRESULT hr = pNuiSensor->NuiAccelerometerGetCurrentReading(&grav);
 	gravity[0] = grav.x;
 	gravity[1] = grav.y;
 	gravity[2] = grav.z;
 	return 1;
-}
-
-//	convert 2.0 to 1.0 =======================================================
-int Microsoft_Kinect::InitKinect(Microsoft_Kinect* another_kinect, int version){
-	//	this function used to convert v2 depth map to v1
-	if( !another_kinect )
-		return 0;
-	if( another_kinect->kinect_version_id != 2 )
-		return 0;
-	if( version != 1 )
-		return 0;
-
-	ref_kinect			= another_kinect;
-	kinect_version_id	= version;
-
-	//	---------------------------------------
-	//	init class storage
-	kinect_version_id = 1;
-	frame_id		= 0;
-
-	dep_width		= 640;
-	dep_height		= 480;
-	dep_h_fov		= NUI_CAMERA_DEPTH_NOMINAL_HORIZONTAL_FOV;
-	dep_v_fov		= NUI_CAMERA_DEPTH_NOMINAL_VERTICAL_FOV;
-	depth_map = new NUI_DEPTH_IMAGE_PIXEL[ dep_width * dep_height ];
-
-	img_width		= 640;
-	img_height		= 480;
-	img_h_fov		= NUI_CAMERA_COLOR_NOMINAL_HORIZONTAL_FOV;
-	img_v_fov		= NUI_CAMERA_COLOR_NOMINAL_VERTICAL_FOV;
-	image_map = new BGRA32Pixel[ img_width * img_height ];
-
-	//	check alloc space
-	if( !depth_map || !image_map ){
-		cout << "error: Microsoft_Kinect::InitKinect, alloc kinect storage space failed" << endl;
-		exit(0);
-	}
-
-	return 1;
-}
-
-int Microsoft_Kinect::CopyDepth20to10(){
-	if( !ref_kinect || kinect_version_id != 1 )
-		return 0;
-
-	memset(depth_map, 0, sizeof(unsigned short)*dep_width*dep_height);
-
-	//	for each pixel on kinect
-	const float DegreesToRadians = 3.14159265359f / 180.0f;
-	const float fov = dep_h_fov;
-	const float xyScale = tanf(fov * DegreesToRadians * 0.5f) / (dep_width * 0.5f);
-	int	half_width	= dep_width / 2;
-	int	half_height	= dep_height / 2;
-	const float ref_fov = ref_kinect->dep_h_fov;
-	const float ref_xyScale = tanf(ref_fov * DegreesToRadians * 0.5f) / (ref_kinect->dep_width * 0.5f);
-	int	ref_half_width	= ref_kinect->dep_width / 2;
-	int	ref_half_height	= ref_kinect->dep_height / 2;
-	for(int j=0; j<dep_height; j++){
-		for(int i=0; i<dep_width; i++){
-			int idx = j * dep_width + i;
-			float	depth = - 1.0f;	//	unit in meters
-			float	x = -(i + 0.5 - half_width) * xyScale * depth;
-			float	y = (j + 0.5 - half_height) * xyScale * depth;
-			float	z = depth;		//	in OpenGL coordinate
-
-			//	calculate uv
-			int		u = - x / (depth*ref_xyScale) + ref_half_width - 0.5f;
-			int		v = y / (depth*ref_xyScale) + ref_half_height - 0.5f;
-			if( u>=0 && u<ref_kinect->dep_width && v>=0 && v<ref_kinect->dep_height ){
-				int ref_idx = v * ref_kinect->dep_width + u;
-				depth_map[idx] = ref_kinect->depth_map[ref_idx];
-			}
-		}
-	}
-
-
-	////	for each pixel on ref_kinect
-	//const float DegreesToRadians = 3.14159265359f / 180.0f;
-	//const float ref_fov = ref_kinect->dep_h_fov;
-	//const float ref_xyScale = tanf(ref_fov * DegreesToRadians * 0.5f) / (ref_kinect->dep_width * 0.5f);
-	//int	ref_half_width	= ref_kinect->dep_width / 2;
-	//int	ref_half_height	= ref_kinect->dep_height / 2;
-	//const float fov = dep_h_fov;
-	//const float xyScale = tanf(fov * DegreesToRadians * 0.5f) / (dep_width * 0.5f);
-	//int	half_width	= dep_width / 2;
-	//int	half_height	= dep_height / 2;
-	//for(int j=0; j<ref_kinect->dep_height; j++){
-	//	for(int i=0; i<ref_kinect->dep_width; i++){
-	//		//	calculate xyz
-	//		int ref_idx = j*ref_kinect->dep_width + i;
-	//		unsigned short pixel_depth = ref_kinect->depth_map[ref_idx];
-	//		if( !pixel_depth || pixel_depth == 0xFFFF )
-	//			continue;
-
-	//		float	depth = - pixel_depth * 0.001;	//	unit in meters
-	//		float	x = -(i + 0.5 - ref_half_width) * ref_xyScale * depth;
-	//		float	y = (j + 0.5 - ref_half_height) * ref_xyScale * depth;
-	//		float	z = depth;		//	in OpenGL coordinate
-	//		//	calculate uv
-	//		int		u = - x / (depth*xyScale) + half_width - 0.5f;
-	//		int		v = y / (depth*xyScale) + half_height - 0.5f;
-	//		if( u>=0 && u<dep_width && v>=0 && v<dep_height ){
-	//			int idx = v * dep_width + u;
-	//			if( !depth_map[idx] || pixel_depth < depth_map[idx] )
-	//				depth_map[idx] = pixel_depth;
-	//		}
-	//	}
-	//}
-
-	return 1;
+#else
+	throw std::exception("kinect 2 gravity not implemented!");
+#endif
 }
 
 //	v1.0 =======================================================
 int Microsoft_Kinect::InitKinect10(){
 #ifdef ENABLE_KINECT_10
-	if( kinect_version_id != 0 ){
-		std::cout << "error: Microsoft_Kinect::InitKinect10, current active kinect version is: " << kinect_version_id << std::endl;
-		return 0;
-	}
-
 	//	check the number of connected sensor
 	int iSensorCount = 0;
 	HRESULT hr = NuiGetSensorCount(&iSensorCount);
@@ -360,7 +241,6 @@ int Microsoft_Kinect::InitKinect10(){
 
 	//	---------------------------------------
 	//	init class storage
-	kinect_version_id = 1;
 	frame_id		= 0;
 
 	dep_width		= 640;
@@ -481,7 +361,6 @@ int Microsoft_Kinect::InitKinect20(){
 
 	//	---------------------------------------
 	//	init class storage
-	kinect_version_id = 2;
 	frame_id	= 0;
 
 	dep_width		= 512;
@@ -494,7 +373,7 @@ int Microsoft_Kinect::InitKinect20(){
 	img_height		= 480;
 	img_h_fov		= 70.6f;
 	img_v_fov		= 60.0f;
-	image_map = new RGB24Pixel[ img_width * img_height ];
+	image_map = new BGRA32Pixel[ img_width * img_height ];
 
 	//	check alloc space
 	if( !depth_map || !image_map ){
@@ -584,6 +463,7 @@ int Microsoft_Kinect::GetDepthMap20(){
 			if( depth_map )
 				delete depth_map;
 			depth_map = new unsigned short[dep_width*dep_height];
+			printf("kinect 2 depth: %d %d\n", dep_width, dep_height);
 		}
 
 		memcpy( depth_map, pBuffer, sizeof(unsigned short)*dep_width*dep_height);

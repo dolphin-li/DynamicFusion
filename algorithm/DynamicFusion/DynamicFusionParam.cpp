@@ -28,7 +28,7 @@ namespace dfusion
 		warp_radius_search_beta = 2;
 		warp_param_dw_lvup_scale = 0.05f;
 		warp_point_step_before_update_node = 1;
-		warp_valid_point_num_each_node = 0.1 * (pow(warp_radius_search_epsilon*voxels_per_meter, 3) 
+		warp_valid_point_num_each_node = 0.5 * (pow(warp_radius_search_epsilon*voxels_per_meter, 3) 
 			/ warp_point_step_before_update_node);
 
 		/** *****************************************************
@@ -55,7 +55,7 @@ namespace dfusion
 
 		// debuging related
 		fusion_dumping_each_frame = false;
-		fusion_enable_nonRigidSolver = true;
+		fusion_enable_nonRigidSolver = false;
 		fusion_loading_mode = false;
 		fusion_dumping_max_frame = 800;
 

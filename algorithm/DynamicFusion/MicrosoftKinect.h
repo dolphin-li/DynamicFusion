@@ -28,7 +28,6 @@
 #ifdef ENABLE_KINECT_20
 #	include <Kinect.h>
 #	pragma comment(lib, "kinect20.lib")
-typedef unsigned short NUI_DEPTH_IMAGE_PIXEL;
 #endif
 
 struct Point3D{
@@ -55,7 +54,7 @@ class Microsoft_Kinect{
 public:
 	//	constructor and destructor
 	Microsoft_Kinect();
-	int InitKinect(int version = 1);
+	int InitKinect();
 	~Microsoft_Kinect();
 	void FreeSpace();
 
@@ -66,31 +65,25 @@ public:
 	//	get data
 	int GetDepthMap();
 	int GetColorMap();
-	int CalculatePointCloud(float* xyz_ptr);
 	int ReadAccelerometer(float gravity[3]);
-
-	int InitKinect(Microsoft_Kinect* another_kinect = NULL, int version = 1);
-	int CopyDepth20to10();
-
 public:
 	//	current frame id
-	int kinect_version_id;
 	int frame_id;
 	Microsoft_Kinect* ref_kinect;
 
 	//	depth data
 	int dep_width, dep_height;
 	float dep_h_fov, dep_v_fov;
-	NUI_DEPTH_IMAGE_PIXEL*	depth_map;
 
  	//	color data
 	int img_width, img_height;
 	float img_h_fov, img_v_fov;
 	BGRA32Pixel*		image_map;
 
+#ifdef ENABLE_KINECT_10
+	NUI_DEPTH_IMAGE_PIXEL*	depth_map;
 	INuiCoordinateMapper* pMapper;
 	std::vector<NUI_COLOR_IMAGE_POINT> coordMapping;
-#ifdef ENABLE_KINECT_10
 	//	Kinect SDK Interface, v1
 	INuiSensor* pNuiSensor;
 	HANDLE		pColorStreamHandle;
@@ -100,6 +93,7 @@ public:
 #endif
 
 #ifdef ENABLE_KINECT_20
+	UINT16*	depth_map;
 	//	Kinect interface v2.0
 	IKinectSensor*          m_pKinectSensor;		// Current Kinect
     IDepthFrameReader*      m_pDepthFrameReader;	// Depth reader

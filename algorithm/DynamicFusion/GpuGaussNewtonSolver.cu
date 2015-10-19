@@ -162,7 +162,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_nodesKnnTex, m_nodesKnn.ptr(), &desc,
 				m_nodesKnn.size() * sizeof(WarpField::KnnIdx));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error1!");
 		}
 		if (1)
 		{
@@ -171,7 +171,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_nodesVwTex, m_nodesVw.ptr(), &desc,
 				m_nodesVw.size() * sizeof(float4));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error2!");
 		}
 		if (1)
 		{
@@ -180,7 +180,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_twistTex, m_twist.ptr(), &desc,
 				m_twist.size() * sizeof(float));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error3!");
 		}
 		if (1)
 		{
@@ -189,7 +189,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_JrtValTex, m_Jrt_val.ptr(), &desc,
 				m_Jrt_val.size() * sizeof(float));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error4!");
 		}
 		if (1)
 		{
@@ -198,7 +198,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_JrtCidxTex, m_Jrt_ColIdx.ptr(), &desc,
 				m_Jrt_ColIdx.size() * sizeof(int));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error5!");
 		}
 		if (1)
 		{
@@ -207,7 +207,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_BtLtinvValTex, m_Bt_Ltinv_val.ptr(), &desc,
 				m_Bt_Ltinv_val.size() * sizeof(float));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error6!");
 		}
 		if (1)
 		{
@@ -216,7 +216,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_BtCidxTex, m_Bt_ColIdx.ptr(), &desc,
 				m_Bt_ColIdx.size() * sizeof(int));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error7!");
 		}
 		if (1)
 		{
@@ -225,7 +225,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_BtValTex, m_Bt_val.ptr(), &desc,
 				m_Bt_val.size() * sizeof(float));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error8!");
 		}
 		if (1)
 		{
@@ -234,7 +234,7 @@ namespace dfusion
 			cudaBindTexture(&offset, &g_HdLinvTex, m_Hd_Linv.ptr(), &desc,
 				m_Hd_Linv.size() * sizeof(float));
 			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error!");
+				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error9!");
 		}
 	}
 

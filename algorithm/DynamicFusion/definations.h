@@ -13,6 +13,7 @@
 #include "dualquaternion\dual_quat_cu.hpp"
 namespace dfusion
 {
+	// kinect 2 is not suitable for fusion, give up it.
 //#define ENABLE_KINECT_20
 	//// use float2 or short2 or half2 as TsdfData
 	//// NOTE:

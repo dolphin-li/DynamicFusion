@@ -385,6 +385,20 @@ namespace dfusion
 		createVMap(m_kinect_intr(0), m_depth_curr_pyd[0], m_vmap_curr_pyd[0]);
 		createNMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
 
+		// debug
+		static int a = 0;
+		if (a++ <= 100)
+		{
+			std::vector<float4> tmp(KINECT_WIDTH*KINECT_HEIGHT);
+			m_vmap_curr_pyd[0].download(tmp.data(), KINECT_WIDTH*sizeof(float4));
+			ObjMesh mesh;
+			for (int i = 0; i < tmp.size(); i++)
+				mesh.vertex_list.push_back(ldp::Float3(tmp[i].x, tmp[i].y, tmp[i].z));
+			mesh.saveObj(("D:/" + std::to_string(a) + ".obj").c_str());
+			system("pause");
+		}
+		// end debug
+
 		//	create pyramid
 		for (int i = 1; i < RIGID_ALIGN_PYD_LEVELS; ++i)
 			pyrDown(m_depth_curr_pyd[i - 1], m_depth_curr_pyd[i]);

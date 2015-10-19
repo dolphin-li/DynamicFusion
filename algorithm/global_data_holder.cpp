@@ -5,7 +5,7 @@ using namespace ldp;
 
 void GlobalDataHolder::init()
 {
-	m_kinect.InitKinect(1);
+	m_kinect.InitKinect();
 	m_depth_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
 	m_depth_d.create(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
 
