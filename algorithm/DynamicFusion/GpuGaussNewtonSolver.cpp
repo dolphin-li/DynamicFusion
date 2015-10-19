@@ -47,6 +47,11 @@ namespace dfusion
 	{
 		if (pWarpField->getNumLevels() < 2)
 			throw std::exception("non-supported levels of warp field!");
+		if (pWarpField->getNumNodesInLevel(0) == 0)
+		{
+			printf("no warp nodes, return");
+			return;
+		}
 
 		bool nodesUpdated = false;
 
@@ -260,6 +265,16 @@ namespace dfusion
 		const MapArr& vmap_warp, const MapArr& nmap_warp,
 		bool factor_rigid_out)
 	{
+		if (m_pWarpField == nullptr)
+			throw std::exception("GpuGaussNewtonSolver::solve: null pointer");
+		if (m_pWarpField->getNumLevels() < 2)
+			throw std::exception("non-supported levels of warp field!");
+		if (m_pWarpField->getNumNodesInLevel(0) == 0)
+		{
+			printf("no warp nodes, return");
+			return;
+		}
+
 		m_vmap_warp = &vmap_warp;
 		m_nmap_warp = &nmap_warp;
 		m_vmap_live = &vmap_live;

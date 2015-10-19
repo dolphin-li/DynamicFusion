@@ -594,7 +594,6 @@ void DynamicFusionUI::on_sbVoxelsPerMeter_valueChanged(int v)
 	try
 	{
 		g_dataholder.m_dparam.voxels_per_meter = v;
-		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 	}
 	catch (std::exception e)
 	{
