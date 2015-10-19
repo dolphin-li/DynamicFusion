@@ -605,7 +605,6 @@ namespace dfusion
 			counter.vol_res = m_volume->getResolution();
 			counter.inv_search_radius_sqr = 1.f / (m_param.warp_radius_search_epsilon * 
 				m_param.warp_radius_search_epsilon);
-
 			counter.input_points = src.verts();
 			counter.out_points = m_meshPointsSorted.ptr();
 			counter.out_keys = m_meshPointsKey.ptr();

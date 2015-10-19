@@ -545,12 +545,11 @@ namespace dfusion
 						Tbx::Vec3 r, t;
 						get_twist(knnNodeId, r, t);
 						float4 nodeVw = get_nodesVw(knnNodeId);
-						Tbx::Point3 nodesV(convert(read_float3_4(nodeVw)));
-						float invNodesW = nodeVw.w;
+						Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw))-v);
+						// note: we store inv radius as vw.w, thus using * instead of / here
 						Tbx::Dual_quat_cu dqk_k;
 						dqk_k.from_twist(r, t);
-						// note: we store inv radius as vw.w, thus using * instead of / here
-						wk[k] = __expf(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+						wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
 						if (k == 0)
 							dqk_0 = dqk_k;
 						if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
