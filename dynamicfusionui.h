@@ -57,6 +57,9 @@ public:
 	void on_cbEnableNonRigid_clicked();
 	void on_dbBeta_valueChanged(double v);
 	void on_dbLambda_valueChanged(double v);
+
+	void on_gbAutoReset_clicked();
+	void on_sbAutoResetSeconds_valueChanged(int v);
 protected:
 	void updateUiFromParam();
 
@@ -69,6 +72,10 @@ protected:
 
 private:
 	Ui::DynamicFusionUIClass ui;
+
+	int m_fpsTimerId;
+	int m_autoResetTimerId;
+	double m_autoResetRemaingTime;
 
 	enum State
 	{

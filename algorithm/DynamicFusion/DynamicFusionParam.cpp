@@ -55,7 +55,7 @@ namespace dfusion
 
 		// debuging related
 		fusion_dumping_each_frame = false;
-		fusion_enable_nonRigidSolver = false;
+		fusion_enable_nonRigidSolver = true;
 		fusion_loading_mode = false;
 		fusion_dumping_max_frame = 800;
 
@@ -70,5 +70,8 @@ namespace dfusion
 		view_errorMap_range = 0.01;
 		view_activeNode_id = -1;
 		view_click_vert_xy[0] = view_click_vert_xy[1] = -1;
+
+		view_autoreset = false;
+		view_autoreset_seconds = 20;
 	}
 }

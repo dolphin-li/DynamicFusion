@@ -115,5 +115,8 @@ namespace dfusion
 		float view_errorMap_range; // in meters
 		int view_activeNode_id;
 		int view_click_vert_xy[2];
+
+		bool view_autoreset;
+		int view_autoreset_seconds;
 	};
 }

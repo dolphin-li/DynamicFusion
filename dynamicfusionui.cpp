@@ -18,7 +18,9 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	
 	g_dataholder.init();
 
-	startTimer(30);
+	m_fpsTimerId = startTimer(30);
+	m_autoResetTimerId = startTimer(g_dataholder.m_dparam.view_autoreset_seconds*1000);
+	m_autoResetRemaingTime = g_dataholder.m_dparam.view_autoreset_seconds;
 }
 
 DynamicFusionUI::~DynamicFusionUI()
@@ -28,60 +30,74 @@ DynamicFusionUI::~DynamicFusionUI()
 
 void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 {
-	gtime_t time_s = gtime_now();
-
-	try
+	if (m_fpsTimerId == ev->timerId())
 	{
-		//// process a new kinect frame.
-		switch (m_state)
+		gtime_t time_s = gtime_now();
+
+		try
 		{
-		case DynamicFusionUI::Loading:
-			frameLoading();
-			break;
-		case DynamicFusionUI::Saving:
-			frameLive();
-			frameSaving();
-			break;
-		case DynamicFusionUI::Live:
-			frameLive();
-			break;
-		default:
-			break;
+			//// process a new kinect frame.
+			switch (m_state)
+			{
+			case DynamicFusionUI::Loading:
+				frameLoading();
+				break;
+			case DynamicFusionUI::Saving:
+				frameLive();
+				frameSaving();
+				break;
+			case DynamicFusionUI::Live:
+				frameLive();
+				break;
+			default:
+				break;
+			}
+
+			//// visualize the depth via jet map, calculate it on GPU
+			//ui.widgetDepth->setImage_h(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT);
+			ui.widgetDepth->setImage_d(g_dataholder.m_depth_d);
+
+			//// process viewers
+			switch (m_state)
+			{
+			case DynamicFusionUI::ShowLoadedStaticVolume:
+				updateLoadedStaticVolume();
+				break;
+			case DynamicFusionUI::Live:
+			case DynamicFusionUI::Loading:
+			case DynamicFusionUI::Pause:
+				updateDynamicFusion();
+				break;
+			default:
+				break;
+			}
+		}
+		catch (std::exception e)
+		{
+			std::cout << e.what() << std::endl;
 		}
 
-		//// visualize the depth via jet map, calculate it on GPU
-		//ui.widgetDepth->setImage_h(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT);
-		ui.widgetDepth->setImage_d(g_dataholder.m_depth_d);
-
-		//// process viewers
-		switch (m_state)
+		gtime_t time_e = gtime_now();
+		double sec = gtime_seconds(time_s, time_e);
+		double fps = 1.0 / sec;
+		m_autoResetRemaingTime -= sec;
+		setWindowTitle(QString().sprintf("FPS:%.1f;  Nodes: %d %d %d %d; Reset: %.1f", fps,
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3),
+			m_autoResetRemaingTime
+			));
+	}// end if fps timer id
+	else if (m_autoResetTimerId == ev->timerId())
+	{
+		m_autoResetRemaingTime = g_dataholder.m_dparam.view_autoreset_seconds;
+		if (g_dataholder.m_dparam.view_autoreset)
 		{
-		case DynamicFusionUI::ShowLoadedStaticVolume:
-			updateLoadedStaticVolume();
-			break;
-		case DynamicFusionUI::Live:
-		case DynamicFusionUI::Loading:
-		case DynamicFusionUI::Pause:
-			updateDynamicFusion();
-			break;
-		default:
-			break;
+			g_dataholder.m_processor.reset();
+			printf("auto reset!");
 		}
 	}
-	catch (std::exception e)
-	{
-		std::cout << e.what() << std::endl;
-	}
-
-	gtime_t time_e = gtime_now();
-	double sec = gtime_seconds(time_s, time_e);
-	double fps = 1.0 / sec;
-	setWindowTitle(QString().sprintf("FPS:%.1f;  Nodes: %d %d %d %d", fps,
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
-		g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3)
-		));
 }
 
 void DynamicFusionUI::dragEnterEvent(QDragEnterEvent* ev)
@@ -160,6 +176,9 @@ void DynamicFusionUI::updateUiFromParam()
 	ui.cbEnableNonRigid->setChecked(g_dataholder.m_dparam.fusion_enable_nonRigidSolver);
 	ui.dbBeta->setValue(g_dataholder.m_dparam.warp_radius_search_beta);
 	ui.dbLambda->setValue(g_dataholder.m_dparam.fusion_lambda);
+
+	ui.gbAutoReset->setChecked(g_dataholder.m_dparam.view_autoreset);
+	ui.sbAutoResetSeconds->setValue(g_dataholder.m_dparam.view_autoreset_seconds);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -694,4 +713,17 @@ void DynamicFusionUI::on_dbBeta_valueChanged(double v)
 void DynamicFusionUI::on_dbLambda_valueChanged(double v)
 {
 	g_dataholder.m_dparam.fusion_lambda = v;
+}
+
+void DynamicFusionUI::on_gbAutoReset_clicked()
+{
+	g_dataholder.m_dparam.view_autoreset = ui.gbAutoReset->isChecked();
+}
+
+void DynamicFusionUI::on_sbAutoResetSeconds_valueChanged(int v)
+{
+	g_dataholder.m_dparam.view_autoreset_seconds = v;
+	killTimer(m_autoResetTimerId);
+	m_autoResetTimerId = startTimer(g_dataholder.m_dparam.view_autoreset_seconds * 1000);
+	m_autoResetRemaingTime = g_dataholder.m_dparam.view_autoreset_seconds;
 }
