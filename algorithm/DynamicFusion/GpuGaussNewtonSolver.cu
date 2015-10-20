@@ -517,7 +517,8 @@ namespace dfusion
 			return true;
 		}
 
-		__device__ __forceinline__ void operator () () const
+		template<int maxK>
+		__device__ __forceinline__ void calc_dataterm () const
 		{
 			const int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
 			const int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
@@ -537,26 +538,25 @@ namespace dfusion
 				const KnnIdx knn = vmapKnn(y, x);
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 				Tbx::Dual_quat_cu dqk_0;
-				float wk[KnnK];
-				for (int k = 0; k < KnnK; k++)
+				float wk[maxK];
+				for (int k = 0; k < maxK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
-					if (knnNodeId < nNodes)
-					{
-						Tbx::Vec3 r, t;
-						get_twist(knnNodeId, r, t);
-						float4 nodeVw = get_nodesVw(knnNodeId);
-						Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw))-v);
-						// note: we store inv radius as vw.w, thus using * instead of / here
-						Tbx::Dual_quat_cu dqk_k;
-						dqk_k.from_twist(r, t);
-						wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
-						if (k == 0)
-							dqk_0 = dqk_k;
-						if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
-							wk[k] = -wk[k];
-						dq = dq + dqk_k * wk[k];
-					}
+					
+					Tbx::Vec3 r, t;
+					get_twist(knnNodeId, r, t);
+					float4 nodeVw = get_nodesVw(knnNodeId);
+					Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw))-v);
+					// note: we store inv radius as vw.w, thus using * instead of / here
+					Tbx::Dual_quat_cu dqk_k;
+					dqk_k.from_twist(r, t);
+					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
+					if (k == 0)
+						dqk_0 = dqk_k;
+					if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
+						wk[k] = -wk[k];
+					dq = dq + dqk_k * wk[k];
+					
 				}
 
 				Tbx::Dual_quat_cu dq_bar = dq;
@@ -573,110 +573,110 @@ namespace dfusion
 				// paitial_f_partial_T
 				const Tbx::Transfo p_f_p_T = compute_p_f_p_T(n, v, vl, dq);
 
-				for (int knnK = 0; knnK < KnnK; knnK++)
+				for (int knnK = 0; knnK < maxK; knnK++)
 				{
 					float p_f_p_alpha[VarPerNode];
 					int knnNodeId = knn_k(knn, knnK);
 					float wk_k = wk[knnK] * inv_norm_dq_bar * 2;
-					if (knnNodeId < nNodes)
+					
+					//// comput partial_T_partial_alphak, hard code here.
+					Tbx::Dual_quat_cu p_qk_p_alpha;
+					Tbx::Transfo p_T_p_alphak;
+					Tbx::Vec3 t, r;
+					float b, c;
+					Tbx::Quat_cu q1;
+					get_twist(knnNodeId, r, t);
 					{
-						//// comput partial_T_partial_alphak, hard code here.
-						Tbx::Dual_quat_cu p_qk_p_alpha;
-						Tbx::Transfo p_T_p_alphak;
-						Tbx::Vec3 t, r;
-						float b, c;
-						Tbx::Quat_cu q1;
-						get_twist(knnNodeId, r, t);
-						{
-							float n = r.norm();
-							float sin_n, cos_n;
-							sincos(n, &sin_n, &cos_n);
-							b = n > Tbx::Dual_quat_cu::epsilon() ? sin_n / n : 1;
-							c = n > Tbx::Dual_quat_cu::epsilon() ? (cos_n - b) / (n*n) : 0;
-							q1 = Tbx::Quat_cu(cos_n*0.5f, r.x*b*0.5f, r.y*b*0.5f, r.z*b*0.5f);
-						}
+						float n = r.norm();
+						float sin_n, cos_n;
+						sincos(n, &sin_n, &cos_n);
+						b = n > Tbx::Dual_quat_cu::epsilon() ? sin_n / n : 1;
+						c = n > Tbx::Dual_quat_cu::epsilon() ? (cos_n - b) / (n*n) : 0;
+						q1 = Tbx::Quat_cu(cos_n*0.5f, r.x*b*0.5f, r.y*b*0.5f, r.z*b*0.5f);
+					}
 
-						// alpha0
-						p_qk_p_alpha[0] = -r[0] * b;
-						p_qk_p_alpha[1] = b + r[0] * r[0] * c;
-						p_qk_p_alpha[2] = r[0] * r[1] * c;
-						p_qk_p_alpha[3] = r[0] * r[2] * c;
-						p_qk_p_alpha = Tbx::Dual_quat_cu::dual_quat_from(p_qk_p_alpha.get_non_dual_part(), t);
-						p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
-							inv_norm_dq_bar, wk_k);
-						p_f_p_alpha[0] = trace_AtB(p_f_p_T, p_T_p_alphak);
+					// alpha0
+					p_qk_p_alpha[0] = -r[0] * b;
+					p_qk_p_alpha[1] = b + r[0] * r[0] * c;
+					p_qk_p_alpha[2] = r[0] * r[1] * c;
+					p_qk_p_alpha[3] = r[0] * r[2] * c;
+					p_qk_p_alpha = Tbx::Dual_quat_cu::dual_quat_from(p_qk_p_alpha.get_non_dual_part(), t);
+					p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
+						inv_norm_dq_bar, wk_k);
+					p_f_p_alpha[0] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
-						// alpha1
-						p_qk_p_alpha[0] = -r[1] * b;
-						p_qk_p_alpha[1] = r[1] * r[0] * c;
-						p_qk_p_alpha[2] = b + r[1] * r[1] * c;
-						p_qk_p_alpha[3] = r[1] * r[2] * c;
-						p_qk_p_alpha = Tbx::Dual_quat_cu::dual_quat_from(p_qk_p_alpha.get_non_dual_part(), t);
-						p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
-							inv_norm_dq_bar, wk_k);
-						p_f_p_alpha[1] = trace_AtB(p_f_p_T, p_T_p_alphak);
+					// alpha1
+					p_qk_p_alpha[0] = -r[1] * b;
+					p_qk_p_alpha[1] = r[1] * r[0] * c;
+					p_qk_p_alpha[2] = b + r[1] * r[1] * c;
+					p_qk_p_alpha[3] = r[1] * r[2] * c;
+					p_qk_p_alpha = Tbx::Dual_quat_cu::dual_quat_from(p_qk_p_alpha.get_non_dual_part(), t);
+					p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
+						inv_norm_dq_bar, wk_k);
+					p_f_p_alpha[1] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
-						// alpha2
-						p_qk_p_alpha[0] = -r[2] * b;
-						p_qk_p_alpha[1] = r[2] * r[0] * c;
-						p_qk_p_alpha[2] = r[2] * r[1] * c;
-						p_qk_p_alpha[3] = b + r[2] * r[2] * c;
-						p_qk_p_alpha = Tbx::Dual_quat_cu::dual_quat_from(p_qk_p_alpha.get_non_dual_part(), t);
-						p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
-							inv_norm_dq_bar, wk_k);
-						p_f_p_alpha[2] = trace_AtB(p_f_p_T, p_T_p_alphak);
+					// alpha2
+					p_qk_p_alpha[0] = -r[2] * b;
+					p_qk_p_alpha[1] = r[2] * r[0] * c;
+					p_qk_p_alpha[2] = r[2] * r[1] * c;
+					p_qk_p_alpha[3] = b + r[2] * r[2] * c;
+					p_qk_p_alpha = Tbx::Dual_quat_cu::dual_quat_from(p_qk_p_alpha.get_non_dual_part(), t);
+					p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
+						inv_norm_dq_bar, wk_k);
+					p_f_p_alpha[2] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
-						// alpha3
-						p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0),
-							Tbx::Quat_cu(-q1[1], q1[0], -q1[3], q1[2]));
-						p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
-							inv_norm_dq_bar, wk_k);
-						p_f_p_alpha[3] = trace_AtB(p_f_p_T, p_T_p_alphak);
+					// alpha3
+					p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0),
+						Tbx::Quat_cu(-q1[1], q1[0], -q1[3], q1[2]));
+					p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
+						inv_norm_dq_bar, wk_k);
+					p_f_p_alpha[3] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
-						// alpha4
-						p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0),
-							Tbx::Quat_cu(-q1[2], q1[3], q1[0], -q1[1]));
-						p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
-							inv_norm_dq_bar, wk_k);
-						p_f_p_alpha[4] = trace_AtB(p_f_p_T, p_T_p_alphak);
+					// alpha4
+					p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0),
+						Tbx::Quat_cu(-q1[2], q1[3], q1[0], -q1[1]));
+					p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
+						inv_norm_dq_bar, wk_k);
+					p_f_p_alpha[4] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
-						// alpha5
-						p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0),
-							Tbx::Quat_cu(-q1[3], -q1[2], q1[1], q1[0]));
-						p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
-							inv_norm_dq_bar, wk_k);
-						p_f_p_alpha[5] = trace_AtB(p_f_p_T, p_T_p_alphak);
+					// alpha5
+					p_qk_p_alpha = Tbx::Dual_quat_cu(Tbx::Quat_cu(0, 0, 0, 0),
+						Tbx::Quat_cu(-q1[3], -q1[2], q1[1], q1[0]));
+					p_T_p_alphak = p_T_p_alphak_func(p_qk_p_alpha, dq_bar, dq,
+						inv_norm_dq_bar, wk_k);
+					p_f_p_alpha[5] = trace_AtB(p_f_p_T, p_T_p_alphak);
 
-						//// reduce--------------------------------------------------
-						int shift = knnNodeId * VarPerNode2;
-						int shift_g = knnNodeId * VarPerNode;
-						for (int i = 0; i < VarPerNode; ++i)
-						{
+					//// reduce--------------------------------------------------
+					int shift = knnNodeId * VarPerNode2;
+					int shift_g = knnNodeId * VarPerNode;
+					for (int i = 0; i < VarPerNode; ++i)
+					{
 #pragma unroll
-							for (int j = 0; j <= i; ++j)
-							{
-								atomicAdd(&Hd_[shift + j], p_f_p_alpha[i] * p_f_p_alpha[j]);
+						for (int j = 0; j <= i; ++j)
+						{
+							atomicAdd(&Hd_[shift + j], p_f_p_alpha[i] * p_f_p_alpha[j]);
 #ifdef ENABLE_GPU_DUMP_DEBUG
 // debug
 if (knnNodeId == 390 && i == 5 && j == 1
-	&& debug_buffer_pixel_sum2 && debug_buffer_pixel_val
-	)
+&& debug_buffer_pixel_sum2 && debug_buffer_pixel_val
+)
 {
-	for (int k = 0; k < VarPerNode; k++)
-		debug_buffer_pixel_val[(y*imgWidth + x)*VarPerNode + k] =
-		p_f_p_alpha[k];
-	debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
+for (int k = 0; k < VarPerNode; k++)
+	debug_buffer_pixel_val[(y*imgWidth + x)*VarPerNode + k] =
+	p_f_p_alpha[k];
+debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 }
 #endif
-							}
-							atomicAdd(&g_[shift_g + i], p_f_p_alpha[i] * f);
-							shift += VarPerNode;
-						}// end for i
-					}// end if knnNodeId < nNodes
+						}
+						atomicAdd(&g_[shift_g + i], p_f_p_alpha[i] * f);
+						shift += VarPerNode;
+					}// end for i
+					
 				}// end for knnK
 			}// end if found corr
 		}// end function ()
 
+		template<int maxK>
 		__device__ __forceinline__ void calcTotalEnergy()const
 		{
 			const int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
@@ -695,27 +695,26 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				const KnnIdx knn = vmapKnn(y, x);
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 				Tbx::Dual_quat_cu dqk_0;
-				float wk[KnnK];
-				for (int k = 0; k < KnnK; k++)
+				float wk[maxK];
+				for (int k = 0; k < maxK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
-					if (knnNodeId < nNodes)
-					{
-						Tbx::Vec3 r, t;
-						get_twist(knnNodeId, r, t);
-						float4 nodeVw = get_nodesVw(knnNodeId);
-						Tbx::Point3 nodesV(convert(read_float3_4(nodeVw)));
-						float invNodesW = nodeVw.w;
-						Tbx::Dual_quat_cu dqk_k;
-						dqk_k.from_twist(r, t);
-						// note: we store inv radius as vw.w, thus using * instead of / here
-						wk[k] = __expf(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
-						if (k == 0)
-							dqk_0 = dqk_k;
-						if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
-							wk[k] = -wk[k];
-						dq = dq + dqk_k * wk[k];
-					}
+					
+					Tbx::Vec3 r, t;
+					get_twist(knnNodeId, r, t);
+					float4 nodeVw = get_nodesVw(knnNodeId);
+					Tbx::Point3 nodesV(convert(read_float3_4(nodeVw)));
+					float invNodesW = nodeVw.w;
+					Tbx::Dual_quat_cu dqk_k;
+					dqk_k.from_twist(r, t);
+					// note: we store inv radius as vw.w, thus using * instead of / here
+					wk[k] = __expf(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
+					if (k == 0)
+						dqk_0 = dqk_k;
+					if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
+						wk[k] = -wk[k];
+					dq = dq + dqk_k * wk[k];
+					
 				}
 
 				float norm_dq = dq.get_non_dual_part().norm();
@@ -731,9 +730,10 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		}
 	};
 
+	template<int maxK>
 	__global__ void dataTermCombinedKernel(const DataTermCombined cs)
 	{
-		cs();
+		cs.calc_dataterm<maxK>();
 	}
 
 	void GpuGaussNewtonSolver::calcDataTerm()
@@ -773,7 +773,24 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		dim3 grid(1, 1, 1);
 		grid.x = divUp(cs.imgWidth, block.x);
 		grid.y = divUp(cs.imgHeight, block.y);
-		dataTermCombinedKernel << <grid, block >> >(cs);
+		int maxK = min(WarpField::KnnK, m_pWarpField->getNumNodesInLevel(0));
+		switch (maxK)
+		{
+		case 1:
+			dataTermCombinedKernel<1> << <grid, block >> >(cs);
+			break;
+		case 2:
+			dataTermCombinedKernel<2> << <grid, block >> >(cs);
+			break;
+		case 3:
+			dataTermCombinedKernel<3> << <grid, block >> >(cs);
+			break;
+		case 4:
+			dataTermCombinedKernel<4> << <grid, block >> >(cs);
+			break;
+		default:
+			throw std::exception("non supported KnnK in data term calc!");
+		}
 		cudaSafeCall(cudaGetLastError(), "dataTermCombinedKernel");
 
 		// debugging
@@ -796,9 +813,10 @@ if (knnNodeId == 390 && i == 5 && j == 1
 #endif
 	}
 
+	template<int maxK>
 	__global__ void calcDataTermTotalEnergyKernel(const DataTermCombined cs)
 	{
-		cs.calcTotalEnergy();
+		cs.calcTotalEnergy<maxK>();
 	}
 
 #pragma endregion
@@ -1886,7 +1904,24 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			dim3 grid(1, 1, 1);
 			grid.x = divUp(cs.imgWidth, block.x);
 			grid.y = divUp(cs.imgHeight, block.y);
-			calcDataTermTotalEnergyKernel << <grid, block >> >(cs);
+			int maxK = min(WarpField::KnnK, m_pWarpField->getNumNodesInLevel(0));
+			switch (maxK)
+			{
+			case 1:
+				calcDataTermTotalEnergyKernel<1> << <grid, block >> >(cs);
+				break;
+			case 2:
+				calcDataTermTotalEnergyKernel<2> << <grid, block >> >(cs);
+				break;
+			case 3:
+				calcDataTermTotalEnergyKernel<3> << <grid, block >> >(cs);
+				break;
+			case 4:
+				calcDataTermTotalEnergyKernel<4> << <grid, block >> >(cs);
+				break;
+			default:
+				throw std::exception("non supported KnnK in data term energy!");
+			}
 			cudaSafeCall(cudaGetLastError(), "calcDataTermTotalEnergyKernel");
 		}
 
