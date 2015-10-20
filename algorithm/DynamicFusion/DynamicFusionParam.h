@@ -40,6 +40,8 @@ namespace dfusion
 		// param \dw in the paper for each node
 		// the larger, the less smoothness and more rigid
 		float warp_param_dw;
+		// we fusion, we expect more smooth output
+		float warp_param_dw_for_fusion;
 
 		// scale = \dw_{level+1} / \dw_{level}
 		// the larger, the more rigid

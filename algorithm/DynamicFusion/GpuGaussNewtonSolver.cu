@@ -539,7 +539,22 @@ namespace dfusion
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 				Tbx::Dual_quat_cu dqk_0;
 				float wk[maxK];
-				for (int k = 0; k < maxK; k++)
+
+				// dqk_0
+				{
+					Tbx::Vec3 r, t;
+					get_twist(knn_k(knn, 0), r, t);
+					float4 nodeVw = get_nodesVw(knn_k(knn, 0));
+					Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw)) - v);
+					dqk_0.from_twist(r, t);
+					float expIn = nodesV.dot(nodesV) * nodeVw.w * nodeVw.w;
+					wk[0] = __expf(-0.5f * expIn);
+					dq = dq + dqk_0 * wk[0];
+				}
+
+				// other dqk_k
+#pragma unroll
+				for (int k = 1; k < maxK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
 					
@@ -547,16 +562,11 @@ namespace dfusion
 					get_twist(knnNodeId, r, t);
 					float4 nodeVw = get_nodesVw(knnNodeId);
 					Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw))-v);
-					// note: we store inv radius as vw.w, thus using * instead of / here
 					Tbx::Dual_quat_cu dqk_k;
 					dqk_k.from_twist(r, t);
-					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
-					if (k == 0)
-						dqk_0 = dqk_k;
-					if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
-						wk[k] = -wk[k];
-					dq = dq + dqk_k * wk[k];
-					
+					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
+						* sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
+					dq = dq + dqk_k * wk[k];		
 				}
 
 				Tbx::Dual_quat_cu dq_bar = dq;

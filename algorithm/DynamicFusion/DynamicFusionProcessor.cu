@@ -12,7 +12,7 @@ namespace dfusion
 	template<int maxK>
 	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
-		int x, int y, int z, float3 origion, float voxelSize,
+		int x, int y, int z, float3 origion, float voxelSize, float inv_dw_for_fusion2,
 		float nodeRadius, float& fusion_weight)
 	{
 		Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
@@ -33,7 +33,7 @@ namespace dfusion
 		tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 		tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
 		float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
-		float w = __expf(-dist2 * 0.5f * (vw.w*vw.w));
+		float w = __expf(-dist2 * 0.5f * inv_dw_for_fusion2);
 		dq0 = pack_dual_quat(q0, q1);
 		dq_blend = dq_blend + dq0*w;
 		dq_avg = dq_avg + dq0;
@@ -53,7 +53,7 @@ namespace dfusion
 
 			// note: we store 1.f/radius in vw.w
 			float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
-			float w = __expf(-dist2 * 0.5f * (vw.w*vw.w)) * 
+			float w = __expf(-dist2 * 0.5f * inv_dw_for_fusion2) *
 				sign(dq0.get_non_dual_part().dot(dq.get_non_dual_part()));
 			dq_blend = dq_blend + dq*w;
 			dq_avg = dq_avg + dq;
@@ -69,7 +69,7 @@ namespace dfusion
 	template<>
 	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel<0>(
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
-		int x, int y, int z, float3 origion, float voxelSize,
+		int x, int y, int z, float3 origion, float voxelSize, float inv_dw_for_fusion2,
 		float nodeRadius, float& fusion_weight)
 	{
 		fusion_weight = 1;
@@ -91,6 +91,7 @@ namespace dfusion
 		float tranc_dist;
 		float max_weight;
 		Intr intr;
+		float inv_dw_for_fusion2;
 
 		cudaTextureObject_t knnTex;
 		cudaTextureObject_t nodesDqVwTex;
@@ -102,7 +103,7 @@ namespace dfusion
 		{
 			float fusion_weight = 0;
 			Tbx::Dual_quat_cu dq = calc_dual_quat_blend_on_voxel<maxK>(
-				knnTex, nodesDqVwTex, x, y, z, origion, voxel_size, 
+				knnTex, nodesDqVwTex, x, y, z, origion, voxel_size, inv_dw_for_fusion2,
 				nodeRadius, fusion_weight);
 
 			float3 cxyz = convert(Rv2c.rotate(dq.transform(Tbx::Point3(x*voxel_size + origion.x,
@@ -177,6 +178,7 @@ namespace dfusion
 		fs.tranc_dist = m_volume->getTsdfTruncDist();
 		fs.max_weight = m_param.fusion_max_weight;
 		fs.intr = m_kinect_intr;
+		fs.inv_dw_for_fusion2 = 1.f / (m_param.warp_param_dw_for_fusion*m_param.warp_param_dw_for_fusion);
 
 		fs.knnTex = m_warpField->bindKnnFieldTexture();
 		fs.nodesDqVwTex = m_warpField->bindNodesDqVwTexture();	
