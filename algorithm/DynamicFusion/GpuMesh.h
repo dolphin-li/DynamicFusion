@@ -62,7 +62,7 @@ namespace dfusion
 			GpuMesh* canoMesh = nullptr,
 			const float3* canoPosActive = nullptr,
 			const ushort4* knnIdxActiveView = nullptr,
-			const Intr* intr = nullptr, bool warp_nodes = true);
+			const Intr* intr = nullptr, bool warp_nodes = true, bool no_rigid = false);
 		void renderToDepth(const Camera& camera, DepthMap& img);
 
 		// we assume self is warped by the warpField,

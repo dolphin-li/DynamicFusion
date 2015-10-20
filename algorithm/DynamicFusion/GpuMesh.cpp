@@ -653,7 +653,8 @@ namespace dfusion
 		const float3* canoPosActive,
 		const WarpField::KnnIdx* knnIdxActiveView,
 		const Intr* intr, 
-		bool warp_nodes)
+		bool warp_nodes,
+		bool norigid)
 	{
 		if (!wglMakeCurrent(g_hdc, g_glrc))
 			throw std::exception("wglMakeCurrent error");
@@ -701,6 +702,12 @@ namespace dfusion
 		bool showColorVert = warpField && param.view_show_nodes && canoMesh;
 		if (showColorVert)
 			showColorVert = (warpField->getActiveVisualizeNodeId() >= 0);
+
+		if (norigid && warpField)
+		{
+			Tbx::Transfo T = warpField->get_rigidTransform().fast_invert().transpose();
+			glMultMatrixf(&T[0]);
+		}
 
 		// draw mesh vertices
 		if (param.view_show_mesh)

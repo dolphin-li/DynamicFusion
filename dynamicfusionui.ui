@@ -378,6 +378,19 @@
        <string>active node</string>
       </property>
      </widget>
+     <widget class="QCheckBox" name="cbNoRigid">
+      <property name="geometry">
+       <rect>
+        <x>130</x>
+        <y>20</y>
+        <width>81</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>no rigid</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QGroupBox" name="groupBox_7">
      <property name="geometry">

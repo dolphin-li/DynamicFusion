@@ -359,6 +359,11 @@ namespace dfusion
 			}
 		}// end for iter
 
+		if (factor_rigid_out)
+		{
+
+		}
+
 		// finally, write results back
 		m_pWarpField->update_nodes_via_twist(m_twist);
 	}

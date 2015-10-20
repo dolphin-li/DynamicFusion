@@ -42,6 +42,7 @@ public:
 	void on_rbResZ512_clicked();
 	void on_sbVoxelsPerMeter_valueChanged(int v);
 
+	void on_cbNoRigid_clicked();
 	void on_cbShowMesh_clicked();
 	void on_cbShowNodes_clicked();
 	void on_cbShowGraph_clicked();

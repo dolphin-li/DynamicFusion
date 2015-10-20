@@ -159,6 +159,7 @@ void DynamicFusionUI::updateUiFromParam()
 		ui.rbResZ512->setChecked(true);
 	ui.sbVoxelsPerMeter->setValue(g_dataholder.m_dparam.voxels_per_meter);
 
+	ui.cbNoRigid->setChecked(g_dataholder.m_dparam.view_no_rigid);
 	ui.cbShowMesh->setChecked(g_dataholder.m_dparam.view_show_mesh);
 	ui.cbShowNodes->setChecked(g_dataholder.m_dparam.view_show_nodes);
 	ui.cbShowGraph->setChecked(g_dataholder.m_dparam.view_show_graph);
@@ -596,6 +597,19 @@ void DynamicFusionUI::on_sbVoxelsPerMeter_valueChanged(int v)
 	try
 	{
 		g_dataholder.m_dparam.voxels_per_meter = v;
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+
+void DynamicFusionUI::on_cbNoRigid_clicked()
+{
+	try
+	{
+		g_dataholder.m_dparam.view_no_rigid = ui.cbNoRigid->isChecked();
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 	}
 	catch (std::exception e)
 	{

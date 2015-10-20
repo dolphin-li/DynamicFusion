@@ -109,6 +109,7 @@ namespace dfusion
 		/** *****************************************************
 		* visualization related
 		* ******************************************************/
+		bool view_no_rigid;
 		bool view_show_mesh;
 		bool view_show_nodes;
 		bool view_show_graph;
