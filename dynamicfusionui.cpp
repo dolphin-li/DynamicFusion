@@ -301,7 +301,7 @@ void DynamicFusionUI::updateDynamicFusion()
 			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
 			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
 		img.save(name);
-
+#if 0
 		// error map
 		img = QImage(g_dataholder.m_errorMap_shading.cols(),
 			g_dataholder.m_errorMap_shading.rows(), QImage::Format::Format_ARGB32);
@@ -321,6 +321,7 @@ void DynamicFusionUI::updateDynamicFusion()
 			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
 			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
 		img.save(name1);
+#endif
 	}
 }
 

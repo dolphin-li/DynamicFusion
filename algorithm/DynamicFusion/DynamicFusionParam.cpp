@@ -24,7 +24,7 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		warp_radius_search_epsilon = 0.025;
-		warp_param_dw = warp_radius_search_epsilon * 1.733; // sqrt(3)/2
+		warp_param_dw = warp_radius_search_epsilon * 1.733 * 0.25f; // sqrt(3)/2
 		warp_radius_search_beta = 2;
 		warp_param_dw_lvup_scale = 0.05f;
 		warp_point_step_before_update_node = 1;
@@ -36,7 +36,7 @@ namespace dfusion
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 128;
-		fusion_lambda = 2000;
+		fusion_lambda = 160*160;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_rigid_distThre = 0.1f; // meter

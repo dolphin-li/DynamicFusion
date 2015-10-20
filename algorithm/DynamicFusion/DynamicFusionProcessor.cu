@@ -4,9 +4,12 @@
 #include "device_utils.h"
 namespace dfusion
 {
-//// could not understand it in sec. 3.2 of the paper; just ignore it currently.
-#define ENABLE_ADAPTIVE_FUSION_WEIGHT
+	__device__ __forceinline__ int sign(float a)
+	{
+		return (a > 0) - (a < 0);
+	}
 
+	template<int maxK>
 	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
 		int x, int y, int z, float3 origion, float voxelSize,
@@ -14,64 +17,68 @@ namespace dfusion
 	{
 		Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 		fusion_weight = 0.f;
-		int numK = 0;
 
+		// 
 		float3 p = make_float3(x*voxelSize, y*voxelSize, z*voxelSize) + origion;
 		WarpField::KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
 		tex3D(&knnIdx, knnTex, x, y, z);
-		if (knnIdx.x >= WarpField::MaxNodeNum)
-		{
-			dq_blend = Tbx::Dual_quat_cu::identity();
-			fusion_weight = 0.1f;
-		}
-		else
-		{
-			Tbx::Dual_quat_cu dq0, dq_avg;
+
+		// the first quat
+		float4 q0, q1, vw;
+		int idk, nn3;
+		Tbx::Dual_quat_cu dq0, dq_avg;
+		idk = WarpField::get_by_arrayid(knnIdx, 0);
+		nn3 = idk * 3;
+		tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
+		tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
+		tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
+		float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
+		float w = __expf(-dist2 * 0.5f * (vw.w*vw.w));
+		dq0 = pack_dual_quat(q0, q1);
+		dq_blend = dq_blend + dq0*w;
+		dq_avg = dq_avg + dq0;
+		fusion_weight += sqrt(dist2);
+
+		// the other quats
 #pragma unroll
-			for (int k = 0; k < WarpField::KnnK; k++)
-			{
-				int idk = WarpField::get_by_arrayid(knnIdx, k);
-				if (idk < WarpField::MaxNodeNum)
-				{
-					WarpField::IdxType nn3 = idk * 3;
-					float4 q0, q1, vw;
-					tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
-					tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
-					tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
+		for (int k = 1; k < maxK; k++)
+		{
+			idk = WarpField::get_by_arrayid(knnIdx, k);
+			
+			nn3 = idk * 3;
+			tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
+			tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
+			tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
+			Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
 
-					// note: we store 1.f/radius in vw.w
-					float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
-					float w = __expf(-dist2 * 2 * (vw.w*vw.w));
-					Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
-					if (k == 0)
-						dq0 = dq;
-					else
-					{
-						if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
-							w = -w;
-					}
-					dq_blend = dq_blend + dq*w;
-					dq_avg = dq_avg + dq;
-					fusion_weight += sqrt(dist2);
-					numK++;
-				}
-			}
-			float norm = dq_blend.get_non_dual_part().norm();
-			if (norm < Tbx::Dual_quat_cu::epsilon())
-			{
-				dq_avg.normalize();
-				dq_blend = dq_avg;
-			}
-			else
-				dq_blend = dq_blend * (1.f/norm);
-			fusion_weight = float(numK) * nodeRadius / fusion_weight;
+			// note: we store 1.f/radius in vw.w
+			float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
+			float w = __expf(-dist2 * 0.5f * (vw.w*vw.w)) * 
+				sign(dq0.get_non_dual_part().dot(dq.get_non_dual_part()));
+			dq_blend = dq_blend + dq*w;
+			dq_avg = dq_avg + dq;
+			fusion_weight += sqrt(dist2);
 		}
-
+		float norm = dq_blend.get_non_dual_part().norm();
+		float norm1 = dq_avg.get_non_dual_part().norm();
+		dq_blend = (norm < Tbx::Dual_quat_cu::epsilon()) ? dq_avg * (1.f / norm1) : dq_blend * (1.f / norm);
+		fusion_weight = float(maxK) * nodeRadius / fusion_weight;
 		return dq_blend;
+	}
+
+	template<>
+	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel<0>(
+		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
+		int x, int y, int z, float3 origion, float voxelSize,
+		float nodeRadius, float& fusion_weight)
+	{
+		fusion_weight = 1;
+		return Tbx::Dual_quat_cu::identity();
 	}
 
 
 	texture<depthtype, cudaTextureType2D, cudaReadModeElementType> g_depth_tex;
+
 	struct Fusioner
 	{
 		PtrStepSz<depthtype> depth;
@@ -90,10 +97,11 @@ namespace dfusion
 		Tbx::Quat_cu Rv2c;
 		Tbx::Point3 tv2c;
 
-		__device__ __forceinline__ void operator()(int x, int y, int z)
+		template<int maxK>
+		__device__ __forceinline__ void fusion(int x, int y, int z)
 		{
 			float fusion_weight = 0;
-			Tbx::Dual_quat_cu dq = calc_dual_quat_blend_on_voxel(
+			Tbx::Dual_quat_cu dq = calc_dual_quat_blend_on_voxel<maxK>(
 				knnTex, nodesDqVwTex, x, y, z, origion, voxel_size, 
 				nodeRadius, fusion_weight);
 
@@ -124,6 +132,7 @@ namespace dfusion
 		}
 	};
 
+	template<int maxK>
 	__global__ void tsdf23( Fusioner fs)
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
@@ -139,7 +148,7 @@ namespace dfusion
 			if (z >= fs.volume_resolution.z)
 				break;
 
-			fs(x, y, z);
+			fs.fusion<maxK>(x, y, z);
 		}// end for block_iter
 	}      // __global__
 
@@ -175,7 +184,28 @@ namespace dfusion
 		fs.Rv2c = tr;
 		fs.tv2c = Tbx::Point3(tr.get_translation());
 
-		tsdf23 << <grid, block >> >(fs);
+		int maxK = min(WarpField::KnnK, m_warpField->getNumNodesInLevel(0));
+
+		switch (maxK)
+		{
+		case 0:
+			tsdf23<0> << <grid, block >> >(fs);
+			break;
+		case 1:
+			tsdf23<1> << <grid, block >> >(fs);
+			break;
+		case 2:
+			tsdf23<2> << <grid, block >> >(fs);
+			break;
+		case 3:
+			tsdf23<3> << <grid, block >> >(fs);
+			break;
+		case 4:
+			tsdf23<4> << <grid, block >> >(fs);
+			break;
+		default:
+			throw std::exception("non supported KnnK!");
+		}
 
 		m_warpField->unBindNodesDqVwTexture(fs.nodesDqVwTex);
 		m_warpField->unBindKnnFieldTexture(fs.knnTex);

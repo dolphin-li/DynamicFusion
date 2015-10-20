@@ -306,7 +306,7 @@ namespace dfusion
 				{
 					float4 nearestVw = make_float4(0, 0, 0, 1);
 					tex1Dfetch(&nearestVw, nodesDqVwTex, get_by_arrayid(knnIdx, k) * 3 + 2); 
-					float w = __expf(-norm2(p - GpuMesh::from_point(nearestVw))*2*nearestVw.w*nearestVw.w);
+					float w = __expf(-norm2(p - GpuMesh::from_point(nearestVw))*0.5f*nearestVw.w*nearestVw.w);
 					color = GpuMesh::to_point(make_float3(w, 0, 0));
 				}
 

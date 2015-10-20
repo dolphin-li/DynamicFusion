@@ -284,7 +284,7 @@ namespace dfusion
 		float* g_;
 
 		Intr intr;
-		Tbx::Transfo Tlw;
+		Tbx::Transfo Tlw_inv;
 
 		int imgWidth;
 		int imgHeight;
@@ -335,8 +335,8 @@ namespace dfusion
 			//Tbx::Transfo nvt = outer_product(n, v);
 			//Tbx::Transfo vlnt = outer_product(n, vl).transpose();
 			//Tbx::Transfo p_f_p_T = T*(nvt + nvt.transpose()) - vlnt;
-			Tbx::Vec3 Tn = Tlw*dq.rotate(n);
-			Tbx::Point3 Tv(Tlw*dq.transform(v) - vl);
+			Tbx::Vec3 Tn = dq.rotate(n);
+			Tbx::Point3 Tv(dq.transform(v) - vl);
 			return Tbx::Transfo(
 				Tn.x*v.x + n.x*Tv.x, Tn.x*v.y + n.y*Tv.x, Tn.x*v.z + n.z*Tv.x, Tn.x,
 				Tn.y*v.x + n.x*Tv.y, Tn.y*v.y + n.y*Tv.y, Tn.y*v.z + n.z*Tv.y, Tn.y,
@@ -481,7 +481,6 @@ namespace dfusion
 			p_T_p_alphak[7] += -dq[1] * p_dqi_p_alphak;
 			p_T_p_alphak[11] += dq[0] * p_dqi_p_alphak;
 
-			p_T_p_alphak = Tlw * p_T_p_alphak;
 			return p_T_p_alphak;
 		}
 
@@ -528,6 +527,8 @@ namespace dfusion
 			if (x < imgWidth && y < imgHeight)
 				found_coresp = search(x, y, vl);
 
+			vl = Tlw_inv * vl;
+
 			if (found_coresp)
 			{
 				Tbx::Point3 v(convert(read_float3_4(vmap_cano(y, x))));
@@ -567,7 +568,7 @@ namespace dfusion
 				dq = dq * inv_norm_dq_bar; // normalize
 
 				// the grad energy f
-				const float f = data_term_penalty((Tlw*dq.rotate(n)).dot(Tlw*dq.transform(v) - vl));
+				const float f = data_term_penalty(dq.rotate(n).dot(dq.transform(v) - vl));
 
 				// paitial_f_partial_T
 				const Tbx::Transfo p_f_p_T = compute_p_f_p_T(n, v, vl, dq);
@@ -724,7 +725,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 				dq = dq * inv_norm_dq; // normalize
 
 				// the grad energy f
-				const float f = data_term_energy((Tlw*dq.rotate(n)).dot(Tlw*dq.transform(v) - vl));
+				const float f = data_term_energy((dq.rotate(n)).dot(dq.transform(v) - Tlw_inv*vl));
 				atomicAdd(&g_totalEnergy, f);
 			}//end if find corr
 		}
@@ -753,7 +754,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 		cs.vmap_warp = *m_vmap_warp;
 		cs.vmapKnn = m_vmapKnn;
 		cs.nNodes = m_numNodes;
-		cs.Tlw = m_pWarpField->get_rigidTransform();
+		cs.Tlw_inv = m_pWarpField->get_rigidTransform().fast_invert();
 		cs.psi_data = m_param->fusion_psi_data;
 
 #ifdef ENABLE_GPU_DUMP_DEBUG
@@ -1873,7 +1874,7 @@ if (knnNodeId == 390 && i == 5 && j == 1
 			cs.vmap_warp = *m_vmap_warp;
 			cs.vmapKnn = m_vmapKnn;
 			cs.nNodes = m_numNodes;
-			cs.Tlw = m_pWarpField->get_rigidTransform();
+			cs.Tlw_inv = m_pWarpField->get_rigidTransform().fast_invert();
 			cs.psi_data = m_param->fusion_psi_data;
 
 			int zero_mem_symbol = 0;
