@@ -32,9 +32,15 @@ namespace dfusion
 		void init(WarpField* pWarpField, const MapArr& vmap_cano, 
 			const MapArr& nmap_cano, Param param, Intr intr);
 
+		// after solve, the interel twists are optimized, but th warpField are not touched
 		void solve(const MapArr& vmap_live, const MapArr& nmap_live,
-			const MapArr& vmap_warp, const MapArr& nmap_warp,
-			bool factor_rigid_out = false);
+			const MapArr& vmap_warp, const MapArr& nmap_warp);
+
+		// optional, factor out common rigid transformations among all nodes
+		void factor_out_rigid();
+
+		// update warpField by calling this function explicitly
+		void updateWarpField();
 
 		void reset();
 

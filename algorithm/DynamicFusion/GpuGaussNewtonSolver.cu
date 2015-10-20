@@ -1960,4 +1960,94 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		return total_energy;
 	}
 #pragma endregion
+
+#pragma region --factor out rigid
+
+	__device__ float _g_common_q[8];
+
+	template<int CTA_SIZE_, typename T>
+	static __device__ __forceinline__ void reduce(volatile T* buffer)
+	{
+		int tid = Block::flattenedThreadId();
+		T val = buffer[tid];
+
+		if (CTA_SIZE_ >= 1024) { if (tid < 512) buffer[tid] = val = val + buffer[tid + 512]; __syncthreads(); }
+		if (CTA_SIZE_ >= 512) { if (tid < 256) buffer[tid] = val = val + buffer[tid + 256]; __syncthreads(); }
+		if (CTA_SIZE_ >= 256) { if (tid < 128) buffer[tid] = val = val + buffer[tid + 128]; __syncthreads(); }
+		if (CTA_SIZE_ >= 128) { if (tid <  64) buffer[tid] = val = val + buffer[tid + 64]; __syncthreads(); }
+
+		if (tid < 32){
+			if (CTA_SIZE_ >= 64) { buffer[tid] = val = val + buffer[tid + 32]; }
+			if (CTA_SIZE_ >= 32) { buffer[tid] = val = val + buffer[tid + 16]; }
+			if (CTA_SIZE_ >= 16) { buffer[tid] = val = val + buffer[tid + 8]; }
+			if (CTA_SIZE_ >= 8) { buffer[tid] = val = val + buffer[tid + 4]; }
+			if (CTA_SIZE_ >= 4) { buffer[tid] = val = val + buffer[tid + 2]; }
+			if (CTA_SIZE_ >= 2) { buffer[tid] = val = val + buffer[tid + 1]; }
+		}
+	}
+
+	__global__ void reduce_all_nodes_kernel(const float4* nodesDqVw, int n)
+	{
+		const float* beg = (const float*)nodesDqVw + blockIdx.x;
+		float sum = 0.f;
+		for (int i = threadIdx.x; i < n; i += blockDim.x)
+			sum += beg[i * 12]; // dq+vw, 12 float per node
+
+		__shared__ float smem[GpuGaussNewtonSolver::CTA_SIZE];
+
+		smem[threadIdx.x] = sum;
+		__syncthreads();
+
+		reduce<GpuGaussNewtonSolver::CTA_SIZE>(smem);
+
+		if (threadIdx.x == 0)
+			_g_common_q[blockIdx.x] = smem[0];
+	}
+
+
+	__global__ void factor_all_nodes_kernel(float4* nodesDqVw, int n, Tbx::Dual_quat_cu rigid_inv)
+	{
+		int i = threadIdx.x + blockIdx.x * blockDim.x;
+		if (i >= n)
+			return;
+		
+		Tbx::Dual_quat_cu dq = rigid_inv * pack_dual_quat(nodesDqVw[3 * i], nodesDqVw[3 * i + 1]);
+		unpack_dual_quat(dq, nodesDqVw[3 * i], nodesDqVw[3 * i + 1]);
+	}
+
+	// optional, factor out common rigid transformations among all nodes
+	void GpuGaussNewtonSolver::factor_out_rigid()
+	{
+		const int num0 = m_pWarpField->getNumNodesInLevel(0);
+		const int numAll = m_pWarpField->getNumAllNodes();
+
+		Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0,0,0,0), Tbx::Quat_cu(0,0,0,0));
+		cudaMemcpyToSymbol(_g_common_q, &dq, sizeof(Tbx::Dual_quat_cu));
+
+		reduce_all_nodes_kernel << <8, GpuGaussNewtonSolver::CTA_SIZE >> >(
+			m_pWarpField->getNodesDqVwPtr(0), num0);
+		cudaSafeCall(cudaGetLastError(), "reduce_all_nodes_kernel");
+		cudaMemcpyFromSymbol(&dq, _g_common_q, sizeof(Tbx::Dual_quat_cu));
+
+		if (dq.get_non_dual_part().norm() > Tbx::Dual_quat_cu::epsilon())
+		{
+			dq.normalize();
+			m_pWarpField->set_rigidTransform(
+				m_pWarpField->get_rigidTransform() * dq.to_transformation());
+
+			for (int lv = 0; lv < m_pWarpField->getNumLevels(); lv++)
+			{
+				int numLv = m_pWarpField->getNumNodesInLevel(lv);
+				if (numLv == 0)
+					break;
+				factor_all_nodes_kernel << <divUp(numLv, GpuGaussNewtonSolver::CTA_SIZE),
+					GpuGaussNewtonSolver::CTA_SIZE >> >(m_pWarpField->getNodesDqVwPtr(lv), numLv, dq.conjugate());
+			}
+			cudaSafeCall(cudaGetLastError(), "factor_all_nodes_kernel");
+
+			// re-extract info
+			m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
+		}
+	}
+#pragma endregion
 }

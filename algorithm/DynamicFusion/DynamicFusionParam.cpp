@@ -53,7 +53,7 @@ namespace dfusion
 		fusion_GaussNewton_diag_regTerm = 0;
 		fusion_GaussNewton_fixedStep = 0.5;
 
-		fusion_post_rigid_factor = false;
+		fusion_post_rigid_factor = true;
 
 		// debuging related
 		fusion_dumping_each_frame = false;

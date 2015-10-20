@@ -310,35 +310,17 @@ namespace dfusion
 		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{
-			// 1. find correspondence
-			// m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
-
-			// 2. Gauss-Newton Optimization
-#if 0
-			CpuGaussNewton solver;
-			solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
-			Eigen::VectorXf debugX;
-			debugX.resize(m_warpField->getNumAllNodes()*6);
-			debugX.setRandom();
-			debugX *= 0.1f;
-			m_gsSolver->debug_set_init_x(debugX.data(), debugX.size());
-			solver.debug_set_init_x(debugX.data(), debugX.size());
-
-			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
-			solver.solve(m_param.fusion_post_rigid_factor);
-
-			ldp::tic();
+			// Gauss-Newton Optimization, findding correspondence internal
 			m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
-			cudaThreadSynchronize();
-			ldp::toc("gpu solver");
-			m_gsSolver->debug_print();
-			system("pause");
-#else
-			m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
-#endif
 
-			// 3. update warped mesh and render for visiblity
+			// update the warp field
+			m_gsSolver->updateWarpField();
+
+			// update warped mesh and render for visiblity
 			m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
+
+			if (m_param.fusion_post_rigid_factor)
+				m_gsSolver->factor_out_rigid();
 		}// end for icp_iter
 
 		// finally, re-factor out the rigid part across all nodes

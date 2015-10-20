@@ -283,8 +283,7 @@ namespace dfusion
 	}
 
 	void GpuGaussNewtonSolver::solve(const MapArr& vmap_live, const MapArr& nmap_live,
-		const MapArr& vmap_warp, const MapArr& nmap_warp,
-		bool factor_rigid_out)
+		const MapArr& vmap_warp, const MapArr& nmap_warp)
 	{
 		if (m_pWarpField == nullptr)
 			throw std::exception("GpuGaussNewtonSolver::solve: null pointer");
@@ -358,12 +357,11 @@ namespace dfusion
 					m_h.ptr(), 1, m_twist.ptr(), 1);
 			}
 		}// end for iter
+	}
 
-		if (factor_rigid_out)
-		{
-
-		}
-
+	// update warpField by calling this function explicitly
+	void GpuGaussNewtonSolver::updateWarpField()
+	{
 		// finally, write results back
 		m_pWarpField->update_nodes_via_twist(m_twist);
 	}
