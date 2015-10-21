@@ -33,6 +33,9 @@ namespace dfusion
 		void updateParam(const Param& param);
 
 		int getFrameId()const{ return m_frame_id; }
+
+		bool hasRawDepth()const{ return m_depth_input.rows() > 0; }
+		const MapArr& getRawDepthNormal()const{ return m_nmap_curr_pyd.at(0); }
 	protected:
 		void estimateWarpField();
 		void nonRigidTsdfFusion();

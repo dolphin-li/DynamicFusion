@@ -60,6 +60,27 @@ void DepthViewer::setImage_d(PtrStepSz<dfusion::depthtype> image_d)
 	updateGL();
 }
 
+void DepthViewer::setNormal_d(const dfusion::MapArr& image_d)
+{
+	makeCurrent();
+
+	size_t num_bytes = 0;
+	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0));
+	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res));
+	dfusion::ColorMap map(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH, 
+		m_pbo_buffer, dfusion::KINECT_WIDTH*sizeof(uchar4));
+	dfusion::generateNormalMap(image_d, map);
+	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0));
+
+	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
+	glBindTexture(GL_TEXTURE_2D, m_texture_id);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_pbo_buffer.cols,
+		m_pbo_buffer.rows, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	CHECK_GL_ERROR("setImage_d");
+	updateGL();
+}
+
 void DepthViewer::initializeGL()
 {
 	makeCurrent();

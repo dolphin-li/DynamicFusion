@@ -13,6 +13,7 @@ public:
 
 	void setImage_h(const dfusion::depthtype* image_h, int w, int h);
 	void setImage_d(PtrStepSz<dfusion::depthtype> image_d);
+	void setNormal_d(const dfusion::MapArr& image_d);
 
 	void initializeGL();
 	void resizeGL(int w, int h);
