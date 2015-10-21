@@ -11,6 +11,7 @@ namespace dfusion
 		* ******************************************************/
 		int volume_resolution[3];
 		int voxels_per_meter;
+		void set_voxels_per_meter(int v);
 
 		/** *****************************************************
 		* marching cube related

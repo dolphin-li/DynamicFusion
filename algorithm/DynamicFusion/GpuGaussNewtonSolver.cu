@@ -1158,8 +1158,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			if (norm < psi_reg)
 				s = norm * norm * 0.5f;
 			else
-			for (int k = 0; k < 3; k++)
-				s += psi_reg*(abs(f[k]) - psi_reg*0.5f);
+				s = psi_reg*(norm - psi_reg*0.5f);
 			return s;
 		}
 
@@ -1172,7 +1171,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 				df = f;
 			else
 			for (int k = 0; k < 3; k++)
-				df[k] = sign(f[k])*psi_reg;
+				df[k] = f[k]*psi_reg / norm;
 			return df;
 		}
 
@@ -1325,6 +1324,11 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
 			float ww = sqrt(lambda * alpha_ij);
 
+			// debug
+			//float ww2 = ww*ww;
+			//ww = 1;
+			//ww *= ww;
+
 			// energy=============================================
 			Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 			val = reg_term_penalty(val);
@@ -1338,6 +1342,10 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			fptr[iRow + 3] = val1.x * ww;
 			fptr[iRow + 4] = val1.y * ww;
 			fptr[iRow + 5] = val1.z * ww;
+
+			// debug
+			//ww = 1;
+			//ww = ww2;
 
 			// jacobi=============================================
 			for (int ialpha = 0; ialpha < VarPerNode; ialpha++)
