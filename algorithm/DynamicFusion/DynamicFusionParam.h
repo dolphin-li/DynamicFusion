@@ -36,6 +36,7 @@ namespace dfusion
 		// meters, for radius search
 		// the larger, the less freedom for warping
 		float warp_radius_search_epsilon; 
+		void set_warp_radius_search_epsilon(float v);
 
 		// param \dw in the paper for each node
 		// the larger, the less smoothness and more rigid

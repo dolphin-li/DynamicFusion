@@ -23,15 +23,12 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-		warp_radius_search_epsilon = 0.025;
+		set_warp_radius_search_epsilon(0.025);
 		warp_param_dw = warp_radius_search_epsilon * 1.733 * 0.5f; // sqrt(3)/2
-		warp_param_dw_for_fusion = warp_param_dw * 0.25f; // sqrt(3)/2
+		warp_param_dw_for_fusion = warp_param_dw * 0.5f; // sqrt(3)/2
 		warp_radius_search_beta = 2;
 		warp_param_dw_lvup_scale = 0.05f;
 		warp_point_step_before_update_node = 1;
-		warp_valid_point_num_each_node = 100;
-			//0.1 * (pow(warp_radius_search_epsilon*voxels_per_meter, 3) 
-			/// warp_point_step_before_update_node);
 
 		/** *****************************************************
 		* dynamic fusion related
@@ -76,5 +73,11 @@ namespace dfusion
 
 		view_autoreset = false;
 		view_autoreset_seconds = 20;
+	}
+
+	void Param::set_warp_radius_search_epsilon(float v)
+	{
+		warp_radius_search_epsilon = v;
+		warp_valid_point_num_each_node = 500 * pow(v / 0.025f, 3);
 	}
 }

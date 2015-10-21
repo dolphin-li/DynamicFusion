@@ -691,7 +691,7 @@ void DynamicFusionUI::on_sbActiveNode_valueChanged(int v)
 
 void DynamicFusionUI::on_sbNodeRadius_valueChanged(int v)
 {
-	g_dataholder.m_dparam.warp_radius_search_epsilon = float(v)/1000;
+	g_dataholder.m_dparam.set_warp_radius_search_epsilon(float(v)/1000);
 }
 
 void DynamicFusionUI::on_dbDwLvScale_valueChanged(double v)

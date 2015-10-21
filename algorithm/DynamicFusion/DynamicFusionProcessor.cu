@@ -26,18 +26,15 @@ namespace dfusion
 		// the first quat
 		float4 q0, q1, vw;
 		int idk, nn3;
-		Tbx::Dual_quat_cu dq0, dq_avg;
+		//Tbx::Dual_quat_cu dq_avg;
 		idk = WarpField::get_by_arrayid(knnIdx, 0);
 		nn3 = idk * 3;
 		tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 		tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 		tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
-		float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
-		float w = __expf(-dist2 * 0.5f * inv_dw_for_fusion2);
-		dq0 = pack_dual_quat(q0, q1);
-		dq_blend = dq_blend + dq0*w;
-		dq_avg = dq_avg + dq0;
-		fusion_weight += sqrt(dist2);
+		float dist2_0 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
+		dq_blend = pack_dual_quat(q0, q1);
+		fusion_weight += sqrt(dist2_0);
 
 		// the other quats
 #pragma unroll
@@ -53,15 +50,12 @@ namespace dfusion
 
 			// note: we store 1.f/radius in vw.w
 			float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
-			float w = __expf(-dist2 * 0.5f * inv_dw_for_fusion2) *
-				sign(dq0.get_non_dual_part().dot(dq.get_non_dual_part()));
+			float w = __expf(-(dist2 - dist2_0) * 0.5f * inv_dw_for_fusion2)
+				* sign(dq_blend.get_non_dual_part().dot(dq.get_non_dual_part()));
 			dq_blend = dq_blend + dq*w;
-			dq_avg = dq_avg + dq;
 			fusion_weight += sqrt(dist2);
 		}
-		float norm = dq_blend.get_non_dual_part().norm();
-		float norm1 = dq_avg.get_non_dual_part().norm();
-		dq_blend = (norm < Tbx::Dual_quat_cu::epsilon()) ? dq_avg * (1.f / norm1) : dq_blend * (1.f / norm);
+		dq_blend.normalize();
 		fusion_weight = float(maxK) * nodeRadius / fusion_weight;
 		return dq_blend;
 	}
