@@ -800,6 +800,15 @@ class __align__(16) Quat_cu{
                        coeff3 * scalar);
     }
 
+	__device__ __host__ Quat_cu& operator*= (float scalar)
+	{
+		coeff0 *= scalar;
+		coeff1 *= scalar;
+		coeff2 *= scalar;
+		coeff3 *= scalar;
+		return *this;
+	}
+
 	__device__ __host__ Quat_cu operator+ (const Quat_cu& q) const
     {
          return Quat_cu(coeff0 + q.coeff0,
@@ -807,6 +816,15 @@ class __align__(16) Quat_cu{
                         coeff2 + q.coeff2,
                         coeff3 + q.coeff3);
     }
+
+	__device__ __host__ Quat_cu& operator+= (const Quat_cu& q)
+	{
+		coeff0 += q.coeff0;
+		coeff1 += q.coeff1;
+		coeff2 += q.coeff2;
+		coeff3 += q.coeff3;
+		return *this;
+	}
 
     /// Get vector part
 	__device__ __host__ operator Vec3 () const{

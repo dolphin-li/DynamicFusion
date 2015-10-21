@@ -25,10 +25,9 @@ namespace dfusion
 
 		// the first quat
 		float4 q0, q1, vw;
-		int idk, nn3;
+		int nn3;
 		//Tbx::Dual_quat_cu dq_avg;
-		idk = WarpField::get_by_arrayid(knnIdx, 0);
-		nn3 = idk * 3;
+		nn3 = WarpField::get_by_arrayid(knnIdx, 0) * 3;
 		tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 		tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 		tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
@@ -40,9 +39,7 @@ namespace dfusion
 #pragma unroll
 		for (int k = 1; k < maxK; k++)
 		{
-			idk = WarpField::get_by_arrayid(knnIdx, k);
-			
-			nn3 = idk * 3;
+			nn3 = WarpField::get_by_arrayid(knnIdx, k) * 3;
 			tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 			tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 			tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
@@ -51,11 +48,11 @@ namespace dfusion
 			// note: we store 1.f/radius in vw.w
 			float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
 			float w = __expf(-(dist2 - dist2_0) * 0.5f * inv_dw_for_fusion2)
-				* sign(dq_blend.get_non_dual_part().dot(dq.get_non_dual_part()));
-			dq_blend = dq_blend + dq*w;
+				* sign(dq_blend[0]*dq[0]+dq_blend[1]*dq[1]+dq_blend[2]*dq[2]+dq_blend[3]*dq[3]);
+			dq_blend += dq*w;
 			fusion_weight += sqrt(dist2);
 		}
-		dq_blend.normalize();
+		dq_blend *= 1.f/dq_blend.norm();
 		fusion_weight = float(maxK) * nodeRadius / fusion_weight;
 		return dq_blend;
 	}
@@ -89,7 +86,7 @@ namespace dfusion
 
 		cudaTextureObject_t knnTex;
 		cudaTextureObject_t nodesDqVwTex;
-		Tbx::Quat_cu Rv2c;
+		Tbx::Mat3 Rv2c;
 		Tbx::Point3 tv2c;
 
 		template<int maxK>
@@ -100,7 +97,7 @@ namespace dfusion
 				knnTex, nodesDqVwTex, x, y, z, origion, voxel_size, inv_dw_for_fusion2,
 				nodeRadius, fusion_weight);
 
-			float3 cxyz = convert(Rv2c.rotate(dq.transform(Tbx::Point3(x*voxel_size + origion.x,
+			float3 cxyz = convert(Rv2c*(dq.transform(Tbx::Point3(x*voxel_size + origion.x,
 				y*voxel_size+origion.y, z*voxel_size+origion.z))) + tv2c);
 
 			float3 uvd = intr.xyz2uvd(cxyz);
@@ -132,27 +129,20 @@ namespace dfusion
 	{
 		int x = threadIdx.x + blockIdx.x * blockDim.x;
 		int y = threadIdx.y + blockIdx.y * blockDim.y;
-		int z = threadIdx.z + blockIdx.z * (blockDim.z<<3);
+		int z = threadIdx.z + blockIdx.z * blockDim.z;
 
-		if (x >= fs.volume_resolution.x || y >= fs.volume_resolution.y)
+		if (x >= fs.volume_resolution.x || y >= fs.volume_resolution.y || z >= fs.volume_resolution.z)
 			return;
 
-#pragma unroll
-		for (int block_iter = 0; block_iter < 8; block_iter++, z += blockDim.z)
-		{
-			if (z >= fs.volume_resolution.z)
-				break;
-
-			fs.fusion<maxK>(x, y, z);
-		}// end for block_iter
-	}      // __global__
+		fs.fusion<maxK>(x, y, z);
+	}// __global__
 
 	void DynamicFusionProcessor::fusion()
 	{
 		dim3 block(32, 8, 2);
 		dim3 grid(divUp(m_volume->getResolution().x, block.x), 
 			divUp(m_volume->getResolution().y, block.y),
-			divUp(m_volume->getResolution().z, block.z<<3));
+			divUp(m_volume->getResolution().z, block.z));
 
 		// bind src to texture
 		g_depth_tex.filterMode = cudaFilterModePoint;
@@ -177,7 +167,7 @@ namespace dfusion
 		fs.knnTex = m_warpField->bindKnnFieldTexture();
 		fs.nodesDqVwTex = m_warpField->bindNodesDqVwTexture();	
 		Tbx::Transfo tr = m_warpField->get_rigidTransform();
-		fs.Rv2c = tr;
+		fs.Rv2c = tr.get_mat3();
 		fs.tv2c = Tbx::Point3(tr.get_translation());
 
 		int maxK = min(WarpField::KnnK, m_warpField->getNumNodesInLevel(0));

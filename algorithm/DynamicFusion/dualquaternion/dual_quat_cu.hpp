@@ -88,7 +88,12 @@ class __align__(16) Dual_quat_cu{
     /// @name Methods
     // -------------------------------------------------------------------------
 
-	__device__ __host__ void normalize()
+	__device__ __host__ __forceinline__ float norm()const
+	{
+		return _quat_0.norm();
+	}
+
+	__device__ __host__ __forceinline__ void normalize()
     {
         float norm = _quat_0.norm();
         _quat_0 = _quat_0 / norm;
@@ -214,11 +219,24 @@ class __align__(16) Dual_quat_cu{
     {
         return Dual_quat_cu(_quat_0 + dq._quat_0, _quat_e + dq._quat_e);
     }
+	__device__ __host__ Dual_quat_cu& operator+=(const Dual_quat_cu& dq)
+	{
+		_quat_0 += dq._quat_0;
+		_quat_e += dq._quat_e;
+		return *this;
+	}
 
 	__device__ __host__ Dual_quat_cu operator*(float scalar) const
     {
         return Dual_quat_cu(_quat_0 * scalar, _quat_e * scalar);
     }
+
+	__device__ __host__ Dual_quat_cu& operator*=(float scalar)
+	{
+		_quat_0 *= scalar;
+		_quat_e *= scalar;
+		return *this;
+	}
 
 	__device__ __host__ Dual_quat_cu operator * (const Dual_quat_cu& other)const
 	{
