@@ -587,6 +587,7 @@ namespace dfusion
 		cudaTextureObject_t tex;
 		MarchingCubes::Tile tile;
 		float isoValue;
+		float minWeights;
 
 		__device__ __forceinline__ void operator () () const
 		{
@@ -616,14 +617,22 @@ namespace dfusion
 				if (z >= tile.end.z)
 					break;
 				float field[8];
-				field[0] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0)).x;
-				field[1] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0)).x;
-				field[2] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0)).x;
-				field[3] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0)).x;
-				field[4] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s)).x;
-				field[5] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s)).x;
-				field[6] = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s)).x;
-				field[7] = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s)).x;
+				float2 tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0));
+				field[0] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0));
+				field[1] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0));
+				field[2] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0));
+				field[3] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s));
+				field[4] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s));
+				field[5] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s));
+				field[6] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s));
+				field[7] = tdata.x * (tdata.y >= minWeights);
 
 				int cubeindex = 0;
 				if (field[0] && field[1] && field[2] && field[3] && field[4]
@@ -792,6 +801,8 @@ namespace dfusion
 #else
 		int zero_mem = 0;
 		cudaSafeCall(cudaMemcpyToSymbol(output_count, &zero_mem, sizeof(int)));
+		cudaSafeCall(cudaMemcpyToSymbol(global_count, &zero_mem, sizeof(int)));
+		cudaSafeCall(cudaMemcpyToSymbol(blocks_done, &zero_mem, sizeof(int)));
 
 		OccupiedVoxels ov;
 
@@ -800,6 +811,7 @@ namespace dfusion
 		ov.tex = m_volTex;
 		ov.tile = tile;
 		ov.isoValue = m_param.marching_cube_isoValue;
+		ov.minWeights = m_param.marchingCube_min_valied_weight;
 
 		dim3 block(OccupiedVoxels::CTA_SIZE_X, OccupiedVoxels::CTA_SIZE_Y);
 		dim3 grid(divUp((tile.end.x - tile.begin.x) >> tile.level, block.x), 
@@ -854,7 +866,7 @@ namespace dfusion
 	// version that calculates flat surface normal for each triangle
 	__global__ void generateTrianglesKernel(GpuMesh::PointType *pos, GpuMesh::PointType *norm,
 		cudaTextureObject_t tex, MarchingCubes::Tile tile,
-		unsigned int *compactedVoxelArray, unsigned int *numVertsScanned, float isoValue)
+		unsigned int *compactedVoxelArray, unsigned int *numVertsScanned, float isoValue, float minWeights)
 	{
 		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
 		unsigned int tid = __mul24(blockId, blockDim.x<<3) + threadIdx.x;
@@ -896,14 +908,22 @@ namespace dfusion
 
 
 				float field[8];
-				field[0] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + 0)).x;
-				field[1] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + 0)).x;
-				field[2] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + 0)).x;
-				field[3] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + 0)).x;
-				field[4] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + s)).x;
-				field[5] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + s)).x;
-				field[6] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + s)).x;
-				field[7] = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + s)).x;
+				float2 tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + 0));
+				field[0] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + 0));
+				field[1] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + 0));
+				field[2] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + 0));
+				field[3] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + s));
+				field[4] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + s));
+				field[5] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + s));
+				field[6] = tdata.x * (tdata.y >= minWeights);
+				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + s));
+				field[7] = tdata.x * (tdata.y >= minWeights);
 
 				// recalculate flag, faster than store in global memory
 				int cubeindex = 0;
@@ -993,7 +1013,8 @@ namespace dfusion
 			result.verts(), result.normals(),
 			m_volTex, tile,
 			m_compVoxelArray, m_voxelVertsScan, 
-			m_param.marching_cube_isoValue);
+			m_param.marching_cube_isoValue,
+			m_param.marchingCube_min_valied_weight);
 		cudaSafeCall(cudaGetLastError(), "generateTriangles");
 		result.unlockVertsNormals();
 	}

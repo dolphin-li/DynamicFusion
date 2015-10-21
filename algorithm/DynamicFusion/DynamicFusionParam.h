@@ -29,6 +29,9 @@ namespace dfusion
 		// by default 0, used when extract triangles
 		float marching_cube_isoValue;
 
+		// in tsdf volume, marching cube is only performed when weight is large enough
+		float marchingCube_min_valied_weight;
+
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/

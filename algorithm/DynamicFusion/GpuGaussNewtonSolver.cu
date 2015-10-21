@@ -567,7 +567,7 @@ namespace dfusion
 					Tbx::Dual_quat_cu dqk_k;
 					dqk_k.from_twist(r, t);
 					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
-						* sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
+						;// *sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
 					dq = dq + dqk_k * wk[k];		
 				}
 
@@ -706,7 +706,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 				const KnnIdx knn = vmapKnn(y, x);
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
-				Tbx::Dual_quat_cu dqk_0;
+				//Tbx::Dual_quat_cu dqk_0;
 				float wk[maxK];
 				for (int k = 0; k < maxK; k++)
 				{
@@ -721,10 +721,10 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 					dqk_k.from_twist(r, t);
 					// note: we store inv radius as vw.w, thus using * instead of / here
 					wk[k] = __expf(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
-					if (k == 0)
-						dqk_0 = dqk_k;
-					if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
-						wk[k] = -wk[k];
+					//if (k == 0)
+					//	dqk_0 = dqk_k;
+					//if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
+					//	wk[k] = -wk[k];
 					dq = dq + dqk_k * wk[k];
 					
 				}

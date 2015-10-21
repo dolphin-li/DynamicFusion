@@ -48,7 +48,7 @@ namespace dfusion
 			// note: we store 1.f/radius in vw.w
 			float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
 			float w = __expf(-(dist2 - dist2_0) * 0.5f * inv_dw_for_fusion2)
-				* sign(dq_blend[0]*dq[0]+dq_blend[1]*dq[1]+dq_blend[2]*dq[2]+dq_blend[3]*dq[3]);
+				;// *sign(dq_blend[0] * dq[0] + dq_blend[1] * dq[1] + dq_blend[2] * dq[2] + dq_blend[3] * dq[3]);
 			dq_blend += dq*w;
 			fusion_weight += sqrt(dist2);
 		}
