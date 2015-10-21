@@ -256,7 +256,7 @@ namespace dfusion
 
 //#define ENABLE_GPU_DUMP_DEBUG
 
-	__device__ float g_totalEnergy;
+	//__device__ float g_totalEnergy;
 
 	struct DataTermCombined
 	{
@@ -293,6 +293,8 @@ namespace dfusion
 		float distThres;
 		float angleThres;
 		float psi_data;
+
+		float* totalEnergy;
 
 
 #ifdef ENABLE_GPU_DUMP_DEBUG
@@ -735,7 +737,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 				// the grad energy f
 				const float f = data_term_energy((dq.rotate(n)).dot(dq.transform(v) - Tlw_inv*vl));
-				atomicAdd(&g_totalEnergy, f);
+				atomicAdd(totalEnergy, f);
 			}//end if find corr
 		}
 	};
@@ -1051,6 +1053,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		float psi_reg;
 		float lambda;
+
+		float* totalEnergy;
 
 		__device__ __forceinline__  Tbx::Dual_quat_cu p_qk_p_alpha_func(Tbx::Dual_quat_cu dq, int i)const
 		{
@@ -1390,7 +1394,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 			float eg = ww2 * reg_term_energy(val);
 
-			atomicAdd(&g_totalEnergy, eg);
+			atomicAdd(totalEnergy, eg);
 		}
 	};
 
@@ -1783,6 +1787,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 				m_HrRowsCols, m_Brows);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcQ_kernel");
 		}
+		checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q");
 
 		// 3. llt decompostion of Q ==================================================
 		// 3.1 decide the working space of the solver
@@ -1808,6 +1813,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			printf("cusolverDnSpotrf failed: status: %d\n", fst);
 			throw std::exception();
 		}
+		checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q1");
 		// 4. solve H*h = g =============================================================
 		const int sz = m_Jrcols;
 		const int sz0 = m_Brows;
@@ -1850,6 +1856,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cublasStrsv(m_cublasHandle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT,
 				sz1, m_Q.ptr(), sz1, m_u.ptr() + sz0, 1);
 		}
+		checkNan(m_u, sz, "u");
 		
 		// 4.2 then we solve for L'*h=u;
 		// 4.2.1 h(sz0:sz-1) = UQinv*u(sz0:sz-1)
@@ -1904,9 +1911,11 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cs.nNodes = m_numNodes;
 			cs.Tlw_inv = m_pWarpField->get_rigidTransform().fast_invert();
 			cs.psi_data = m_param->fusion_psi_data;
+			cs.totalEnergy = &m_tmpvec[0];
 
-			int zero_mem_symbol = 0;
-			cudaMemcpyToSymbol(g_totalEnergy, &zero_mem_symbol, sizeof(int));
+			//int zero_mem_symbol = 0;
+			//cudaMemcpyToSymbol(g_totalEnergy, &zero_mem_symbol, sizeof(int));
+			cudaMemset(&m_tmpvec[0], 0, sizeof(float));
 
 			// 1. data term
 			//////////////////////////////
@@ -1946,6 +1955,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			rj.rptr = m_Jr_RowPtr.ptr();
 			rj.vptr = m_Jr_val.ptr();
 			rj.fptr = m_f_r.ptr();
+			rj.totalEnergy = &m_tmpvec[0];
 
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Jrrows / 6, block.x));
@@ -1954,8 +1964,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cudaSafeCall(cudaGetLastError(), "calcRegTermTotalEnergy_kernel");
 		}
 
-		cudaSafeCall(cudaMemcpyFromSymbol(&total_energy,
-			g_totalEnergy, sizeof(int)), "copy reg totalEnergy to host");
+		cudaSafeCall(cudaMemcpy(&total_energy,
+			&m_tmpvec[0], sizeof(float), cudaMemcpyDeviceToHost), "copy reg totalEnergy to host");
 
 		return total_energy;
 	}
@@ -2045,8 +2055,10 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			}
 			cudaSafeCall(cudaGetLastError(), "factor_all_nodes_kernel");
 
+
 			// re-extract info
 			m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
+			checkNan(m_twist, numAll * 6, "twist after factoring rigid");
 		}
 	}
 #pragma endregion

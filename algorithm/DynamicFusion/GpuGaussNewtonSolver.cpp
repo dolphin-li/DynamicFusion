@@ -208,6 +208,7 @@ namespace dfusion
 
 		//extract nodes info
 		m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
+		checkNan(m_twist, m_numNodes, "twist_init");
 
 		// the sparse block B
 		if (nodesUpdated)
@@ -323,10 +324,11 @@ namespace dfusion
 			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g=-(g+Jr'*fr)
 			calcHessian();
 			checkNan(m_Hd, m_numLv0Nodes*VarPerNode*VarPerNode, ("Hd_reg_" + std::to_string(iter)).c_str());
+			checkNan(m_g, m_Jrcols, ("g_" + std::to_string(iter)).c_str());
 
 			// 4. solve H*h = g
 			blockSolve();
-			checkNan(m_twist, m_Jrcols, ("h_" + std::to_string(iter)).c_str());
+			checkNan(m_h, m_Jrcols, ("h_" + std::to_string(iter)).c_str());
 
 			// if not fix step, we perform line search
 			if (m_param->fusion_GaussNewton_fixedStep <= 0.f)
