@@ -13,10 +13,11 @@ namespace dfusion
 	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, float2 tsdf_prev,
 		int x, int y, int z, float3 origion, float voxelSize, float inv_dw_for_fusion2,
-		float nodeRadius, float marchingCube_weightThre, float& fusion_weight)
+		float nodeRadius, float marchingCube_weightThre, float& fusion_weight, bool& suc)
 	{
 		Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 		fusion_weight = 0.f;
+		suc = false;
 
 		// 
 		float3 p = make_float3(x*voxelSize, y*voxelSize, z*voxelSize) + origion;
@@ -32,12 +33,16 @@ namespace dfusion
 		tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 		tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
 		float dist2_0 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
+		float w_0 = __expf(-dist2_0 * 0.5f * inv_dw_for_fusion2);
 
-		// ldp hack here
-		// if the voxel is too far away from existed nodes and the voxel has been classified previously
-		// we just ignore it.
-		if (dist2_0 >= nodeRadius * nodeRadius * 3 && tsdf_prev.y >= marchingCube_weightThre)
-			return dq_blend;
+		// ldp hack here: if the voxel is too far from existed node, we just 
+		// assume its transformation to be identity and fuse it
+		// this helps to preserve empty place.
+		if (w_0 < Tbx::Dual_quat_cu::epsilon())
+		{
+			suc = true;
+			return Tbx::Dual_quat_cu::identity();
+		}
 
 		dq_blend = pack_dual_quat(q0, q1);
 		fusion_weight += sqrt(dist2_0);
@@ -61,6 +66,7 @@ namespace dfusion
 		}
 		dq_blend *= 1.f/dq_blend.norm();
 		fusion_weight = float(maxK) * nodeRadius / fusion_weight;
+		suc = true;
 		return dq_blend;
 	}
 
@@ -68,9 +74,10 @@ namespace dfusion
 	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel<0>(
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, float2 tsdf_prev,
 		int x, int y, int z, float3 origion, float voxelSize, float inv_dw_for_fusion2,
-		float nodeRadius, float marchingCube_weightThre, float& fusion_weight)
+		float nodeRadius, float marchingCube_weightThre, float& fusion_weight, bool& suc)
 	{
 		fusion_weight = marchingCube_weightThre + 1e-5f;
+		suc = true;
 		return Tbx::Dual_quat_cu::identity();
 	}
 
@@ -102,9 +109,13 @@ namespace dfusion
 		{
 			float2 tsdf_weight_prev = unpack_tsdf(read_tsdf_surface(volumeTex, x, y, z));
 			float fusion_weight = 0;
+			bool suc = true;
 			Tbx::Dual_quat_cu dq = calc_dual_quat_blend_on_voxel<maxK>(
 				knnTex, nodesDqVwTex, tsdf_weight_prev, x, y, z, origion, voxel_size, inv_dw_for_fusion2,
-				nodeRadius, marchingCube_weightThre, fusion_weight);
+				nodeRadius, marchingCube_weightThre, fusion_weight, suc);
+
+			if (!suc)
+				return;
 
 			float3 cxyz = convert(Rv2c*(dq.transform(Tbx::Point3(x*voxel_size + origion.x,
 				y*voxel_size+origion.y, z*voxel_size+origion.z))) + tv2c);
