@@ -64,12 +64,12 @@ namespace dfusion
 		insertNewNodes(src);
 
 		if (m_lastNumNodes[0] != m_numNodes[0])
-		{
 			updateAnnField();
 
-			for (int lv = 1; lv < GraphLevelNum; lv++)
-				updateGraph(lv);
-		}
+		// use this to turn on/off high-level nodes dq re-initialization each frame.
+		//if (m_lastNumNodes[0] != m_numNodes[0])
+		for (int lv = 1; lv < GraphLevelNum; lv++)
+			updateGraph(lv);
 	}
 
 	cudaSurfaceObject_t WarpField::bindKnnFieldSurface()const

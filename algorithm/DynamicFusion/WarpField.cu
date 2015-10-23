@@ -532,6 +532,14 @@ namespace dfusion
 
 			unpack_dual_quat(dq_blend, nodesDqVw[threadId * 3], nodesDqVw[threadId * 3 + 1]);
 		}
+
+		__device__ __forceinline__ void update_nodes_dq_assume_compact_nodes(int threadId)
+		{
+			float4 p = nodesDqVw[threadId * 3 + 2];
+			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
+				nodesDqVwTex, make_float3(p.x, p.y, p.z), origion, invVoxelSize);
+			unpack_dual_quat(dq_blend, nodesDqVw[threadId * 3], nodesDqVw[threadId * 3 + 1]);
+		}
 	};
 
 	__global__ void write_nodes_kernel(NodesWriter nw)
@@ -541,6 +549,16 @@ namespace dfusion
 		if (threadId < nw.num)
 		{
 			nw(threadId);
+		}
+	}
+
+	__global__ void update_nodes_dq_assume_compact_nodes_kernel(NodesWriter nw)
+	{
+		int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+		if (threadId < nw.num)
+		{
+			nw.update_nodes_dq_assume_compact_nodes(threadId);
 		}
 	}
 
@@ -869,72 +887,103 @@ namespace dfusion
 			return;
 		}
 
-		// reset symbols
-		int zero_mem_symbol = 0;
-		cudaMemcpyToSymbol(newPoints_global_count, &zero_mem_symbol, sizeof(int));
-		cudaMemcpyToSymbol(newPoints_blocks_done, &zero_mem_symbol, sizeof(int));
-		cudaMemcpyToSymbol(validVoxel_global_count, &zero_mem_symbol, sizeof(int));
-		cudaMemcpyToSymbol(validVoxel_blocks_done, &zero_mem_symbol, sizeof(int));
-		cudaSafeCall(cudaDeviceSynchronize(), "set zero: new point");
-
-		float radius = m_param.warp_radius_search_epsilon * pow(m_param.warp_radius_search_beta, level);
-
+		// re-define structure only if lv0 structure changed===============================
+		if (m_lastNumNodes[0] != m_numNodes[0])
 		{
-			dim3 block(32);
-			dim3 grid(1, 1, 1);
-			grid.x = divUp(num_points, block.x << 3);
+			// reset symbols
+			int zero_mem_symbol = 0;
+			cudaMemcpyToSymbol(newPoints_global_count, &zero_mem_symbol, sizeof(int));
+			cudaMemcpyToSymbol(newPoints_blocks_done, &zero_mem_symbol, sizeof(int));
+			cudaMemcpyToSymbol(validVoxel_global_count, &zero_mem_symbol, sizeof(int));
+			cudaMemcpyToSymbol(validVoxel_blocks_done, &zero_mem_symbol, sizeof(int));
+			cudaSafeCall(cudaDeviceSynchronize(), "set zero: new point");
 
-			// copy to new buffer and generate sort key
-			pointToKey_kernel << <grid, block >> >(
-				getNodesDqVwPtr(level-1)+2, m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(),
-				num_points, 3, 1.f / radius, m_volume->getOrigion(), m_nodesGridSize);
-			cudaSafeCall(cudaGetLastError(), "pointToKey_kernel lv");
-		}
+			float radius = m_param.warp_radius_search_epsilon * pow(m_param.warp_radius_search_beta, level);
 
-		if (num_points == 0)
-			return;
+			{
+				dim3 block(32);
+				dim3 grid(1, 1, 1);
+				grid.x = divUp(num_points, block.x << 3);
 
-		// sort
-		thrust_wrapper::sort_by_key(m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(), num_points);
+				// copy to new buffer and generate sort key
+				pointToKey_kernel << <grid, block >> >(
+					getNodesDqVwPtr(level - 1) + 2, m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(),
+					num_points, 3, 1.f / radius, m_volume->getOrigion(), m_nodesGridSize);
+				cudaSafeCall(cudaGetLastError(), "pointToKey_kernel lv");
+			}
 
-		// segment scan
-		thrust_wrapper::inclusive_scan_by_key(m_meshPointsKey.ptr(),
-			m_meshPointsSorted.ptr(), m_meshPointsSorted.ptr(), num_points);
+			if (num_points == 0)
+				return;
 
-		// compact
-		ValidVoxelCounter counter;
-		counter.counts = m_meshPointsFlags.ptr();
-		counter.key_sorted = m_meshPointsKey.ptr();
-		counter.n = num_points;
-		counter.weight_thre = 1;
-		counter.points_scaned = m_meshPointsSorted.ptr();
-		if (num_points)
-		{
-			dim3 block1(ValidVoxelCounter::CTA_SIZE);
-			dim3 grid1(divUp(num_points, block1.x));
-			get_validVoxel_kernel << <grid1, block1 >> >(counter);
-			cudaSafeCall(cudaGetLastError(), "get_validVoxel_kernel lv");
-			cudaSafeCall(cudaDeviceSynchronize(), "get_validVoxel_kernel lv sync");
-		}
+			// sort
+			thrust_wrapper::sort_by_key(m_meshPointsKey.ptr(), m_meshPointsSorted.ptr(), num_points);
 
-		int num_after_compact = 0;
-		cudaSafeCall(cudaMemcpyFromSymbol(&num_after_compact,
-			validVoxel_output_count, sizeof(int)), "copy voxel count from symbol");
-		m_numNodes[level] = min(num_after_compact, MaxNodeNum);
-		if (num_after_compact > MaxNodeNum)
-			printf("warning: too many nodes %d vs %d in level\n", 
-			num_after_compact + m_lastNumNodes[0], MaxNodeNum, level);
+			// segment scan
+			thrust_wrapper::inclusive_scan_by_key(m_meshPointsKey.ptr(),
+				m_meshPointsSorted.ptr(), m_meshPointsSorted.ptr(), num_points);
 
-		// write level nodes
-		if (m_numNodes[level] > 0)
+			// compact
+			ValidVoxelCounter counter;
+			counter.counts = m_meshPointsFlags.ptr();
+			counter.key_sorted = m_meshPointsKey.ptr();
+			counter.n = num_points;
+			counter.weight_thre = 1;
+			counter.points_scaned = m_meshPointsSorted.ptr();
+			if (num_points)
+			{
+				dim3 block1(ValidVoxelCounter::CTA_SIZE);
+				dim3 grid1(divUp(num_points, block1.x));
+				get_validVoxel_kernel << <grid1, block1 >> >(counter);
+				cudaSafeCall(cudaGetLastError(), "get_validVoxel_kernel lv");
+				cudaSafeCall(cudaDeviceSynchronize(), "get_validVoxel_kernel lv sync");
+			}
+
+			int num_after_compact = 0;
+			cudaSafeCall(cudaMemcpyFromSymbol(&num_after_compact,
+				validVoxel_output_count, sizeof(int)), "copy voxel count from symbol");
+			m_numNodes[level] = min(num_after_compact, MaxNodeNum);
+			if (num_after_compact > MaxNodeNum)
+				printf("warning: too many nodes %d vs %d in level\n",
+				num_after_compact + m_lastNumNodes[0], MaxNodeNum, level);
+
+			// write level nodes
+			if (m_numNodes[level] > 0)
+			{
+				dim3 block(32);
+				dim3 grid(1, 1, 1);
+				grid.x = divUp(m_numNodes[level], block.x);
+
+				NodesWriter nw;
+				nw.points_not_compact = m_meshPointsSorted.ptr();
+				nw.index = m_meshPointsFlags.ptr();
+				nw.nodesDqVw = getNodesDqVwPtr(level);
+				nw.num = m_numNodes[level];
+				nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_param_dw_lvup_scale, level));
+				nw.origion = m_volume->getOrigion();
+				nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
+				nw.knnTex = bindKnnFieldTexture();
+				nw.nodesDqVwTex = bindNodesDqVwTexture();
+
+				write_nodes_kernel << <grid, block >> >(nw);
+				cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
+			}
+
+			// build graph
+			if (m_numNodes[level] > 0)
+			{
+				m_nodeTree[level]->buildTree(getNodesDqVwPtr(level) + 2, m_numNodes[level], 3);
+
+				m_nodeTree[level]->knnSearchGpu(getNodesDqVwPtr(level - 1) + 2, 3,
+					(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
+			}
+		}// end if (m_lastNumNodes[0] != m_numNodes[0])
+		else // else we only update the graph quaternions
 		{
 			dim3 block(32);
 			dim3 grid(1, 1, 1);
 			grid.x = divUp(m_numNodes[level], block.x);
 
 			NodesWriter nw;
-			nw.points_not_compact = m_meshPointsSorted.ptr();
-			nw.index = m_meshPointsFlags.ptr();
 			nw.nodesDqVw = getNodesDqVwPtr(level);
 			nw.num = m_numNodes[level];
 			nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_param_dw_lvup_scale, level));
@@ -943,18 +992,9 @@ namespace dfusion
 			nw.knnTex = bindKnnFieldTexture();
 			nw.nodesDqVwTex = bindNodesDqVwTexture();
 
-			write_nodes_kernel << <grid, block >> >(nw);
-			cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
-		}
-
-		// build graph
-		if (m_numNodes[level] > 0)
-		{
-			m_nodeTree[level]->buildTree(getNodesDqVwPtr(level) + 2, m_numNodes[level], 3);
-
-			m_nodeTree[level]->knnSearchGpu(getNodesDqVwPtr(level - 1) + 2, 3,
-				(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
-		}
+			update_nodes_dq_assume_compact_nodes_kernel << <grid, block >> >(nw);
+			cudaSafeCall(cudaGetLastError(), "update_nodes_dq_assume_compact_nodes_kernel");
+		}// end else (m_lastNumNodes[0] == m_numNodes[0])
 	}
 #pragma endregion
 
