@@ -54,6 +54,14 @@ namespace dfusion
 	DynamicFusionProcessor::~DynamicFusionProcessor()
 	{
 		clear();
+		DFUSION_SAFE_DELETE(m_camera);
+		DFUSION_SAFE_DELETE(m_volume);
+		DFUSION_SAFE_DELETE(m_rayCaster);
+		DFUSION_SAFE_DELETE(m_marchCube);
+		DFUSION_SAFE_DELETE(m_canoMesh);
+		DFUSION_SAFE_DELETE(m_warpedMesh);
+		DFUSION_SAFE_DELETE(m_warpField);
+		DFUSION_SAFE_DELETE(m_gsSolver);
 	}
 
 	void DynamicFusionProcessor::init(Param param)
@@ -64,7 +72,8 @@ namespace dfusion
 		// allocation----------------------
 
 		// camera
-		m_camera = new Camera();
+		if (m_camera == nullptr)
+			m_camera = new Camera();
 		m_camera->setViewPort(0, KINECT_WIDTH, 0, KINECT_HEIGHT);
 		m_camera->setPerspective(KINECT_DEPTH_V_FOV, float(KINECT_WIDTH) / KINECT_HEIGHT,
 			KINECT_NEAREST_METER, 30.f);
@@ -76,7 +85,8 @@ namespace dfusion
 		m_kinect_intr = Intr(f, f, (l + r) / 2, (t + b) / 2);
 
 		// volume
-		m_volume = new TsdfVolume();
+		if (m_volume == nullptr)
+			m_volume = new TsdfVolume();
 		m_volume->init(make_int3(
 			m_param.volume_resolution[0], 
 			m_param.volume_resolution[1], 
@@ -88,23 +98,29 @@ namespace dfusion
 			);
 
 		// mesh
-		m_canoMesh = new GpuMesh();
-		m_warpedMesh = new GpuMesh();
+		if (m_canoMesh == nullptr)
+			m_canoMesh = new GpuMesh();
+		if (m_warpedMesh == nullptr)
+			m_warpedMesh = new GpuMesh();
 
 		// marching cube
-		m_marchCube = new MarchingCubes();
+		if (m_marchCube == nullptr)
+			m_marchCube = new MarchingCubes();
 		m_marchCube->init(m_volume, m_param);
 
 		// ray casting
-		m_rayCaster = new RayCaster();
+		if (m_rayCaster == nullptr)
+			m_rayCaster = new RayCaster();
 		m_rayCaster->init(*m_volume);
 
 		// warp field
-		m_warpField = new WarpField();
+		if (m_warpField == nullptr)
+			m_warpField = new WarpField();
 		m_warpField->init(m_volume, m_param);
 
 		// GaussNewton solver
-		m_gsSolver = new GpuGaussNewtonSolver();
+		if (m_gsSolver == nullptr)
+			m_gsSolver = new GpuGaussNewtonSolver();
 
 		// maps
 		m_depth_curr_pyd.resize(RIGID_ALIGN_PYD_LEVELS);
@@ -124,14 +140,20 @@ namespace dfusion
 
 	void DynamicFusionProcessor::clear()
 	{
-		DFUSION_SAFE_DELETE(m_camera);
-		DFUSION_SAFE_DELETE(m_volume);
-		DFUSION_SAFE_DELETE(m_rayCaster);
-		DFUSION_SAFE_DELETE(m_marchCube);
-		DFUSION_SAFE_DELETE(m_canoMesh);
-		DFUSION_SAFE_DELETE(m_warpedMesh);
-		DFUSION_SAFE_DELETE(m_warpField);
-		DFUSION_SAFE_DELETE(m_gsSolver);
+		if (m_camera)
+			m_camera->reset();
+		if (m_volume)
+			m_volume->reset();
+		if (m_rayCaster)
+			m_rayCaster->clear();
+		if (m_canoMesh)
+			m_canoMesh->release();
+		if (m_warpedMesh)
+			m_warpedMesh->release();
+		if (m_warpField)
+			m_warpField->clear();
+		if (m_gsSolver)
+			m_gsSolver->reset();
 		m_frame_id = 0;
 		m_depth_input.release();
 		m_depth_curr_pyd.clear();

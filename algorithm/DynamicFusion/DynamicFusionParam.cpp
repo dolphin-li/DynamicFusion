@@ -46,10 +46,10 @@ namespace dfusion
 		fusion_nonRigid_distThre = 0.03f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 
-		fusion_nonRigidICP_maxIter = 3;
-		fusion_GaussNewton_maxIter = 3;
+		fusion_nonRigidICP_maxIter = 2;
+		fusion_GaussNewton_maxIter = 2;
 		fusion_GaussNewton_diag_regTerm = 1e-3;
-		fusion_GaussNewton_fixedStep = 0.5;// 5;
+		fusion_GaussNewton_fixedStep = 0.;// 5;
 
 		fusion_post_rigid_factor = true;
 
