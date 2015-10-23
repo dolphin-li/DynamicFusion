@@ -336,7 +336,7 @@ void DynamicFusionUI::updateDynamicFusion()
 
 void DynamicFusionUI::on_actionPause_triggered()
 {
-	if (ui.actionPause->isChecked())
+	if (m_state != Pause)
 		setState(DynamicFusionUI::Pause);
 	else
 		restoreState();
@@ -350,11 +350,55 @@ void DynamicFusionUI::on_pbReset_clicked()
 
 void DynamicFusionUI::on_actionSave_triggered()
 {
-
+	try
+	{
+		setState(DynamicFusionUI::Pause);
+		QString name = QFileDialog::getSaveFileName(this, "save", "", "*.rawvol");
+		if (!name.isEmpty())
+		{
+			try
+			{
+				if (!name.endsWith(".rawvol"))
+					name.append(".rawvol");
+				g_dataholder.m_processor.save(name.toStdString().c_str());
+			}
+			catch (std::exception e)
+			{
+				std::cout << e.what() << std::endl;
+			}
+		}
+		restoreState();
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
+
 void DynamicFusionUI::on_actionLoad_triggered()
 {
-
+	try
+	{
+		setState(DynamicFusionUI::Pause);
+		QString name = QFileDialog::getOpenFileName(this, "load", "", "*.rawvol");
+		if (!name.isEmpty())
+		{
+			try
+			{
+				g_dataholder.m_processor.load(name.toStdString().c_str());
+			}
+			catch (std::exception e)
+			{
+				std::cout << e.what() << std::endl;
+			}
+		}
+		else
+			restoreState();
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 void DynamicFusionUI::on_actionLoad_frames_triggered()
 {
@@ -367,7 +411,24 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		if (!dir.exists())
 			throw std::exception(("error input path:" + m_currentPath.toStdString()).c_str());
 		int fid = 0;
+
+		// 1. load a pre-saved volume and then start by this frame.
+		int vol_fid = 0;
+		for (; vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame;)
+		{
+			std::string volname = fullfile(m_currentPath.toStdString(), std::to_string(vol_fid) + ".rawvol");
+			if (ldp::file_exist(volname.c_str()))
+			{
+				g_dataholder.m_processor.load(volname.c_str());
+				break;
+			}
+			else
+				vol_fid++;
+		}
+		if (vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame)
+			fid = vol_fid;
 		
+		// 2. find the smallest available frame
 		for (; fid < g_dataholder.m_dparam.fusion_dumping_max_frame; )
 		{
 			try

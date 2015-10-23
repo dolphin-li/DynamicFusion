@@ -159,4 +159,44 @@ namespace dfusion
 		cudaChannelFormatDesc desc = cudaCreateChannelDesc<TsdfData>();
 		cudaSafeCall(cudaMalloc3DArray(&volume_, &desc, ext), "cudaMalloc3D");
 	}
+
+	void TsdfVolume::save(const char* filename)const
+	{
+		std::vector<TsdfData> tsdf;
+		downloadRawVolume(tsdf);
+
+		FILE* pFile = fopen(filename, "wb");
+		if (!pFile)
+			throw std::exception(("save failed: " + std::string(filename)).c_str());
+
+		fwrite(&voxel_size_, sizeof(voxel_size_), 1, pFile);
+		fwrite(&origion_, sizeof(origion_), 1, pFile);
+		fwrite(&resolution_, sizeof(resolution_), 1, pFile);
+		fwrite(&tranc_dist_, sizeof(tranc_dist_), 1, pFile);
+		fwrite(tsdf.data(), sizeof(TsdfData), tsdf.size(), pFile);
+
+		fclose(pFile);
+	}
+
+	void TsdfVolume::load(const char* filename)
+	{
+
+		FILE* pFile = fopen(filename, "rb");
+		if (!pFile)
+			throw std::exception(("load failed: " + std::string(filename)).c_str());
+
+		fread(&voxel_size_, sizeof(voxel_size_), 1, pFile);
+		fread(&origion_, sizeof(origion_), 1, pFile);
+		fread(&resolution_, sizeof(resolution_), 1, pFile);
+		fread(&tranc_dist_, sizeof(tranc_dist_), 1, pFile);
+
+		std::vector<TsdfData> tsdf(resolution_.x * resolution_.y * resolution_.z);
+		fread(tsdf.data(), sizeof(TsdfData), tsdf.size(), pFile);
+
+		fclose(pFile);
+
+		allocate(resolution_, voxel_size_, origion_);
+
+		uploadRawVolume(tsdf);
+	}
 }

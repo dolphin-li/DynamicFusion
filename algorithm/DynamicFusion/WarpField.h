@@ -177,6 +177,9 @@ namespace dfusion
 		// slow: copy from cuda array to a single host pos
 		KnnIdx getKnnAt(float3 volumePos)const;
 		KnnIdx getKnnAt(int3 gridXYZ)const;
+
+		void save(const char* filename)const;
+		void load(const char* filename);
 	protected:
 		void initKnnField();
 		void insertNewNodes(GpuMesh& src);

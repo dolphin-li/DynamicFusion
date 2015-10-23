@@ -21,26 +21,13 @@ namespace dfusion
 		grid.x = divUp(resolution_.x, block.x);
 		grid.y = divUp(resolution_.y, block.y);
 
-#if 0
-		// bind the surface
-		cudaChannelFormatDesc desc = cudaCreateChannelDesc<TsdfData>();
-		cudaSafeCall(cudaBindSurfaceToArray(&g_tsdf_volume_surf, volume_, &desc));
-		initializeVolume << <grid, block >> >(resolution_);
-		cudaSafeCall(cudaGetLastError());
-#else
 		// surface object
-		cudaSurfaceObject_t surf;
-		cudaResourceDesc    surfRes;
-		memset(&surfRes, 0, sizeof(cudaResourceDesc));
-		surfRes.resType = cudaResourceTypeArray;
-		surfRes.res.array.array = volume_;
-		cudaSafeCall(cudaCreateSurfaceObject(&surf, &surfRes));
+		cudaSurfaceObject_t surf = bindSurface();
 
 		initializeVolume << <grid, block >> >(resolution_, surf);
 		cudaSafeCall(cudaGetLastError());
-		cudaSafeCall(cudaDestroySurfaceObject(surf));
-#endif
 
+		unbindSurface(surf);
 	}
 
 	__global__ void copyFromHostKernel(const float* data, int3 res, cudaSurfaceObject_t surf)
@@ -68,24 +55,13 @@ namespace dfusion
 		grid.x = divUp(resolution_.x, block.x);
 		grid.y = divUp(resolution_.y, block.y);
 
-#if 0
-		cudaChannelFormatDesc desc = cudaCreateChannelDesc<TsdfData>();
-		cudaSafeCall(cudaBindSurfaceToArray(&g_tsdf_volume_surf, volume_));
-		copyFromHostKernel << <grid, block >> >(tmp.ptr(), resolution_);
-		cudaSafeCall(cudaGetLastError());
-#else
 		// surface object
-		cudaSurfaceObject_t surf;
-		cudaResourceDesc    surfRes;
-		memset(&surfRes, 0, sizeof(cudaResourceDesc));
-		surfRes.resType = cudaResourceTypeArray;
-		surfRes.res.array.array = volume_;
-		cudaSafeCall(cudaCreateSurfaceObject(&surf, &surfRes));
+		cudaSurfaceObject_t surf = bindSurface();
 
 		copyFromHostKernel << <grid, block >> >(tmp.ptr(), resolution_, surf);
-		cudaSafeCall(cudaGetLastError());
-		cudaSafeCall(cudaDestroySurfaceObject(surf));
-#endif
+		cudaSafeCall(cudaGetLastError(), "TsdfVolume::copyFromHost");
+		cudaSafeCall(cudaThreadSynchronize(), "TsdfVolume::copyFromHost");
+		unbindSurface(surf);
 	}
 
 	__global__ void copyToHostKernel(float* data, int3 res, cudaSurfaceObject_t surf)
@@ -117,24 +93,14 @@ namespace dfusion
 		grid.x = divUp(resolution_.x, block.x);
 		grid.y = divUp(resolution_.y, block.y);
 
-#if 0
-		cudaChannelFormatDesc desc = cudaCreateChannelDesc<TsdfData>();
-		cudaSafeCall(cudaBindSurfaceToArray(&g_tsdf_volume_surf, volume_, &desc));
-		copyToHostKernel << <grid, block >> >(tmp.ptr(), resolution_);
-		cudaSafeCall(cudaGetLastError());
-#else
 		// surface object
-		cudaSurfaceObject_t surf;
-		cudaResourceDesc    surfRes;
-		memset(&surfRes, 0, sizeof(cudaResourceDesc));
-		surfRes.resType = cudaResourceTypeArray;
-		surfRes.res.array.array = volume_;
-		cudaSafeCall(cudaCreateSurfaceObject(&surf, &surfRes));
+		cudaSurfaceObject_t surf = bindSurface();
 
 		copyToHostKernel << <grid, block >> >(tmp.ptr(), resolution_, surf);
-		cudaSafeCall(cudaGetLastError());
-		cudaSafeCall(cudaDestroySurfaceObject(surf));
-#endif
+		cudaSafeCall(cudaGetLastError(), "TsdfVolume::copyToHost");
+		cudaSafeCall(cudaThreadSynchronize(), "TsdfVolume::copyToHost");
+
+		unbindSurface(surf);
 
 		tmp.download(data);
 	}
@@ -164,25 +130,49 @@ namespace dfusion
 		grid.x = divUp(resolution_.x, block.x);
 		grid.y = divUp(resolution_.y, block.y);
 
-#if 0
-		cudaChannelFormatDesc desc = cudaCreateChannelDesc<TsdfData>();
-		cudaSafeCall(cudaBindSurfaceToArray(&g_tsdf_volume_surf, volume_, &desc));
-		copyToHostRawKernel << <grid, block >> >(tmp.ptr(), resolution_);
-		cudaSafeCall(cudaGetLastError());
-#else
 		// surface object
-		cudaSurfaceObject_t surf;
-		cudaResourceDesc    surfRes;
-		memset(&surfRes, 0, sizeof(cudaResourceDesc));
-		surfRes.resType = cudaResourceTypeArray;
-		surfRes.res.array.array = volume_;
-		cudaSafeCall(cudaCreateSurfaceObject(&surf, &surfRes));
+		cudaSurfaceObject_t surf = bindSurface();
 
 		copyToHostRawKernel << <grid, block >> >(tmp.ptr(), resolution_, surf);
-		cudaSafeCall(cudaGetLastError());
-		cudaSafeCall(cudaDestroySurfaceObject(surf));
-#endif
+		cudaSafeCall(cudaGetLastError(), "TsdfVolume::copyToHostRaw");
+		cudaSafeCall(cudaThreadSynchronize(), "TsdfVolume::copyToHostRaw");
+
+		unbindSurface(surf);
 
 		tmp.download(data);
+	}
+
+	__global__ void uploadRawVolumeKernel(const TsdfData* data, int3 res, cudaSurfaceObject_t surf)
+	{
+		int x = threadIdx.x + blockIdx.x * blockDim.x;
+		int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+		if (x < res.x && y < res.y)
+		{
+			for (int z = 0; z < res.z; ++z)
+			{
+				int pos = (z*res.y + y)*res.x + x;
+				write_tsdf_surface(surf, data[pos], x, y, z);
+			}
+		}
+	}
+
+	void TsdfVolume::uploadRawVolume(std::vector<TsdfData>& tsdf)
+	{
+		dim3 block(32, 16);
+		dim3 grid(1, 1, 1);
+		grid.x = divUp(resolution_.x, block.x);
+		grid.y = divUp(resolution_.y, block.y);
+
+		cudaSurfaceObject_t surf = bindSurface();
+
+		DeviceArray<TsdfData> tmp;
+		tmp.upload(tsdf);
+
+		uploadRawVolumeKernel << <grid, block >> >(tmp.ptr(), resolution_, surf);
+		cudaSafeCall(cudaGetLastError(), "TsdfVolume::uploadRawVolume");
+		cudaSafeCall(cudaThreadSynchronize(), "TsdfVolume::uploadRawVolume");
+
+		unbindSurface(surf);
 	}
 }

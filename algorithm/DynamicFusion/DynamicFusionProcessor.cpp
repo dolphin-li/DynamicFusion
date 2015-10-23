@@ -14,6 +14,8 @@
 #include "GpuGaussNewtonSolver.h"
 namespace dfusion
 {
+//#define ENABLE_CPU_DEBUG
+
 #define DFUSION_SAFE_DELETE(buffer)\
 	if (buffer){ delete buffer; buffer = nullptr; }
 
@@ -289,6 +291,47 @@ namespace dfusion
 		return m_warpField;
 	}
 
+	WarpField* DynamicFusionProcessor::getWarpField()
+	{
+		return m_warpField;
+	}
+
+	const TsdfVolume* DynamicFusionProcessor::getVolume()const
+	{
+		return m_volume;
+	}
+
+	TsdfVolume* DynamicFusionProcessor::getVolume()
+	{
+		return m_volume;
+	}
+
+	void DynamicFusionProcessor::save(const char* volume_name)
+	{
+		m_volume->save(volume_name);
+
+		std::string path, purename, ext;
+		ldp::fileparts(volume_name, path, purename, ext);
+		std::string name1 = fullfile(path, purename + ".warpfield");
+		m_warpField->save(name1.c_str());
+	}
+
+	void DynamicFusionProcessor::load(const char* volume_name)
+	{
+		int3 old_res = m_volume->getResolution();
+		m_volume->load(volume_name);
+		int3 new_res = m_volume->getResolution();
+		if (old_res.x != new_res.x || old_res.y != new_res.y || old_res.z != new_res.z)
+			throw std::exception("error in loading volumes, size not matched with pre-allocated!");
+
+		std::string path, purename, ext;
+		ldp::fileparts(volume_name, path, purename, ext);
+		std::string name1 = fullfile(path, purename + ".warpfield");
+		m_warpField->load(name1.c_str());
+
+		surfaceExtractionMC();
+	}
+
 	void DynamicFusionProcessor::estimateWarpField()
 	{
 		Tbx::Transfo rigid = rigid_align();
@@ -305,27 +348,37 @@ namespace dfusion
 		if (!m_param.fusion_enable_nonRigidSolver)
 			return;
 
+#ifdef ENABLE_CPU_DEBUG
+		CpuGaussNewton solver;
+		solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
+#endif
 
 		// icp iteration
 		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{
+#ifdef ENABLE_CPU_DEBUG
+			solver.findCorr(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
+			solver.solve(false);
+#else
 			// Gauss-Newton Optimization, findding correspondence internal
 			m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
 
 			// update the warp field
 			m_gsSolver->updateWarpField();
+#endif
 
-			// update warped mesh and render for visiblity
-			m_warpField->warp(*m_canoMesh, *m_warpedMesh);
-			if (icp_iter < m_param.fusion_nonRigidICP_maxIter - 1)
-			{
-				m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
-				m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
-			}
-
+			//// update warped mesh and render for visiblity
+			//if (icp_iter < m_param.fusion_nonRigidICP_maxIter - 1)
+			//{
+			//	m_warpField->warp(*m_canoMesh, *m_warpedMesh);
+			//	m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
+			//}
+			m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
+#ifndef ENABLE_CPU_DEBUG
 			if (m_param.fusion_post_rigid_factor)
 				m_gsSolver->factor_out_rigid();
+#endif
 		}// end for icp_iter
 
 		// finally, re-factor out the rigid part across all nodes

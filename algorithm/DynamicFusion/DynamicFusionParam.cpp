@@ -49,7 +49,7 @@ namespace dfusion
 		fusion_nonRigidICP_maxIter = 3;
 		fusion_GaussNewton_maxIter = 3;
 		fusion_GaussNewton_diag_regTerm = 1e-3;
-		fusion_GaussNewton_fixedStep = 0.;// 5;
+		fusion_GaussNewton_fixedStep = 0.5;// 5;
 
 		fusion_post_rigid_factor = true;
 

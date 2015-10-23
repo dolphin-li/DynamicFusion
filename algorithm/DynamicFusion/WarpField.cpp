@@ -152,4 +152,62 @@ namespace dfusion
 	{
 		return m_activeVisualizeNodeId;
 	}
+
+	void WarpField::save(const char* filename)const
+	{
+		FILE* pFile = fopen(filename, "wb");
+		if (!pFile)
+			throw std::exception(("save failed" + std::string(filename)).c_str());
+
+		fwrite(&m_rigidTransform, sizeof(m_rigidTransform), 1, pFile);
+		fwrite(m_numNodes, sizeof(m_numNodes), 1, pFile);
+
+		std::vector<float4> tmp;
+		m_nodesQuatTransVw.download(tmp);
+		int ntmp = tmp.size();
+		fwrite(&ntmp, sizeof(int), 1, pFile);
+		fwrite(tmp.data(), sizeof(float4), tmp.size(), pFile);
+
+		std::vector<KnnIdx> tmpIdx;
+		m_nodesGraph.download(tmpIdx);
+		int ntmpidx = tmpIdx.size();
+		fwrite(&ntmpidx, sizeof(int), 1, pFile);
+		fwrite(tmpIdx.data(), sizeof(KnnIdx), tmpIdx.size(), pFile);
+
+		fclose(pFile);
+	}
+
+	void WarpField::load(const char* filename)
+	{
+		if (m_volume == nullptr)
+			throw std::exception("Error: not initialzied before loading WarpField!");
+
+		FILE* pFile = fopen(filename, "rb");
+		if (!pFile)
+			throw std::exception(("load failed" + std::string(filename)).c_str());
+	
+		memset(m_lastNumNodes, 0, sizeof(m_lastNumNodes));
+		fread(&m_rigidTransform, sizeof(m_rigidTransform), 1, pFile);
+		fread(m_numNodes, sizeof(m_numNodes), 1, pFile);
+		
+		std::vector<float4> tmp(m_nodesQuatTransVw.size(), make_float4(0.f,0.f,0.f,0.f));
+		int ntmp = 0;
+		fread(&ntmp, sizeof(int), 1, pFile);
+		if (ntmp != tmp.size())
+			throw std::exception("size not matched in WarpField::load nodesQuatTransVw");
+		fread(tmp.data(), sizeof(float4), tmp.size(), pFile);
+		m_nodesQuatTransVw.upload(tmp);
+
+		std::vector<KnnIdx> tmpIdx(m_nodesGraph.size(), make_ushort4(0,0,0,0));
+		int ntmpidx = 0;
+		fread(&ntmpidx, sizeof(int), 1, pFile);
+		if (ntmpidx != tmpIdx.size())
+			throw std::exception("size not matched in WarpField::load nodesGraph");
+		fread(tmpIdx.data(), sizeof(KnnIdx), tmpIdx.size(), pFile);
+		m_nodesGraph.upload(tmpIdx);
+
+		fclose(pFile);
+
+		updateAnnField();
+	}
 }

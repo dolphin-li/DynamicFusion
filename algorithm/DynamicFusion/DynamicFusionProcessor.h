@@ -21,6 +21,9 @@ namespace dfusion
 		void clear();
 		void reset();
 
+		void save(const char* volume_name);
+		void load(const char* volume_name);
+
 		void processFrame(const DepthMap& depth);
 
 		// if not use_ray_casting, then use marching_cube
@@ -29,6 +32,9 @@ namespace dfusion
 		void shadingCurrentErrorMap(ColorMap& img, float errorMapRange);
 
 		const WarpField* getWarpField()const;
+		WarpField* getWarpField();
+		const TsdfVolume* getVolume()const;
+		TsdfVolume* getVolume();
 
 		void updateParam(const Param& param);
 

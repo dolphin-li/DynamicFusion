@@ -6,7 +6,7 @@
 #include "ldpdef.h"
 namespace dfusion
 {
-#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+//#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
 #define SHOW_LAST_NODE_INFO
 
 #define USE_ROBUST_HUBER_PENALTY
@@ -347,8 +347,7 @@ namespace dfusion
 			if (norm < param_.fusion_psi_reg)
 				s = norm * norm * 0.5f;
 			else
-			for (int k = 0; k < 3; k++)
-				s += param_.fusion_psi_reg*(abs(f[k])- param_.fusion_psi_reg*0.5f);
+				s = param_.fusion_psi_reg*(norm - param_.fusion_psi_reg*0.5f);
 			return s;
 #endif
 		}
@@ -363,9 +362,8 @@ namespace dfusion
 			real norm = f.norm();
 			if (norm < param_.fusion_psi_reg)
 				df = f;
-			else
-			for (int k = 0; k < 3; k++)
-				df[k] = ldp::sign(f[k])*param_.fusion_psi_reg;
+			else for(int k = 0; k < 3; k++)
+				df[k] = f[k] * param_.fusion_psi_reg / norm;
 			return df;
 #endif
 		}
@@ -680,13 +678,15 @@ namespace dfusion
 					}
 				}
 
-				if (dq_blend.get_non_dual_part().norm() == 0)
-					printf("warning: non-covered pixel: %d\n", iPixel);
-
-				dq_blend.normalize();
-				v = Tlw_*(dq_blend.transform(v));
-				n = Tlw_*(dq_blend.rotate(n));
-				f[nRow] = data_term_penalty(n.dot(v - vl));
+				if (dq_blend.get_non_dual_part().norm() < Tbx::Dual_quat_cu::epsilon())
+					f[nRow] = 0;
+				else
+				{
+					dq_blend.normalize();
+					v = Tlw_*(dq_blend.transform(v));
+					n = Tlw_*(dq_blend.rotate(n));
+					f[nRow] = data_term_penalty(n.dot(v - vl));
+				}
 			}// end for iPixel
 
 			// reg term
@@ -798,8 +798,8 @@ namespace dfusion
 					}
 				}
 
-				if (dq_blend.get_non_dual_part().norm() == 0)
-					printf("warning: non-covered pixel: %d\n", iPixel);
+				if (dq_blend.get_non_dual_part().norm() < Tbx::Dual_quat_cu::epsilon())
+					continue;
 
 				dq_blend.normalize();
 				v = Tlw_*(dq_blend.transform(v));
@@ -962,6 +962,9 @@ namespace dfusion
 			const int nNodes = x_.size() / 6;
 			const int nPixel = imgHeight_ * imgWidth_;
 
+			for (size_t i = 0; i < m_cooSys.size(); i++)
+				m_cooSys[i] = Eigen::Triplet<real>(m_cooSys[i].row(), m_cooSys[i].col(), 0);
+
 			// data term    ========================================================
 #pragma omp parallel for
 			for (int iPixel = 0; iPixel < nPixel; iPixel++)
@@ -999,9 +1002,8 @@ namespace dfusion
 					}// end if (knnNodeId < nNodes)
 				}// ebd fir knnK
 
-				if (dq.get_non_dual_part().norm() == std::numeric_limits<float>::epsilon())
-					printf("warning: non-covered pixel: %d %f\n", iPixel, 
-					dq.get_non_dual_part().norm());
+				if (dq.get_non_dual_part().norm() < std::numeric_limits<float>::epsilon())
+					continue;
 
 				Tbx::Dual_quat_cu dq_bar = dq;
 				real norm_dq_bar = dq_bar.get_non_dual_part().norm();
@@ -1072,6 +1074,7 @@ namespace dfusion
 								p_T_p_alphak.print();
 								printf("p_qk_p_alpha:\n");
 								p_qk_p_alpha.to_transformation().print();
+								system("pause");
 							}
 
 							// write to jacobi

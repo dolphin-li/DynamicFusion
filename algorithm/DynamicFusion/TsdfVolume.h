@@ -58,7 +58,10 @@ namespace dfusion
 		*/
 		void downloadRawVolume(std::vector<TsdfData>& tsdf)const;
 		void download(mpu::VolumeData* vhost)const;
+		void uploadRawVolume(std::vector<TsdfData>& tsdf);
 
+		void save(const char* filename)const;
+		void load(const char* filename);
 	protected:
 		void copyFromHost(const float* data);
 		void copyToHost(float* data)const;
