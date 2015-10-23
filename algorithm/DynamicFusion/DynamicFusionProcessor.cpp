@@ -317,7 +317,12 @@ namespace dfusion
 			m_gsSolver->updateWarpField();
 
 			// update warped mesh and render for visiblity
-			m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
+			m_warpField->warp(*m_canoMesh, *m_warpedMesh);
+			if (icp_iter < m_param.fusion_nonRigidICP_maxIter - 1)
+			{
+				m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
+				m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
+			}
 
 			if (m_param.fusion_post_rigid_factor)
 				m_gsSolver->factor_out_rigid();

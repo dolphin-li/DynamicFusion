@@ -6,6 +6,8 @@
 #include "GpuCholeSky.h"
 namespace dfusion
 {
+//#define USE_L2_NORM_DATA_TERM
+//#define USE_L2_NORM_REG_TERM
 #define CHECK(a, msg){if(!(a)) throw std::exception(msg);} 
 #define CHECK_LE(a, b){if((a) > (b)) {std::cout << "" << #a << "(" << a << ")<=" << #b << "(" << b << ")";throw std::exception(" ###error!");}} 
 
@@ -285,6 +287,7 @@ namespace dfusion
 
 		Intr intr;
 		Tbx::Transfo Tlw_inv;
+		Tbx::Transfo Tlw;
 
 		int imgWidth;
 		int imgHeight;
@@ -305,21 +308,29 @@ namespace dfusion
 
 		__device__ __forceinline__ float data_term_energy(float f)const
 		{
+#ifdef USE_L2_NORM_DATA_TERM
+			return 0.5f*f*f;
+#else
 			// the robust Tukey penelty gradient
 			if (abs(f) <= psi_data)
 				return psi_data*psi_data / 6.f *(1 - pow(1 - sqr(f / psi_data), 3));
 			else
 				return psi_data*psi_data / 6.f;
+#endif
 		}
 
 		__device__ __forceinline__ float data_term_penalty(float f)const
 		{
+#ifdef USE_L2_NORM_DATA_TERM
+			return f;
+#else
 			return f * sqr(max(0.f, 1.f - sqr(f / psi_data)));
 			//// the robust Tukey penelty gradient
 			//if (abs(f) <= psi_data)
 			//	return f * sqr(1 - sqr(f / psi_data));
 			//else
 			//	return 0;
+#endif
 		}
 
 		__device__ __forceinline__ float trace_AtB(Tbx::Transfo A, Tbx::Transfo B)const
@@ -491,7 +502,12 @@ namespace dfusion
 			float3 vwarp = read_float3_4(vmap_warp(y, x));
 			float3 nwarp = read_float3_4(nmap_warp(y, x));
 
-			if (isnan(nwarp.x))
+			return search(vwarp, nwarp, vl);
+		}
+
+		__device__ __forceinline__ bool search(float3 vwarp, float3 nwarp, Tbx::Point3& vl) const
+		{
+			if (isnan(nwarp.x) || isnan(vwarp.x))
 				return false;
 
 			float3 uvd = intr.xyz2uvd(vwarp);
@@ -503,7 +519,7 @@ namespace dfusion
 
 			float3 vlive = read_float3_4(vmap_live[ukr.y*imgWidth + ukr.x]);
 			float3 nlive = read_float3_4(nmap_live[ukr.y*imgWidth + ukr.x]);
-			if (isnan(nlive.x))
+			if (isnan(nlive.x) || isnan(vlive.x))
 				return false;
 
 			float dist = norm(vwarp - vlive);
@@ -567,12 +583,12 @@ namespace dfusion
 					Tbx::Dual_quat_cu dqk_k;
 					dqk_k.from_twist(r, t);
 					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
-						;// *sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
+						 *sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
 					dq = dq + dqk_k * wk[k];		
 				}
 
 				Tbx::Dual_quat_cu dq_bar = dq;
-				float norm_dq_bar = dq_bar.get_non_dual_part().norm();
+				float norm_dq_bar = dq_bar.norm();
 				if (norm_dq_bar < Tbx::Dual_quat_cu::epsilon())
 					return;
 				float inv_norm_dq_bar = 1.f / norm_dq_bar;
@@ -689,6 +705,167 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}// end function ()
 
 		template<int maxK>
+		__device__ __forceinline__ Tbx::Dual_quat_cu calc_pixel_dq(WarpField::KnnIdx knn, 
+			Tbx::Point3 v, float* wk)const
+		{
+			Tbx::Dual_quat_cu dqk_0;
+			Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0,0,0,0), Tbx::Quat_cu(0,0,0,0));
+			// dqk_0
+			{
+				Tbx::Vec3 r, t;
+				get_twist(knn_k(knn, 0), r, t);
+				float4 nodeVw = get_nodesVw(knn_k(knn, 0));
+				Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw)) - v);
+				dqk_0.from_twist(r, t);
+				wk[0] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
+				dq += dqk_0 * wk[0];
+			}
+
+			// other dqk_k
+#pragma unroll
+			for (int k = 1; k < maxK; k++)
+			{
+				float4 nodeVw = get_nodesVw(knn_k(knn, k));
+				Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw)) - v);
+				Tbx::Dual_quat_cu dqk_k;
+				Tbx::Vec3 r, t;
+				get_twist(knn_k(knn, k), r, t);
+				dqk_k.from_twist(r, t);
+				wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
+					*sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
+				dq += dqk_k * wk[k];
+			}
+			return dq;
+		}
+
+		__device__ __forceinline__ void exchange_ri_k(WarpField::KnnIdx knn, 
+			const float* wk, int k, int i, Tbx::Dual_quat_cu& dq, float& inc)const
+		{
+			Tbx::Vec3 r, t;
+			get_twist(knn_k(knn, k), r, t);
+			Tbx::Dual_quat_cu old_dqk, new_dqk;
+			old_dqk.from_twist(r, t);
+			inc = get_numeric_inc(r[i]);
+			r[i] += inc;
+			new_dqk.from_twist(r, t);
+			dq -= old_dqk * wk[k];
+			dq += new_dqk * wk[k] * sign(old_dqk.get_non_dual_part().dot(new_dqk.get_non_dual_part()));
+		}
+		__device__ __forceinline__ void exchange_ti_k(WarpField::KnnIdx knn,
+			const float* wk, int k, int i, Tbx::Dual_quat_cu& dq, float& inc)const
+		{
+			Tbx::Vec3 r, t;
+			get_twist(knn_k(knn, k), r, t);
+			Tbx::Dual_quat_cu old_dqk, new_dqk;
+			old_dqk.from_twist(r, t);
+			inc = get_numeric_inc(t[i]);
+			t[i] += inc;
+			new_dqk.from_twist(r, t);
+			dq -= old_dqk * wk[k];
+			dq += new_dqk * wk[k] * sign(old_dqk.get_non_dual_part().dot(new_dqk.get_non_dual_part()));
+		}
+
+		__device__ __forceinline__ float get_numeric_inc(float v) const
+		{
+			return max( 1e-5f, v* 1e-3f);
+		}
+
+		template<int maxK>
+		__device__ __forceinline__ void calc_dataterm_numeric() const
+		{
+			const int x = threadIdx.x + blockIdx.x * blockDim.x;
+			const int y = threadIdx.y + blockIdx.y * blockDim.y;
+			if (x >= imgWidth || y >= imgHeight)
+				return;
+
+			const KnnIdx knn = vmapKnn(y, x);
+			Tbx::Point3 v(convert(read_float3_4(vmap_cano(y, x))));
+			Tbx::Vec3 n(convert(read_float3_4(nmap_cano(y, x))));
+
+			if (isnan(n.x) || isnan(v.x))
+				return;
+
+			// 1. get all nodes params
+			// 2. compute function=================================================
+			float wk[maxK];
+			Tbx::Dual_quat_cu dq = calc_pixel_dq<maxK>(knn, v, wk);
+			float norm_dq = dq.norm();
+			if (norm_dq < Tbx::Dual_quat_cu::epsilon())
+				return;
+			Tbx::Dual_quat_cu dq_not_normalized = dq;
+			dq = dq * (1.f / norm_dq); // normalize
+
+			// find corr
+			Tbx::Vec3 nwarp = Tlw*dq.rotate(n);
+			Tbx::Point3 vwarp = Tlw*dq.transform(v);
+			Tbx::Point3 vl;
+			//bool corr_found = search(convert(vwarp), convert(nwarp), vl);
+			bool corr_found = search(x, y, vl);
+			if (!corr_found)
+				return;
+
+			// the grad energy
+			const float f = nwarp.dot(vwarp - vl);
+			const float psi_f = data_term_penalty(f);
+
+			// 3. compute jacobi
+			for (int knnK = 0; knnK < maxK; knnK++)
+			{
+				float df[6];
+
+				// 3.0 p_r[0:2]
+				for (int i = 0; i < 3; i++)
+				{
+					float inc;
+					Tbx::Dual_quat_cu dq1 = dq_not_normalized;
+					exchange_ri_k(knn, wk, knnK, i, dq1, inc);
+					dq1 *= (1.f / dq1.norm());
+					nwarp = Tlw*dq1.rotate(n);
+					vwarp = Tlw*dq1.transform(v);
+
+					Tbx::Point3 vl1 = vl;
+					//corr_found = search(convert(vwarp), convert(nwarp), vl1);
+					//if (!corr_found)
+					//	return;
+
+					float f1 = nwarp.dot(vwarp - vl1);
+					df[i] = (f1 - f) / inc;
+				}// i=0:3
+
+				// 3.1 p_t[0:2]
+				for (int i = 0; i < 3; i++)
+				{
+					float inc;
+					Tbx::Dual_quat_cu dq1 = dq_not_normalized;
+					exchange_ti_k(knn, wk, knnK, i, dq1, inc);
+					dq1 *= (1.f / dq1.norm());
+					nwarp = Tlw*dq1.rotate(n);
+					vwarp = Tlw*dq1.transform(v);
+
+					Tbx::Point3 vl1 = vl;
+					//corr_found = search(convert(vwarp), convert(nwarp), vl1);
+					//if (!corr_found)
+					//	return;
+
+					float f1 = nwarp.dot(vwarp - vl1);
+					df[i+3] = (f1 - f) / inc;
+				}// i=0:3
+
+				//// reduce--------------------------------------------------
+				int shift = knn_k(knn, knnK) * VarPerNode2;
+				int shift_g = knn_k(knn, knnK) * VarPerNode;
+				for (int i = 0; i < VarPerNode; ++i)
+				{
+#pragma unroll
+					for (int j = 0; j <= i; ++j)
+						atomicAdd(&Hd_[shift + j], df[i] * df[j]);
+					atomicAdd(&g_[shift_g + i], df[i] * psi_f);
+					shift += VarPerNode;
+				}// end for i
+			}// end for knnK
+		}// end function ()
+
+		template<int maxK>
 		__device__ __forceinline__ void calcTotalEnergy()const
 		{
 			const int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
@@ -706,34 +883,41 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 				const KnnIdx knn = vmapKnn(y, x);
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
-				//Tbx::Dual_quat_cu dqk_0;
+				Tbx::Dual_quat_cu dqk_0;
 				float wk[maxK];
-				for (int k = 0; k < maxK; k++)
+				// dqk_0
+				{
+					Tbx::Vec3 r, t;
+					get_twist(knn_k(knn, 0), r, t);
+					float4 nodeVw = get_nodesVw(knn_k(knn, 0));
+					Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw)) - v);
+					dqk_0.from_twist(r, t);
+					float expIn = nodesV.dot(nodesV) * nodeVw.w * nodeVw.w;
+					wk[0] = __expf(-0.5f * expIn);
+					dq = dq + dqk_0 * wk[0];
+				}
+
+				// other dqk_k
+#pragma unroll
+				for (int k = 1; k < maxK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
-					
+
 					Tbx::Vec3 r, t;
 					get_twist(knnNodeId, r, t);
 					float4 nodeVw = get_nodesVw(knnNodeId);
-					Tbx::Point3 nodesV(convert(read_float3_4(nodeVw)));
-					float invNodesW = nodeVw.w;
+					Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw)) - v);
 					Tbx::Dual_quat_cu dqk_k;
 					dqk_k.from_twist(r, t);
-					// note: we store inv radius as vw.w, thus using * instead of / here
-					wk[k] = __expf(-(v - nodesV).dot(v - nodesV)*(2 * invNodesW * invNodesW));
-					//if (k == 0)
-					//	dqk_0 = dqk_k;
-					//if (dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()) < 0)
-					//	wk[k] = -wk[k];
+					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
+						*sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
 					dq = dq + dqk_k * wk[k];
-					
 				}
 
-				float norm_dq = dq.get_non_dual_part().norm();
+				float norm_dq = dq.norm();
 				if (norm_dq < Tbx::Dual_quat_cu::epsilon())
 					return;
-				float inv_norm_dq = 1.f / norm_dq;
-				dq = dq * inv_norm_dq; // normalize
+				dq = dq * (1.f / norm_dq); // normalize
 
 				// the grad energy f
 				const float f = data_term_energy((dq.rotate(n)).dot(dq.transform(v) - Tlw_inv*vl));
@@ -746,6 +930,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 	__global__ void dataTermCombinedKernel(const DataTermCombined cs)
 	{
 		cs.calc_dataterm<maxK>();
+		//cs.calc_dataterm_numeric<maxK>();
 	}
 
 	void GpuGaussNewtonSolver::calcDataTerm()
@@ -766,6 +951,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		cs.vmap_warp = *m_vmap_warp;
 		cs.vmapKnn = m_vmapKnn;
 		cs.nNodes = m_numNodes;
+		cs.Tlw = m_pWarpField->get_rigidTransform();
 		cs.Tlw_inv = m_pWarpField->get_rigidTransform().fast_invert();
 		cs.psi_data = m_param->fusion_psi_data;
 
@@ -956,6 +1142,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			thrust_wrapper::exclusive_scan(m_Jr_RowCounter.ptr(), m_Jr_RowCounter.ptr(), m_numNodes + 1);
 			cudaSafeCall(cudaMemcpy(&m_Jrrows, m_Jr_RowCounter.ptr() + m_numNodes,
 				sizeof(int), cudaMemcpyDeviceToHost), "copy Jr rows to host");
+			CHECK_LE(1, m_Jrrows);
 		}
 
 		// 1.1. collect nodes edges info:
@@ -1152,6 +1339,9 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		__device__ __forceinline__  float reg_term_energy(Tbx::Vec3 f)const
 		{
+#ifdef USE_L2_NORM_REG_TERM
+			return 0.5f*f.dot(f);
+#else
 			// the robust Huber penelty gradient
 			float s = 0;
 			float norm = f.norm();
@@ -1160,10 +1350,14 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			else
 				s = psi_reg*(norm - psi_reg*0.5f);
 			return s;
+#endif
 		}
 
 		__device__ __forceinline__  Tbx::Vec3 reg_term_penalty(Tbx::Vec3 f)const
 		{
+#ifdef USE_L2_NORM_REG_TERM
+			return f;
+#else
 			// the robust Huber penelty gradient
 			Tbx::Vec3 df;
 			float norm = f.norm();
@@ -1173,6 +1367,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			for (int k = 0; k < 3; k++)
 				df[k] = f[k]*psi_reg / norm;
 			return df;
+#endif
 		}
 
 		__device__ __forceinline__  Tbx::Transfo p_SE3_p_alpha_func(Tbx::Dual_quat_cu dq, int i)const
@@ -1401,6 +1596,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			// energy=============================================
 			Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 			float eg = ww2 * reg_term_energy(val);
+			Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
+			eg += ww2 * reg_term_energy(val1);
 
 			atomicAdd(totalEnergy, eg);
 		}
@@ -1417,6 +1614,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 	void GpuGaussNewtonSolver::calcRegTerm()
 	{
+		CHECK_LE(1, m_Jrrows);
 		RegTermJacobi rj;
 		rj.cidx = m_Jr_ColIdx.ptr();
 		rj.lambda = m_param->fusion_lambda;
@@ -1766,15 +1964,18 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		// 1.1 Hd = L*L'
 		gpu_cholesky::single_thread_cholesky_batched(m_Hd_Linv.ptr(), VarPerNode,
 			VarPerNode*VarPerNode, m_numLv0Nodes);
+		checkNan(m_Hd_Linv, m_numLv0Nodes*VarPerNode*VarPerNode, "Hd_L");
 
 		// 1.2 inv(L)
 		gpu_cholesky::single_thread_tril_inv_batched(m_Hd_Linv.ptr(), VarPerNode,
 			VarPerNode*VarPerNode, m_numLv0Nodes);
+		checkNan(m_Hd_Linv, m_numLv0Nodes*VarPerNode*VarPerNode, "Hd_Linv");
 
 		// 1.3 inv(L*L') = inv(L')*inv(L) = inv(L)'*inv(L)
 		gpu_cholesky::single_thread_LtL_batched(
 			m_Hd_LLtinv.ptr(), VarPerNode*VarPerNode, m_Hd_Linv.ptr(), 
 			VarPerNode*VarPerNode, VarPerNode, m_numLv0Nodes);
+		checkNan(m_Hd_LLtinv, m_numLv0Nodes*VarPerNode*VarPerNode, "Hd_LLtinv");
 
 		// 2. compute Q = Hr - Bt * inv(Hd) * B ======================================
 		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Q.size());
@@ -2036,6 +2237,15 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 	// optional, factor out common rigid transformations among all nodes
 	void GpuGaussNewtonSolver::factor_out_rigid()
 	{
+		if (m_pWarpField == nullptr)
+			throw std::exception("GpuGaussNewtonSolver::solve: null pointer");
+		if (m_pWarpField->getNumLevels() < 2)
+			throw std::exception("non-supported levels of warp field!");
+		if (m_pWarpField->getNumNodesInLevel(0) == 0)
+		{
+			printf("no warp nodes, return\n");
+			return;
+		}
 		const int num0 = m_pWarpField->getNumNodesInLevel(0);
 		const int numAll = m_pWarpField->getNumAllNodes();
 

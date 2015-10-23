@@ -71,7 +71,7 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 			//// visualize the depth via jet map, calculate it on GPU
 			//ui.widgetDepth->setImage_h(g_dataholder.m_depth_h.data(), 
 			// dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT);
-			if (g_dataholder.m_processor.hasRawDepth())
+			if (g_dataholder.m_processor.hasRawDepth() && m_state != Saving)
 			{
 				const dfusion::MapArr& nmap = g_dataholder.m_processor.getRawDepthNormal();
 				ui.widgetDepth->setNormal_d(nmap);
@@ -88,7 +88,8 @@ void DynamicFusionUI::timerEvent(QTimerEvent* ev)
 		double sec = gtime_seconds(time_s, time_e);
 		double fps = 1.0 / sec;
 		m_autoResetRemaingTime -= sec;
-		setWindowTitle(QString().sprintf("FPS:%.1f;  Nodes: %d %d %d %d; Reset: %.1f", fps,
+		setWindowTitle(QString().sprintf("[%d] FPS:%.1f;  Nodes: %d %d %d %d; Reset: %.1f", 
+			m_frameIndex, fps,
 			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
 			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
 			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
@@ -362,6 +363,26 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 	if (m_currentPath != "")
 	{
 		m_frameIndex = 0;
+		QDir dir(m_currentPath);
+		if (!dir.exists())
+			throw std::exception(("error input path:" + m_currentPath.toStdString()).c_str());
+		int fid = 0;
+		
+		for (; fid < g_dataholder.m_dparam.fusion_dumping_max_frame; )
+		{
+			try
+			{
+				QString name = dir.absoluteFilePath(QString().sprintf("%08d.depth", fid));
+				g_dataholder.loadDepth(g_dataholder.m_depth_h, name.toStdString());
+				break;
+			}
+			catch (std::exception e)
+			{
+				fid++;
+			}
+		}
+		m_frameIndex = fid;
+
 		setState(DynamicFusionUI::Loading);
 		g_dataholder.m_processor.reset();
 	}

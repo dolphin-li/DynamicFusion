@@ -38,11 +38,11 @@ namespace dfusion
 		// ldp hack here: if the voxel is too far from existed node, we just 
 		// assume its transformation to be identity and fuse it
 		// this helps to preserve empty place.
-		if (w_0 < Tbx::Dual_quat_cu::epsilon())
-		{
-			suc = true;
-			return Tbx::Dual_quat_cu::identity();
-		}
+		//if (w_0 < Tbx::Dual_quat_cu::epsilon())
+		//{
+		//	suc = true;
+		//	return Tbx::Dual_quat_cu::identity();
+		//}
 
 		dq_blend = pack_dual_quat(q0, q1);
 		fusion_weight += sqrt(dist2_0);
@@ -60,7 +60,7 @@ namespace dfusion
 			// note: we store 1.f/radius in vw.w
 			float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
 			float w = __expf(-(dist2 - dist2_0) * 0.5f * inv_dw_for_fusion2)
-				;// *sign(dq_blend[0] * dq[0] + dq_blend[1] * dq[1] + dq_blend[2] * dq[2] + dq_blend[3] * dq[3]);
+				 *sign(dq_blend[0] * dq[0] + dq_blend[1] * dq[1] + dq_blend[2] * dq[2] + dq_blend[3] * dq[3]);
 			dq_blend += dq*w;
 			fusion_weight += sqrt(dist2);
 		}

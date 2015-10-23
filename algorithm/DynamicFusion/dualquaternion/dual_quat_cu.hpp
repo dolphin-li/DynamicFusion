@@ -226,6 +226,17 @@ class __align__(16) Dual_quat_cu{
 		return *this;
 	}
 
+	__device__ __host__ Dual_quat_cu operator-(const Dual_quat_cu& dq) const
+	{
+		return Dual_quat_cu(_quat_0 - dq._quat_0, _quat_e - dq._quat_e);
+	}
+	__device__ __host__ Dual_quat_cu& operator-=(const Dual_quat_cu& dq)
+	{
+		_quat_0 -= dq._quat_0;
+		_quat_e -= dq._quat_e;
+		return *this;
+	}
+
 	__device__ __host__ Dual_quat_cu operator*(float scalar) const
     {
         return Dual_quat_cu(_quat_0 * scalar, _quat_e * scalar);

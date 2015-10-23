@@ -49,6 +49,10 @@ namespace dfusion
 		{
 			return ((WarpField::IdxType*)(&knn))[i];
 		}
+		__device__ __forceinline__ static int sign(float a)
+		{
+			return (a > 0) - (a < 0);
+		}
 		__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_p(
 			cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, 
 			float3 p, float3 origion, float invVoxelSize)
@@ -68,71 +72,39 @@ namespace dfusion
 			}
 			else
 			{
-				Tbx::Dual_quat_cu dq0;
-				for (int k = 0; k < KnnK; k++)
+				// the first quat
+				float4 q0, q1, vw;
+				int nn3;
+				//Tbx::Dual_quat_cu dq_avg;
+				nn3 = get_by_arrayid(knnIdx, 0) * 3;
+				tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
+				tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
+				tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
+				float dist2_0 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
+
+				dq_blend = pack_dual_quat(q0, q1);
+
+				// the other quats
+				for (int k = 1; k < KnnK; k++)
 				{
-					if (get_by_arrayid(knnIdx, k) < MaxNodeNum)
+					if(get_by_arrayid(knnIdx, k) < MaxNodeNum)
 					{
-						IdxType nn3 = get_by_arrayid(knnIdx, k) * 3;
-						float4 q0, q1, vw;
+						nn3 = get_by_arrayid(knnIdx, k) * 3;
 						tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 						tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 						tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
-						// note: we store 1.f/radius in vw.w
-						float w = __expf(-norm2(make_float3(vw.x - p.x, vw.y - p.y,
-							vw.z - p.z)) * 2 * (vw.w*vw.w));
 						Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
-						if(k == 0)
-							dq0 = dq;
-						else
-						{
-							if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
-								w = -w;
-						}
-						dq_blend = dq_blend + dq*w;
+
+						// note: we store 1.f/radius in vw.w
+						float dist2 = norm2(make_float3(vw.x - p.x, vw.y - p.y, vw.z - p.z));
+						float w = __expf(-(dist2 - dist2_0) * 0.5f * vw.w * vw.w)
+							*sign(dq_blend[0] * dq[0] + dq_blend[1] * dq[1] + 
+							dq_blend[2] * dq[2] + dq_blend[3] * dq[3]);
+						dq_blend += dq*w;
 					}
 				}
-				float norm = dq_blend.get_non_dual_part().norm();
-				if(norm < Tbx::Dual_quat_cu::epsilon())
-					dq_blend = dq0;
-				else
-					dq_blend = dq_blend * (1.f/norm);
-			}
-			return dq_blend;
-		}
-		__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
-			cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex,
-			int x, int y, int z, float3 origion, float voxelSize)
-		{
-			Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
-
-			float3 p = make_float3(x*voxelSize, y*voxelSize, z*voxelSize) + origion;
-			KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
-			tex3D(&knnIdx, knnTex, x, y, z);
-
-			if (get_by_arrayid(knnIdx, 0) >= MaxNodeNum)
-			{
-				dq_blend = Tbx::Dual_quat_cu::identity();
-			}
-			else
-			{
-				for (int k = 0; k < KnnK; k++)
-				{
-					if (get_by_arrayid(knnIdx, k) < MaxNodeNum)
-					{
-						IdxType nn3 = get_by_arrayid(knnIdx, k) * 3;
-						float4 q0, q1, vw;
-						tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
-						tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
-						tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
-						// note: we store 1.f/radius in vw.w
-						float w = __expf(-norm2(make_float3(vw.x - p.x, vw.y - p.y,
-							vw.z - p.z)) * 2 * (vw.w*vw.w));
-						Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
-						dq_blend = dq_blend + dq*w;
-					}
-				}
-				dq_blend.normalize();
+				dq_blend *= 1.f / dq_blend.norm();
+				return dq_blend;
 			}
 			return dq_blend;
 		}

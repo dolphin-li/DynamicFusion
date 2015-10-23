@@ -23,6 +23,7 @@ namespace dfusion
 
 		m_nodes_for_buffer = 0;
 		m_not_lv0_nodes_for_buffer = 0;
+		m_pWarpField = nullptr;
 
 		reset();
 	}
@@ -70,7 +71,7 @@ namespace dfusion
 			throw std::exception("non-supported levels of warp field!");
 		if (pWarpField->getNumNodesInLevel(0) == 0)
 		{
-			printf("no warp nodes, return");
+			printf("no warp nodes, return\n");
 			return;
 		}
 
@@ -292,7 +293,7 @@ namespace dfusion
 			throw std::exception("non-supported levels of warp field!");
 		if (m_pWarpField->getNumNodesInLevel(0) == 0)
 		{
-			printf("no warp nodes, return");
+			printf("no warp nodes, return\n");
 			return;
 		}
 
@@ -338,7 +339,7 @@ namespace dfusion
 				float alpha = 1.f;
 				cudaSafeCall(cudaMemcpy(m_tmpvec.ptr(), m_twist.ptr(), m_Jrcols*sizeof(float),
 					cudaMemcpyDeviceToDevice), "copy tmp vec to twist");
-				for (; alpha > 0.1; alpha *= 0.5)
+				for (; alpha > 1e-6; alpha *= 0.5)
 				{
 					// x += alpha * h
 					cublasSaxpy(m_cublasHandle, m_Jrcols, &alpha,
@@ -364,6 +365,15 @@ namespace dfusion
 	// update warpField by calling this function explicitly
 	void GpuGaussNewtonSolver::updateWarpField()
 	{
+		if (m_pWarpField == nullptr)
+			throw std::exception("GpuGaussNewtonSolver::solve: null pointer");
+		if (m_pWarpField->getNumLevels() < 2)
+			throw std::exception("non-supported levels of warp field!");
+		if (m_pWarpField->getNumNodesInLevel(0) == 0)
+		{
+			printf("no warp nodes, return\n");
+			return;
+		}
 		// finally, write results back
 		m_pWarpField->update_nodes_via_twist(m_twist);
 	}
