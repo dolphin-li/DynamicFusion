@@ -414,6 +414,7 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 
 		// 1. load a pre-saved volume and then start by this frame.
 		int vol_fid = 0;
+		g_dataholder.m_processor.reset();
 		for (; vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame;)
 		{
 			std::string volname = fullfile(m_currentPath.toStdString(), std::to_string(vol_fid) + ".rawvol");
@@ -445,7 +446,15 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		m_frameIndex = fid;
 
 		setState(DynamicFusionUI::Loading);
-		g_dataholder.m_processor.reset();
+
+		// for convinience, if there exists pre-defined volumes, we
+		// just pause to visualize it.
+		if (vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame)
+		{
+			frameLoading();
+			g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
+			setState(DynamicFusionUI::Pause);
+		}
 	}
 	//else
 	//	restoreState();

@@ -182,6 +182,8 @@ namespace dfusion
 		if (m_volume == nullptr)
 			throw std::exception("Error: not initialzied before loading WarpField!");
 
+		init(m_volume, m_param);
+
 		FILE* pFile = fopen(filename, "rb");
 		if (!pFile)
 			throw std::exception(("load failed" + std::string(filename)).c_str());

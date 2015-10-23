@@ -330,6 +330,9 @@ namespace dfusion
 		m_warpField->load(name1.c_str());
 
 		surfaceExtractionMC();
+		m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
+		m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
+		m_frame_id = 1; // !=0 to prevent trivial case.
 	}
 
 	void DynamicFusionProcessor::estimateWarpField()
