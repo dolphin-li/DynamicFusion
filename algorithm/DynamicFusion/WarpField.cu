@@ -977,7 +977,7 @@ namespace dfusion
 					(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
 			}
 		}// end if (m_lastNumNodes[0] != m_numNodes[0])
-		else // else we only update the graph quaternions
+		else if (m_numNodes[level])// else we only update the graph quaternions
 		{
 			dim3 block(32);
 			dim3 grid(1, 1, 1);
