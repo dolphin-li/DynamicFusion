@@ -83,7 +83,7 @@ namespace dfusion
 		grid.y = divUp(jetRgb_d.rows, block.y);
 
 		calcTemperatureJetKernel << <grid, block >> >(depth_d, jetRgb_d, shift, div);
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "calc_temperature_jet");
 	}
 
 #pragma endregion
@@ -333,7 +333,7 @@ namespace dfusion
 		bilateralKernel << <grid, block >> >(dst, 0.5f / (sigma_space * sigma_space), 
 			0.5f / (sigma_color * sigma_color));
 
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "bilateralKernel");
 
 		cudaUnbindTexture(&g_bitex);
 	}
@@ -399,7 +399,7 @@ namespace dfusion
 		grid.y = divUp(depth.rows(), block.y);
 
 		computeVmapKernel << <grid, block >> >(depth, vmap, intr);
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "computeVmapKernel");
 	}
 
 	void createNMap(const MapArr& vmap, MapArr& nmap)
@@ -415,7 +415,7 @@ namespace dfusion
 		grid.y = divUp(rows, block.y);
 
 		computeNmapKernel << <grid, block >> >(rows, cols, vmap, nmap);
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "computeNmapKernel");
 	}
 #pragma endregion
 
@@ -469,7 +469,7 @@ namespace dfusion
 		dim3 grid(divUp(dst.cols(), block.x), divUp(dst.rows(), block.y));
 
 		pyrDownKernel << <grid, block >> >(dst, sigma_color);
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "pyrDownKernel");
 
 		cudaUnbindTexture(&g_pydtex);
 	}
@@ -527,8 +527,8 @@ namespace dfusion
 		dim3 block(32, 8);
 		dim3 grid(divUp(out_cols, block.x), divUp(out_rows, block.y));
 		resizeMapKernel<normalize> << < grid, block >> >(out_rows, out_cols, in_rows, input, output);
-		cudaSafeCall(cudaGetLastError());
-		cudaSafeCall(cudaDeviceSynchronize());
+		cudaSafeCall(cudaGetLastError(), "resizeMapKernel");
+		cudaSafeCall(cudaDeviceSynchronize(), "resizeMapKernel");
 	}
 
 	void resizeVMap(const MapArr& input, MapArr& output)
@@ -574,7 +574,7 @@ namespace dfusion
 		grid.y = divUp(rows, block.y);
 		rigidTransformKernel << <grid, block >> >(vmap, nmap, convert(T.get_mat3()), 
 			convert(T.get_translation()), rows, cols);
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "rigidTransformKernel");
 	}
 #pragma endregion
 
@@ -817,7 +817,7 @@ namespace dfusion
 		cs.gbuf = gbuf;
 
 		combinedKernel << <grid, block >> >(cs);
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "combinedKernel");
 
 		TranformReduction tr;
 		tr.gbuf = gbuf;
@@ -825,8 +825,8 @@ namespace dfusion
 		tr.output = mbuf;
 
 		TransformEstimatorKernel2 << <TranformReduction::TOTAL, TranformReduction::CTA_SIZE >> >(tr);
-		cudaSafeCall(cudaGetLastError());
-		cudaSafeCall(cudaDeviceSynchronize());
+		cudaSafeCall(cudaGetLastError(), "TransformEstimatorKernel2");
+		cudaSafeCall(cudaDeviceSynchronize(), "TransformEstimatorKernel2");
 
 		float_type host_data[TranformReduction::TOTAL];
 		mbuf.download(host_data);

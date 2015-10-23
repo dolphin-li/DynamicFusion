@@ -452,7 +452,8 @@ namespace dfusion
 
 		// allocation info
 		cudaSafeCall(cudaMemcpy(allocation_info_ptr_, allocation_info_host_.data(),
-			allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
+			allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice),
+			"GpuKdTree::buildTree:: memcpy");
 
 		
 		// create sorted index list -> can be used to compute AABBs in O(1)
@@ -491,7 +492,8 @@ namespace dfusion
 
 			// copy allocation info to host
 			cudaSafeCall(cudaMemcpy(allocation_info_host_.data(), allocation_info_ptr_,
-				allocation_info_host_.size()*sizeof(int), cudaMemcpyDeviceToHost));
+				allocation_info_host_.size()*sizeof(int), cudaMemcpyDeviceToHost),
+				"GpuKdTree::buildTree, memcpy 1");
 
 			if (last_node_count == allocation_info_host_[NodeCount]) // no more nodes were split -> done
 				break;
@@ -506,7 +508,8 @@ namespace dfusion
 				allocation_info_host_[OutOfSpace] = 0;
 				allocation_info_host_[NodesAllocated] *= 2;
 				cudaSafeCall(cudaMemcpy(allocation_info_ptr_, allocation_info_host_.data(),
-					allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice));
+					allocation_info_host_.size()*sizeof(int), cudaMemcpyHostToDevice),
+					"GpuKdTree::buildTree, memcpy 2");
 			}
 
 			// foreach point: point was in node that was split?move it to child (leaf) node : do nothing
@@ -1150,7 +1153,7 @@ namespace dfusion
 		dim3 block(256);
 		dim3 grid(divUp(unique_labels, block.x));
 		for_each_SetLeftAndRightAndAABB_kernel << <grid, block >> >(s, unique_labels);
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "GpuKdTree::update_leftright_and_aabb");
 	}
 
 	//! Separates the left and right children of each node into continuous parts of the array.
@@ -1181,7 +1184,7 @@ namespace dfusion
 			dim3 block(256);
 			dim3 grid(divUp(nInputPoints_, block.x));
 			set_addr3_kernel << <grid, block >> >(sa, addr_tmp, nInputPoints_);
-			cudaSafeCall(cudaGetLastError());
+			cudaSafeCall(cudaGetLastError(), "set_addr3_kernel");
 		}
 		thrust_wrapper::scatter(key_in, addr_tmp, key_out, nInputPoints_);
 		if (scatter_val_out) 
@@ -1224,7 +1227,8 @@ namespace dfusion
 		CHECK_ZERO(offset);
 		cudaChannelFormatDesc desc_f4 = cudaCreateChannelDesc<float4>();
 		cudaSafeCall(cudaBindTexture(&offset, &g_ele_low_high_tex, points_ptr_, &desc_f4,
-			aabb_max_offset_byte() - points_offset_byte() + prealloc_*sizeof(float4)));
+			aabb_max_offset_byte() - points_offset_byte() + prealloc_*sizeof(float4)),
+			"GpuKdTree::bindTextures 1");
 
 
 		int offset_f4[3] = {
@@ -1232,7 +1236,8 @@ namespace dfusion
 			int((aabb_min_offset_byte() - points_offset_byte()) / sizeof(float4)),
 			int((aabb_max_offset_byte() - points_offset_byte()) / sizeof(float4))
 		};
-		cudaSafeCall(cudaMemcpyToSymbol(g_ele_low_high_tex_off_d, offset_f4, sizeof(offset_f4)));
+		cudaSafeCall(cudaMemcpyToSymbol(g_ele_low_high_tex_off_d, offset_f4, sizeof(offset_f4)),
+			"GpuKdTree::bindTextures 2");
 
 		// store texture offsets
 		int offsets_tex[26] = {
@@ -1263,6 +1268,7 @@ namespace dfusion
 			tmp_misc_offset_byte() / 4,
 			allocation_info_offset_byte() / 4
 		};
-		cudaSafeCall(cudaMemcpyToSymbol(g_mempool_tex_offs, offsets_tex, sizeof(offsets_tex)));
+		cudaSafeCall(cudaMemcpyToSymbol(g_mempool_tex_offs, offsets_tex, sizeof(offsets_tex)),
+			"GpuKdTree::bindTextures, 3");
 	}
 }

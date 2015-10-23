@@ -138,12 +138,9 @@ namespace dfusion
 		KnnIdx* getNodesEdgesPtr(int level){ return m_nodesGraph.ptr() + MaxNodeNum*level; }
 		const KnnIdx* getNodesEdgesPtr(int level)const{ return m_nodesGraph.ptr() + MaxNodeNum*level; }
 
-		cudaSurfaceObject_t bindKnnFieldSurface()const;
-		void unBindKnnFieldSurface(cudaSurfaceObject_t t)const;
-		cudaTextureObject_t bindKnnFieldTexture()const;
-		void unBindKnnFieldTexture(cudaTextureObject_t t)const;
-		cudaTextureObject_t bindNodesDqVwTexture()const;
-		void unBindNodesDqVwTexture(cudaTextureObject_t t)const;
+		cudaSurfaceObject_t getKnnFieldSurface()const;
+		cudaTextureObject_t getKnnFieldTexture()const;
+		cudaTextureObject_t getNodesDqVwTexture()const;
 
 		const TsdfVolume* getVolume()const;
 
@@ -186,6 +183,13 @@ namespace dfusion
 		void insertNewNodes(GpuMesh& src);
 		void updateAnnField();
 		void updateGraph(int level);
+
+		void bindKnnFieldSurface();
+		void unBindKnnFieldSurface();
+		void bindKnnFieldTexture();
+		void unBindKnnFieldTexture();
+		void bindNodesDqVwTexture();
+		void unBindNodesDqVwTexture();
 	private:
 		Param m_param;
 		TsdfVolume* m_volume;
@@ -212,6 +216,10 @@ namespace dfusion
 
 		// type: KnnIdx
 		cudaArray_t m_knnField;
+
+		cudaSurfaceObject_t m_knnFieldSurface;
+		cudaTextureObject_t m_knnFieldTexture;
+		cudaTextureObject_t m_nodesDqVeTexture;
 	};
 
 }

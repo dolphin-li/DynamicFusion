@@ -762,10 +762,12 @@ namespace dfusion
 		unsigned int lastElement, lastScanElement;
 		cudaSafeCall(cudaMemcpy((void *)&lastElement,
 			(void *)(d_ary + n- 1),
-			sizeof(unsigned int), cudaMemcpyDeviceToHost));
+			sizeof(unsigned int), cudaMemcpyDeviceToHost),
+			"get_scanned_sum 1");
 		cudaSafeCall(cudaMemcpy((void *)&lastScanElement,
 			(void *)(d_scan + n - 1),
-			sizeof(unsigned int), cudaMemcpyDeviceToHost));
+			sizeof(unsigned int), cudaMemcpyDeviceToHost),
+			"get_scanned_sum 2");
 		return lastElement + lastScanElement;
 	}
 
@@ -800,9 +802,12 @@ namespace dfusion
 		cudaSafeCall(cudaGetLastError(), "compact voxels");
 #else
 		int zero_mem = 0;
-		cudaSafeCall(cudaMemcpyToSymbol(output_count, &zero_mem, sizeof(int)));
-		cudaSafeCall(cudaMemcpyToSymbol(global_count, &zero_mem, sizeof(int)));
-		cudaSafeCall(cudaMemcpyToSymbol(blocks_done, &zero_mem, sizeof(int)));
+		cudaSafeCall(cudaMemcpyToSymbol(output_count, &zero_mem, sizeof(int)),
+			"MarchingCubes::classifyVoxel 1");
+		cudaSafeCall(cudaMemcpyToSymbol(global_count, &zero_mem, sizeof(int)),
+			"MarchingCubes::classifyVoxel 2");
+		cudaSafeCall(cudaMemcpyToSymbol(blocks_done, &zero_mem, sizeof(int)),
+			"MarchingCubes::classifyVoxel 3");
 
 		OccupiedVoxels ov;
 
@@ -818,10 +823,13 @@ namespace dfusion
 			divUp((tile.end.y - tile.begin.y) >> tile.level, block.y));
 
 		getOccupiedVoxelsKernel << <grid, block >> >(ov);
-		cudaSafeCall(cudaGetLastError());
-		cudaSafeCall(cudaDeviceSynchronize());
+		cudaSafeCall(cudaGetLastError(),
+			"MarchingCubes::classifyVoxel getOccupiedVoxelsKernel");
+		cudaSafeCall(cudaDeviceSynchronize(),
+			"MarchingCubes::classifyVoxel getOccupiedVoxelsKernel");
 
-		cudaSafeCall(cudaMemcpyFromSymbol(&tile.num_activeVoxels, output_count, sizeof(int)));
+		cudaSafeCall(cudaMemcpyFromSymbol(&tile.num_activeVoxels, output_count, sizeof(int)),
+			"MarchingCubes::classifyVoxel 4");
 
 		if (tile.num_activeVoxels == tile.max_num_activeVoxels)
 		{

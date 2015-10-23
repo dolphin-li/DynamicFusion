@@ -172,7 +172,7 @@ namespace dfusion
 
 		Fusioner fs;
 		fs.depth = m_depth_input;
-		fs.volumeTex = m_volume->bindSurface();
+		fs.volumeTex = m_volume->getSurface();
 		fs.volume_resolution = m_volume->getResolution();
 		fs.origion = m_volume->getOrigion();
 		fs.nodeRadius = m_param.warp_radius_search_epsilon;
@@ -183,8 +183,8 @@ namespace dfusion
 		fs.inv_dw_for_fusion2 = 1.f / (m_param.warp_param_dw_for_fusion*m_param.warp_param_dw_for_fusion);
 		fs.marchingCube_weightThre = m_param.marchingCube_min_valied_weight;
 
-		fs.knnTex = m_warpField->bindKnnFieldTexture();
-		fs.nodesDqVwTex = m_warpField->bindNodesDqVwTexture();	
+		fs.knnTex = m_warpField->getKnnFieldTexture();
+		fs.nodesDqVwTex = m_warpField->getNodesDqVwTexture();	
 		Tbx::Transfo tr = m_warpField->get_rigidTransform();
 		fs.Rv2c = tr.get_mat3();
 		fs.tv2c = Tbx::Point3(tr.get_translation());
@@ -212,11 +212,8 @@ namespace dfusion
 			throw std::exception("non supported KnnK!");
 		}
 
-		m_warpField->unBindNodesDqVwTexture(fs.nodesDqVwTex);
-		m_warpField->unBindKnnFieldTexture(fs.knnTex);
-		m_volume->unbindSurface(fs.volumeTex);
 		cudaUnbindTexture(&g_depth_tex);
 
-		cudaSafeCall(cudaGetLastError());
+		cudaSafeCall(cudaGetLastError(), "DynamicFusionProcessor::fusion()");
 	}
 }

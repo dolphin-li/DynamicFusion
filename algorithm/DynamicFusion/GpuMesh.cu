@@ -185,8 +185,8 @@ namespace dfusion
 		int* glindex = (int*)(gldata + WarpField::MaxNodeNum * WarpField::GraphLevelNum);
 		int node_start_id = 0;
 
-		cudaTextureObject_t nodesDqVwTex = warpField->bindNodesDqVwTexture();
-		cudaTextureObject_t knnTex = warpField->bindKnnFieldTexture();
+		cudaTextureObject_t nodesDqVwTex = warpField->getNodesDqVwTexture();
+		cudaTextureObject_t knnTex = warpField->getKnnFieldTexture();
 		float3 origion = warpField->getVolume()->getOrigion();
 		float invVsz = 1.f/warpField->getVolume()->getVoxelSize();
 
@@ -211,8 +211,6 @@ namespace dfusion
 				indices, n, node_start_id, warp_nodes);
 			cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_warp_node_to_gl_buffer");
 		}
-		warpField->unBindKnnFieldTexture(knnTex);
-		warpField->unBindNodesDqVwTexture(nodesDqVwTex);
 	}
 
 	__global__ void copy_maps_to_gl_buffer_kernel(
@@ -321,8 +319,8 @@ namespace dfusion
 			throw std::exception("GpuMesh::update_color_buffer_by_warpField(): cano mesh not matched!");
 		lockVertsNormals();
 		canoMesh->lockVertsNormals();
-		cudaTextureObject_t knnTex = warpField->bindKnnFieldTexture();
-		cudaTextureObject_t nodesDqVwTex = warpField->bindNodesDqVwTexture();
+		cudaTextureObject_t knnTex = warpField->getKnnFieldTexture();
+		cudaTextureObject_t nodesDqVwTex = warpField->getNodesDqVwTexture();
 		float3 ori = warpField->getVolume()->getOrigion();
 		float vsz = warpField->getVolume()->getVoxelSize();
 		int aid = warpField->getActiveVisualizeNodeId();
@@ -333,8 +331,6 @@ namespace dfusion
 			knnTex, nodesDqVwTex, m_colors_d, canoMesh->verts(), num(), aid, ori, 1.f/vsz);
 		cudaSafeCall(cudaGetLastError(), "update_color_buffer_by_warpField_kernel");
 
-		warpField->unBindKnnFieldTexture(knnTex);
-		warpField->unBindNodesDqVwTexture(nodesDqVwTex);
 		canoMesh->unlockVertsNormals();
 		unlockVertsNormals();
 	}

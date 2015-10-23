@@ -308,8 +308,8 @@ namespace dfusion
 		m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
-			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()));
-			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()));
+			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()), "GpuGaussNewtonSolver::solve, setHd=0");
+			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()), "GpuGaussNewtonSolver::solve, setg=0");
 
 			checkNan(m_twist, m_numNodes, ("twist_" + std::to_string(iter)).c_str());
 
@@ -386,7 +386,8 @@ namespace dfusion
 			printf("debug_set_init_x: size not matched: %d %d\n", n, m_numNodes*VarPerNode);
 			throw std::exception();
 		}
-		cudaSafeCall(cudaMemcpy(m_twist.ptr(), x_host, n*sizeof(float), cudaMemcpyHostToDevice));
+		cudaSafeCall(cudaMemcpy(m_twist.ptr(), x_host, n*sizeof(float), cudaMemcpyHostToDevice),
+			"GpuGaussNewtonSolver::debug_set_init_x");
 	}
 
 	void GpuGaussNewtonSolver::debug_print()

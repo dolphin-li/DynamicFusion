@@ -42,7 +42,7 @@ namespace dfusion
 			throw std::exception("Before MarchingCubes::run(), call init() first!");
 		m_param.marching_cube_isoValue = isoValue;
 
-		m_volTex = m_volume->bindTexture();
+		m_volTex = m_volume->getTexture();
 
 		// count for each tile the number of vertices
 		// if only one tile, we directly write the results
@@ -79,8 +79,6 @@ namespace dfusion
 			}
 			mesh.unlockVertsNormals();
 		}// end if m_tiles.size() > 1
-
-		m_volume->unbindTexture(m_volTex);
 	}
 
 	void MarchingCubes::generate_tiles()

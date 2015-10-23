@@ -115,8 +115,8 @@ namespace dfusion
 		MeshWarper warper;
 		warper.t = convert(m_rigidTransform.get_translation());
 		warper.R = Tbx::Quat_cu(m_rigidTransform);
-		warper.knnTex = bindKnnFieldTexture();
-		warper.nodesDqVwTex = bindNodesDqVwTexture();
+		warper.knnTex = getKnnFieldTexture();
+		warper.nodesDqVwTex = getNodesDqVwTexture();
 		warper.vsrc = src.verts();
 		warper.nsrc = src.normals();
 		warper.vdst = dst.verts();
@@ -131,8 +131,6 @@ namespace dfusion
 		warp_mesh_kernel << <grid, block >> >(warper);
 		cudaSafeCall(cudaGetLastError(), "warp mesh");
 
-		unBindKnnFieldTexture(warper.knnTex);
-		unBindNodesDqVwTexture(warper.nodesDqVwTex);
 		dst.unlockVertsNormals();
 		src.unlockVertsNormals();
 	}
@@ -149,8 +147,8 @@ namespace dfusion
 		MapWarper warper;
 		warper.t = convert(m_rigidTransform.get_translation());
 		warper.R = Tbx::Quat_cu(m_rigidTransform);
-		warper.knnTex = bindKnnFieldTexture();
-		warper.nodesDqVwTex = bindNodesDqVwTexture();
+		warper.knnTex = getKnnFieldTexture();
+		warper.nodesDqVwTex = getNodesDqVwTexture();
 		warper.vsrc = srcVmap;
 		warper.nsrc = srcNmap;
 		warper.vdst = dstVmap;
@@ -164,9 +162,6 @@ namespace dfusion
 		dim3 grid(divUp(w, block.x), divUp(h, block.y), 1);
 		warp_map_kernel << <grid, block >> >(warper);
 		cudaSafeCall(cudaGetLastError(), "warp map");
-
-		unBindKnnFieldTexture(warper.knnTex);
-		unBindNodesDqVwTexture(warper.nodesDqVwTex);
 	}
 #pragma endregion
 
@@ -204,10 +199,9 @@ namespace dfusion
 			divUp(res.y, block.y),
 			divUp(res.z, block.z));
 
-		cudaSurfaceObject_t surf = bindKnnFieldSurface();
+		cudaSurfaceObject_t surf = getKnnFieldSurface();
 		initKnnFieldKernel << <grid, block >> >(surf, res);
 		cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel");
-		unBindKnnFieldSurface(surf);
 
 		dim3 block1(256);
 		dim3 grid1(divUp(m_nodesGraph.size(), block1.x));
@@ -626,8 +620,8 @@ namespace dfusion
 			counter.input_points = src.verts();
 			counter.out_points = m_meshPointsSorted.ptr();
 			counter.out_keys = m_meshPointsKey.ptr();
-			counter.knnTex = bindKnnFieldTexture();
-			counter.nodesDqVwTex = bindNodesDqVwTexture();
+			counter.knnTex = getKnnFieldTexture();
+			counter.nodesDqVwTex = getNodesDqVwTexture();
 			counter.nodesDqVw = getNodesDqVwPtr(0);
 			counter.numNodes = m_numNodes[0];
 
@@ -640,8 +634,6 @@ namespace dfusion
 			cudaSafeCall(cudaMemcpyFromSymbol(&num_points, newPoints_output_count, 
 				sizeof(int)), "get_newPoints_kernel memcpy from symbol");
 
-			unBindKnnFieldTexture(counter.knnTex);
-			unBindNodesDqVwTexture(counter.nodesDqVwTex);
 			src.unlockVertsNormals();
 		}// end else
 
@@ -691,14 +683,11 @@ namespace dfusion
 			nw.inv_weight_radius = 1.f / m_param.warp_param_dw;
 			nw.origion = m_volume->getOrigion();
 			nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
-			nw.knnTex = bindKnnFieldTexture();
-			nw.nodesDqVwTex = bindNodesDqVwTexture();
+			nw.knnTex = getKnnFieldTexture();
+			nw.nodesDqVwTex = getNodesDqVwTexture();
 
 			write_nodes_kernel << <grid, block >> >(nw);
 			cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
-
-			unBindKnnFieldTexture(nw.knnTex);
-			unBindNodesDqVwTexture(nw.nodesDqVwTex);
 		}
 	}
 #pragma endregion
@@ -791,9 +780,8 @@ namespace dfusion
 		if (m_lastNumNodes[0] == 0)
 		{
 			m_nodeTree[0]->buildTree(m_nodesQuatTransVw.ptr() + 2, m_numNodes[0], 3);
-			cudaSurfaceObject_t surf = bindKnnFieldSurface();
+			cudaSurfaceObject_t surf = getKnnFieldSurface();
 			m_nodeTree[0]->knnSearchGpu(surf, make_int3(0, 0, 0), res, origion, vsz, KnnK);
-			unBindKnnFieldSurface(surf);
 		}
 		// else, collect voxels around the new added node and then perform sub-volume searching
 		else
@@ -860,13 +848,11 @@ namespace dfusion
 					divUp(res.y, block.y),
 					divUp(res.z, block.z));
 
-				cudaSurfaceObject_t surf = bindKnnFieldSurface();
-				cudaTextureObject_t tex = bindNodesDqVwTexture();
+				cudaSurfaceObject_t surf = getKnnFieldSurface();
+				cudaTextureObject_t tex = getNodesDqVwTexture();
 				bruteforce_updateKnn_kernel << <grid, block >> >(
 					tex, surf, res, m_lastNumNodes[0], m_numNodes[0], origion, vsz);
 				cudaSafeCall(cudaGetLastError(), "bruteforce_updateKnn_kernel");
-				unBindNodesDqVwTexture(tex);
-				unBindKnnFieldSurface(surf);
 			}
 #endif
 		}
@@ -961,8 +947,8 @@ namespace dfusion
 				nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_param_dw_lvup_scale, level));
 				nw.origion = m_volume->getOrigion();
 				nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
-				nw.knnTex = bindKnnFieldTexture();
-				nw.nodesDqVwTex = bindNodesDqVwTexture();
+				nw.knnTex = getKnnFieldTexture();
+				nw.nodesDqVwTex = getNodesDqVwTexture();
 
 				write_nodes_kernel << <grid, block >> >(nw);
 				cudaSafeCall(cudaGetLastError(), "write_nodes_kernel");
@@ -989,8 +975,8 @@ namespace dfusion
 			nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_param_dw_lvup_scale, level));
 			nw.origion = m_volume->getOrigion();
 			nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
-			nw.knnTex = bindKnnFieldTexture();
-			nw.nodesDqVwTex = bindNodesDqVwTexture();
+			nw.knnTex = getKnnFieldTexture();
+			nw.nodesDqVwTex = getNodesDqVwTexture();
 
 			update_nodes_dq_assume_compact_nodes_kernel << <grid, block >> >(nw);
 			cudaSafeCall(cudaGetLastError(), "update_nodes_dq_assume_compact_nodes_kernel");
@@ -1049,11 +1035,10 @@ namespace dfusion
 		dim3 block(32, 8);
 		dim3 grid(divUp(vmap.cols(), block.x), divUp(vmap.rows(), block.y));
 
-		cudaTextureObject_t knnTex = bindKnnFieldTexture();
+		cudaTextureObject_t knnTex = getKnnFieldTexture();
 		extract_knn_for_vmap_kernel << <grid, block >> >(vmap, vmapKnn, m_volume->getOrigion(),
 			1.f / m_volume->getVoxelSize(), knnTex, ic);
 		cudaSafeCall(cudaGetLastError(), "extract_knn_for_vmap_kernel");
-		unBindKnnFieldTexture(knnTex);
 	}
 
 	__global__ void extract_nodes_info_kernel(const float4* nodesDqVw, float* twist, float4* vw,
@@ -1210,10 +1195,9 @@ namespace dfusion
 		static DeviceArray<KnnIdx> knn;
 		knn.create(1);
 
-		cudaTextureObject_t tex = bindKnnFieldTexture();
+		cudaTextureObject_t tex = getKnnFieldTexture();
 		getKnnAtKernel << <dim3(1), dim3(1) >> >(knn.ptr(), gridXYZ, tex);
 		cudaSafeCall(cudaGetLastError(), "WarpField::getKnnAtKernel");
-		unBindKnnFieldTexture(tex);
 
 		WarpField::KnnIdx host;
 		cudaSafeCall(cudaMemcpy(&host, knn.ptr(), sizeof(KnnIdx), cudaMemcpyDeviceToHost),

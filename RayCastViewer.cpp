@@ -75,7 +75,7 @@ void RayCastViewer::initializeGL()
 		dfusion::KINECT_WIDTH * dfusion::KINECT_HEIGHT * 4,
 		NULL, GL_DYNAMIC_COPY);
 	cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_pbo_cuda_res, m_pbo_id,
-		cudaGraphicsMapFlagsWriteDiscard));
+		cudaGraphicsMapFlagsWriteDiscard),"RayCastViewer::initializeGL");
 	m_pbo_buffer.rows = dfusion::KINECT_HEIGHT;
 	m_pbo_buffer.cols = dfusion::KINECT_WIDTH;
 	m_pbo_buffer.step = dfusion::KINECT_WIDTH * sizeof(uchar4);
@@ -164,9 +164,11 @@ void RayCastViewer::setRayCastingShadingImage(const dfusion::ColorMap& img)
 		m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);		m_gl_func->glBufferData(GL_PIXEL_UNPACK_BUFFER,
 			img.cols() * img.rows() * 4,
 			NULL, GL_DYNAMIC_COPY);
-		cudaSafeCall(cudaGraphicsUnregisterResource(m_pbo_cuda_res));
+		cudaSafeCall(cudaGraphicsUnregisterResource(m_pbo_cuda_res),
+			"RayCastViewer::setRayCastingShadingImage 1");
 		cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_pbo_cuda_res, m_pbo_id,
-			cudaGraphicsMapFlagsWriteDiscard));
+			cudaGraphicsMapFlagsWriteDiscard),
+			"RayCastViewer::setRayCastingShadingImage 2");
 		m_pbo_buffer.rows = img.rows();
 		m_pbo_buffer.cols = img.cols();
 		m_pbo_buffer.step = img.cols() * sizeof(uchar4);
@@ -184,9 +186,12 @@ void RayCastViewer::setRayCastingShadingImage(const dfusion::ColorMap& img)
 	}
 
 	size_t num_bytes = 0;
-	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0));
-	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res));	dfusion::copyColorMapToPbo(img, m_pbo_buffer);
-	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0));
+	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0),
+		"RayCastViewer::setRayCastingShadingImage 3");
+	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res),
+		"RayCastViewer::setRayCastingShadingImage 4");	dfusion::copyColorMapToPbo(img, m_pbo_buffer);
+	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0),
+		"RayCastViewer::setRayCastingShadingImage 5" );
 
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
 	glBindTexture(GL_TEXTURE_2D, m_texture_id);

@@ -423,7 +423,7 @@ namespace dfusion
 			if (n)// when n==0, it may crash.
 			{
 				cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res, m_vbo_id,
-					cudaGraphicsMapFlagsNone));
+					cudaGraphicsMapFlagsNone), "GpuMesh::create, cudaGraphicsGLRegisterBuffer");
 			}
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 		}
@@ -436,7 +436,7 @@ namespace dfusion
 		if (m_vbo_id != 0)
 			glDeleteBuffers(1, &m_vbo_id);
 		if (m_cuda_res)
-			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res));
+			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res), "GpuMesh::release(), unregister resouce");
 		m_verts_d = nullptr;
 		m_normals_d = nullptr;
 		m_colors_d = nullptr;
@@ -470,8 +470,9 @@ namespace dfusion
 			return;
 
 		size_t num_bytes = 0;
-		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res, 0));
-		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_verts_d, &num_bytes, m_cuda_res));
+		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res, 0), "GpuMesh::lockVertsNormals(), 1");
+		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_verts_d, &num_bytes, m_cuda_res),
+			"GpuMesh::lockVertsNormals() 2");
 		m_normals_d = m_verts_d + m_num;
 		m_colors_d = m_normals_d + m_num;
 	}
@@ -479,7 +480,7 @@ namespace dfusion
 	{
 		if (m_verts_d == nullptr)
 			return;
-		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res, 0));
+		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res, 0), "GpuMesh::unlockVertsNormals()");
 		m_verts_d = nullptr;
 		m_normals_d = nullptr;
 		m_colors_d = nullptr;
@@ -574,7 +575,7 @@ namespace dfusion
 			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_render_fbo_pbo_id);			glBufferData(GL_PIXEL_UNPACK_BUFFER, w * h * sizeof(PointType)* 2,
 				NULL, GL_DYNAMIC_COPY);
 			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res_fbo, m_render_fbo_pbo_id,
-				cudaGraphicsRegisterFlagsReadOnly));
+				cudaGraphicsRegisterFlagsReadOnly), "GpuMesh::createRenderer, register gl buffer");
 			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
 #ifdef ENABLE_SHOW_DEBUG
@@ -610,7 +611,7 @@ namespace dfusion
 			int bytes = max(bytes_warp, bytes_corr);
 			glBufferData(GL_ARRAY_BUFFER, bytes, 0, GL_DYNAMIC_DRAW);
 			cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_cuda_res_warp, m_vbo_id_warpnodes,
-					cudaGraphicsMapFlagsNone));
+					cudaGraphicsMapFlagsNone), "GpuMesh::createRendererForWarpField, register gl buffer");
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 		}
 	}
@@ -624,7 +625,7 @@ namespace dfusion
 			glDeleteRenderbuffers(1, &m_render_depth_id);
 			glDeleteFramebuffers(1, &m_render_fbo_id);
 			glDeleteBuffers(1, &m_render_fbo_pbo_id);
-			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res_fbo));
+			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res_fbo), "GpuMesh::releaseRenderer");
 		}
 		m_width = 0;
 		m_height = 0;
@@ -641,7 +642,7 @@ namespace dfusion
 		if (m_vbo_id_warpnodes != 0)
 			glDeleteBuffers(1, &m_vbo_id_warpnodes);
 		if (m_cuda_res)
-			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res_warp));
+			cudaSafeCall(cudaGraphicsUnregisterResource(m_cuda_res_warp), "GpuMesh::releaseRendererForWarpField");
 		m_cuda_res_warp = nullptr;
 		m_vbo_id_warpnodes = 0;
 	}
@@ -746,7 +747,8 @@ namespace dfusion
 			size_t num_bytes = 0;
 			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0),
 				"GpuMesh::renderToImg::mapWarpFieldRes");
-			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp),
+				"GpuMesh::renderToImg::cudaGraphicsResourceGetMappedPointer");
 			copy_warp_node_to_gl_buffer(gldata, warpField, warp_nodes);
 			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0), 
 				"GpuMesh::renderToImg::unMapWarpFieldRes");
@@ -845,10 +847,12 @@ namespace dfusion
 			glEnableClientState(GL_NORMAL_ARRAY);
 			float4* gldata = nullptr;
 			size_t num_bytes = 0;
-			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0));
-			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp));
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_warp, 0), "GpuMesh::renderToImg::cudaGraphicsMapResources1");
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp),
+				"GpuMesh::renderToImg::cudaGraphicsMapResources2");
 			copy_maps_to_gl_buffer(*vmap_live, *vmap_warp, *nmap_live, *nmap_warp, gldata, param, *intr);
-			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0));
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0),
+				 "GpuMesh::renderToImg::cudaGraphicsMapResources3");
 
 			const int n = vmap_live->rows() * vmap_live->cols();
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
@@ -881,10 +885,13 @@ namespace dfusion
 
 		float4* gldata = nullptr;
 		size_t num_bytes = 0;
-		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
-		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
+		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0), 
+			"GpuMesh::renderToImg::cudaGraphicsMapResources4");
+		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo)
+			, "GpuMesh::renderToImg::cudaGraphicsMapResources5");
 		copy_invert_y(gldata, img);
-		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
+		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0)
+			, "GpuMesh::renderToImg::cudaGraphicsMapResources6");
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 		CHECK_GL_ERROR("renderToImg");
@@ -920,14 +927,17 @@ namespace dfusion
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 		float4* gldata = nullptr;
 		size_t num_bytes = 0;
-		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
-		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
+		cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0)
+			, "GpuMesh::renderToDepth 1");
+		cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo)
+			, "GpuMesh::renderToDepth 2");
 		const float s1 = 2.f*camera.getFrustumNear()*camera.getFrustumFar() /
 			(camera.getFrustumNear() - camera.getFrustumFar());
 		const float s2 = (camera.getFrustumNear() + camera.getFrustumFar()) /
 			(camera.getFrustumNear() - camera.getFrustumFar());
 		copy_gldepth_to_depthmap(gldata, img, s1, s2, camera.getFrustumNear());
-		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
+		cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0)
+			, "GpuMesh::renderToDepth 3");
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glDisableClientState(GL_VERTEX_ARRAY);
@@ -978,10 +988,13 @@ namespace dfusion
 			glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, 0);
 			float4* gldata = nullptr;
 			size_t num_bytes = 0;
-			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
-			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0),
+				"GpuMesh::renderToCanonicalMaps 1");
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo),
+				"GpuMesh::renderToCanonicalMaps 2");
 			copy_canoview(gldata, vmap);
-			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0),
+				"GpuMesh::renderToCanonicalMaps 3");
 		}
 		g_shader_cano->end();
 
@@ -994,10 +1007,13 @@ namespace dfusion
 			glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, 0);
 			float4* gldata = nullptr;
 			size_t num_bytes = 0;
-			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0));
-			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo));
+			cudaSafeCall(cudaGraphicsMapResources(1, &m_cuda_res_fbo, 0),
+				"GpuMesh::renderToCanonicalMaps 4");
+			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_fbo),
+				"GpuMesh::renderToCanonicalMaps 5");
 			copy_canoview(gldata, nmap);
-			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0));
+			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_fbo, 0),
+				"GpuMesh::renderToCanonicalMaps 6");
 		}
 
 		g_shader_cano->end();

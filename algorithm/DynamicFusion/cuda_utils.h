@@ -20,6 +20,14 @@
 
 static inline void ___cudaSafeCall(cudaError_t err, char* msg=NULL)
 {
+	//// debug
+	//err = cudaThreadSynchronize();
+	//if (cudaSuccess != err){
+	//	printf("CUDA error1(%s): %s\n", msg, cudaGetErrorString(err));
+	//	exit(-1);
+	//}
+	//// end debug
+
 	if (cudaSuccess != err){
 		printf( "CUDA error(%s): %s\n", msg, cudaGetErrorString(err) );
 		exit(-1);

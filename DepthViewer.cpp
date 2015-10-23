@@ -46,10 +46,13 @@ void DepthViewer::setImage_d(PtrStepSz<dfusion::depthtype> image_d)
 	makeCurrent();
 
 	size_t num_bytes = 0;
-	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0));
-	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res));
+	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0),
+		"DepthViewer::setImage_d 1");
+	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res),
+		"DepthViewer::setImage_d 2");
 	dfusion::calc_temperature_jet(image_d, m_pbo_buffer, 300, 700);
-	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0));
+	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0),
+		"DepthViewer::setImage_d 3");
 
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
 	glBindTexture(GL_TEXTURE_2D, m_texture_id);
@@ -65,12 +68,15 @@ void DepthViewer::setNormal_d(const dfusion::MapArr& image_d)
 	makeCurrent();
 
 	size_t num_bytes = 0;
-	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0));
-	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res));
+	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0),
+		"DepthViewer::setNormal_d 1");
+	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res),
+		"DepthViewer::setNormal_d 2");
 	dfusion::ColorMap map(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH, 
 		m_pbo_buffer, dfusion::KINECT_WIDTH*sizeof(uchar4));
 	dfusion::generateNormalMap(image_d, map);
-	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0));
+	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0),
+		"DepthViewer::setNormal_d 3");
 
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo_id);
 	glBindTexture(GL_TEXTURE_2D, m_texture_id);
@@ -115,7 +121,8 @@ void DepthViewer::initializeGL()
 		dfusion::KINECT_WIDTH * dfusion::KINECT_HEIGHT * 4,
 		NULL, GL_DYNAMIC_COPY);
 	cudaSafeCall(cudaGraphicsGLRegisterBuffer(&m_pbo_cuda_res, m_pbo_id,
-		cudaGraphicsMapFlagsWriteDiscard));
+		cudaGraphicsMapFlagsWriteDiscard),
+		"DepthViewer::initializeGL 1");
 	m_pbo_buffer.rows = dfusion::KINECT_HEIGHT;
 	m_pbo_buffer.cols = dfusion::KINECT_WIDTH;
 	m_pbo_buffer.step = dfusion::KINECT_WIDTH * sizeof(uchar4);

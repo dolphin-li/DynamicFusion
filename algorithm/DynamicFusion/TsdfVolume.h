@@ -36,10 +36,9 @@ namespace dfusion
 		/** \brief Returns tsdf volume container that point to data in GPU memroy */
 		cudaArray_t data() const;
 		cudaArray_t data();
-		cudaTextureObject_t bindTexture()const;
-		void unbindTexture(cudaTextureObject_t t)const;
-		cudaSurfaceObject_t bindSurface()const;
-		void unbindSurface(cudaSurfaceObject_t t)const;
+
+		cudaTextureObject_t getTexture()const;
+		cudaSurfaceObject_t getSurface()const;
 
 		/** \brief Returns volume resolution */
 		const int3& getResolution() const;
@@ -67,6 +66,11 @@ namespace dfusion
 		void copyToHost(float* data)const;
 		void copyToHostRaw(TsdfData* data)const;
 		void allocate(int3 resolution, float voxel_size, float3 origion);
+
+		void bindTexture();
+		void unbindTexture();
+		void bindSurface();
+		void unbindSurface();
 	private:
 		/** \brief tsdf volume size in meters */
 		float voxel_size_;
@@ -81,5 +85,8 @@ namespace dfusion
 
 		/** \brief tsdf truncation distance */
 		float tranc_dist_;
+
+		cudaTextureObject_t tex_;
+		cudaSurfaceObject_t surf_;
 	};
 }

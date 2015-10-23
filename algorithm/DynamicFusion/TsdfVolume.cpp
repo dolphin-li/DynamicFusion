@@ -60,9 +60,18 @@ namespace dfusion
 		return volume_;
 	}
 
-	cudaTextureObject_t TsdfVolume::bindTexture()const
+	cudaTextureObject_t TsdfVolume::getTexture()const
 	{
-		cudaTextureObject_t t;
+		return tex_;
+	}
+
+	cudaSurfaceObject_t TsdfVolume::getSurface()const
+	{
+		return surf_;
+	}
+
+	void TsdfVolume::bindTexture()
+	{
 		cudaResourceDesc texRes;
 		memset(&texRes, 0, sizeof(cudaResourceDesc));
 		texRes.resType = cudaResourceTypeArray;
@@ -79,29 +88,30 @@ namespace dfusion
 		texDescr.addressMode[1] = cudaAddressModeClamp;
 		texDescr.addressMode[2] = cudaAddressModeClamp;
 		texDescr.readMode = cudaReadModeElementType;
-		cudaSafeCall(cudaCreateTextureObject(&t, &texRes, &texDescr, NULL));
-		return t;
+		cudaSafeCall(cudaCreateTextureObject(&tex_, &texRes, &texDescr, NULL),
+			"TsdfVolume::bindTexture 1");
 	}
 
-	void TsdfVolume::unbindTexture(cudaTextureObject_t t)const
+	void TsdfVolume::unbindTexture()
 	{
-		cudaSafeCall(cudaDestroyTextureObject(t));
+		cudaSafeCall(cudaDestroyTextureObject(tex_),
+			"TsdfVolume::unbindTexture");
 	}
 
-	cudaSurfaceObject_t TsdfVolume::bindSurface()const
+	void TsdfVolume::bindSurface()
 	{
-		cudaSurfaceObject_t t;
 		cudaResourceDesc    surfRes;
 		memset(&surfRes, 0, sizeof(cudaResourceDesc));
 		surfRes.resType = cudaResourceTypeArray;
 		surfRes.res.array.array = data();
-		cudaSafeCall(cudaCreateSurfaceObject(&t, &surfRes));
-		return t;
+		cudaSafeCall(cudaCreateSurfaceObject(&surf_, &surfRes),
+			"TsdfVolume::bindSurface");
 	}
 
-	void TsdfVolume::unbindSurface(cudaSurfaceObject_t t)const
+	void TsdfVolume::unbindSurface()
 	{
-		cudaSafeCall(cudaDestroySurfaceObject(t));
+		cudaSafeCall(cudaDestroySurfaceObject(surf_),
+			"TsdfVolume::unBindSurface");
 	}
 
 	const int3& TsdfVolume::getResolution() const
@@ -157,7 +167,11 @@ namespace dfusion
 		ext.height = resolution.y;
 		ext.depth = resolution.z;
 		cudaChannelFormatDesc desc = cudaCreateChannelDesc<TsdfData>();
-		cudaSafeCall(cudaMalloc3DArray(&volume_, &desc, ext), "cudaMalloc3D");
+		cudaSafeCall(cudaMalloc3DArray(&volume_, &desc, ext), "TsdfVolume::allocate, cudaMalloc3D");
+		unbindTexture();
+		unbindSurface();
+		bindTexture();
+		bindSurface();
 	}
 
 	void TsdfVolume::save(const char* filename)const

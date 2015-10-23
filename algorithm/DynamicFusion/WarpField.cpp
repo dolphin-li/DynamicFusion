@@ -15,6 +15,9 @@ namespace dfusion
 		memset(m_numNodes, 0, sizeof(m_numNodes));
 		memset(m_lastNumNodes, 0, sizeof(m_lastNumNodes));
 		m_activeVisualizeNodeId = -1;
+		m_knnFieldSurface = 0;
+		m_knnFieldTexture = 0;
+		m_nodesDqVeTexture = 0;
 	}
 
 	WarpField::~WarpField()
@@ -31,6 +34,8 @@ namespace dfusion
 		m_nodesGraph.create(MaxNodeNum*GraphLevelNum);
 		cudaMemset(m_nodesQuatTransVw.ptr(), 0, m_nodesQuatTransVw.size()*m_nodesQuatTransVw.elem_size);
 		cudaMemset(m_nodesGraph.ptr(), 0, m_nodesGraph.size()*m_nodesGraph.elem_size);
+		unBindNodesDqVwTexture();
+		bindNodesDqVwTexture();
 		for (int lv = 0; lv < GraphLevelNum; lv++)
 			m_numNodes[lv] = 0;
 		int3 res = m_volume->getResolution();
@@ -42,7 +47,11 @@ namespace dfusion
 			cudaSafeCall(cudaFreeArray(m_knnField), "cudaFreeArray");
 		cudaExtent ext = make_cudaExtent(res.x, res.y, res.z);
 		cudaChannelFormatDesc desc = cudaCreateChannelDesc<KnnIdx>();
-		cudaSafeCall(cudaMalloc3DArray(&m_knnField, &desc, ext), "cudaMalloc3D");
+		cudaSafeCall(cudaMalloc3DArray(&m_knnField, &desc, ext), "WarpField::init, cudaMalloc3D");
+		unBindKnnFieldSurface();
+		unBindKnnFieldTexture();
+		bindKnnFieldSurface();
+		bindKnnFieldTexture();
 		initKnnField();
 
 		for (int k = 0; k < GraphLevelNum; k++)
@@ -60,6 +69,9 @@ namespace dfusion
 
 	void WarpField::clear()
 	{
+		unBindNodesDqVwTexture();
+		unBindKnnFieldSurface();
+		unBindKnnFieldTexture();
 		for (int k = 0; k < GraphLevelNum; k++)
 		{
 			if (m_nodeTree[k])
@@ -87,6 +99,21 @@ namespace dfusion
 		m_activeVisualizeNodeId = -1;
 	}
 
+	cudaSurfaceObject_t WarpField::getKnnFieldSurface()const
+	{
+		return m_knnFieldSurface;
+	}
+
+	cudaTextureObject_t WarpField::getKnnFieldTexture()const
+	{
+		return m_knnFieldTexture;
+	}
+
+	cudaTextureObject_t WarpField::getNodesDqVwTexture()const
+	{
+		return m_nodesDqVeTexture;
+	}
+
 	void WarpField::updateWarpNodes(GpuMesh& src)
 	{
 		memcpy(m_lastNumNodes, m_numNodes, sizeof(m_numNodes));
@@ -102,25 +129,24 @@ namespace dfusion
 			updateGraph(lv);
 	}
 
-	cudaSurfaceObject_t WarpField::bindKnnFieldSurface()const
+	void WarpField::bindKnnFieldSurface()
 	{
-		cudaSurfaceObject_t t;
 		cudaResourceDesc    surfRes;
 		memset(&surfRes, 0, sizeof(cudaResourceDesc));
 		surfRes.resType = cudaResourceTypeArray;
 		surfRes.res.array.array = m_knnField;
-		cudaSafeCall(cudaCreateSurfaceObject(&t, &surfRes));
-		return t;
+		cudaSafeCall(cudaCreateSurfaceObject(&m_knnFieldSurface, &surfRes),
+			"WarpField::bindKnnFieldSurface");
 	}
 
-	void WarpField::unBindKnnFieldSurface(cudaSurfaceObject_t t)const
+	void WarpField::unBindKnnFieldSurface()
 	{
-		cudaSafeCall(cudaDestroySurfaceObject(t));
+		cudaSafeCall(cudaDestroySurfaceObject(m_knnFieldSurface),
+			"WarpField::unBindKnnFieldSurface");
 	}
 
-	cudaTextureObject_t WarpField::bindKnnFieldTexture()const
+	void WarpField::bindKnnFieldTexture()
 	{
-		cudaTextureObject_t t;
 		cudaResourceDesc texRes;
 		memset(&texRes, 0, sizeof(cudaResourceDesc));
 		texRes.resType = cudaResourceTypeArray;
@@ -133,18 +159,18 @@ namespace dfusion
 		texDescr.addressMode[1] = cudaAddressModeClamp;
 		texDescr.addressMode[2] = cudaAddressModeClamp;
 		texDescr.readMode = cudaReadModeElementType;
-		cudaSafeCall(cudaCreateTextureObject(&t, &texRes, &texDescr, NULL));
-		return t;
+		cudaSafeCall(cudaCreateTextureObject(&m_knnFieldTexture, &texRes, &texDescr, NULL),
+			"WarpField::bindKnnFieldTexture");
 	}
 
-	void WarpField::unBindKnnFieldTexture(cudaTextureObject_t t)const
+	void WarpField::unBindKnnFieldTexture()
 	{
-		cudaSafeCall(cudaDestroyTextureObject(t));
+		cudaSafeCall(cudaDestroyTextureObject(m_knnFieldTexture),
+			"WarpField::unBindKnnFieldTexture");
 	}
 
-	cudaTextureObject_t WarpField::bindNodesDqVwTexture()const
+	void WarpField::bindNodesDqVwTexture()
 	{
-		cudaTextureObject_t t;
 		cudaResourceDesc texRes;
 		memset(&texRes, 0, sizeof(cudaResourceDesc));
 		texRes.resType = cudaResourceTypeLinear;
@@ -159,13 +185,14 @@ namespace dfusion
 		texDescr.addressMode[1] = cudaAddressModeClamp;
 		texDescr.addressMode[2] = cudaAddressModeClamp;
 		texDescr.readMode = cudaReadModeElementType;
-		cudaSafeCall(cudaCreateTextureObject(&t, &texRes, &texDescr, NULL));
-		return t;
+		cudaSafeCall(cudaCreateTextureObject(&m_nodesDqVeTexture, &texRes, &texDescr, NULL),
+			"WarpField::bindNodesDqVwTexture");
 	}
 
-	void WarpField::unBindNodesDqVwTexture(cudaTextureObject_t t)const
+	void WarpField::unBindNodesDqVwTexture()
 	{
-		cudaSafeCall(cudaDestroyTextureObject(t));
+		cudaSafeCall(cudaDestroyTextureObject(m_nodesDqVeTexture),
+			"WarpField::unBindNodesDqVwTexture");
 	}
 
 	const TsdfVolume* WarpField::getVolume()const
@@ -228,7 +255,9 @@ namespace dfusion
 		if (ntmp != tmp.size())
 			throw std::exception("size not matched in WarpField::load nodesQuatTransVw");
 		fread(tmp.data(), sizeof(float4), tmp.size(), pFile);
-		m_nodesQuatTransVw.upload(tmp);
+		m_nodesQuatTransVw.upload(tmp);		
+		unBindNodesDqVwTexture();
+		bindNodesDqVwTexture();
 
 		std::vector<KnnIdx> tmpIdx(m_nodesGraph.size(), make_ushort4(0,0,0,0));
 		int ntmpidx = 0;

@@ -241,7 +241,7 @@ namespace dfusion
 		rc.intr = m_intr;
 		rc.vmap = m_vmap;
 		rc.nmap = m_nmap;
-		rc.volumeData_tex = m_volume->bindTexture();
+		rc.volumeData_tex = m_volume->getTexture();
 
 		// lunch the kernel
 		dim3 block(RayCasterG::CTA_SIZE_X, RayCasterG::CTA_SIZE_Y);
@@ -249,8 +249,6 @@ namespace dfusion
 
 		rayCastKernel << <grid, block >> >(rc);
 		cudaSafeCall(cudaGetLastError(), "raycast");
-
-		m_volume->unbindTexture(rc.volumeData_tex);
 	}
 }
 
