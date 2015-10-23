@@ -189,6 +189,7 @@ void DynamicFusionUI::updateUiFromParam()
 	ui.gbAutoReset->setChecked(g_dataholder.m_dparam.view_autoreset);
 	ui.sbAutoResetSeconds->setValue(g_dataholder.m_dparam.view_autoreset_seconds);
 	ui.sbMaxWeights->setValue(g_dataholder.m_dparam.fusion_max_weight);
+	ui.dbGSStep->setValue(g_dataholder.m_dparam.fusion_GaussNewton_fixedStep);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -452,6 +453,7 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		if (vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame)
 		{
 			frameLoading();
+			g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 			g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
 			setState(DynamicFusionUI::Pause);
 		}
@@ -844,4 +846,10 @@ void DynamicFusionUI::on_sbAutoResetSeconds_valueChanged(int v)
 void DynamicFusionUI::on_sbMaxWeights_valueChanged(int v)
 {
 	g_dataholder.m_dparam.fusion_max_weight = v;
+}
+
+void DynamicFusionUI::on_dbGSStep_valueChanged(double v)
+{
+	g_dataholder.m_dparam.fusion_GaussNewton_fixedStep = v;
+	g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 }
