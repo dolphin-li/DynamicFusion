@@ -114,6 +114,7 @@ namespace dfusion
 		~WarpField();
 
 		void init(TsdfVolume* volume, Param param);
+		void clear();
 
 		// update graph nodes based on a given mesh
 		void updateWarpNodes(GpuMesh& src);

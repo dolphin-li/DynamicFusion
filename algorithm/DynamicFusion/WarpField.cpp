@@ -19,6 +19,7 @@ namespace dfusion
 
 	WarpField::~WarpField()
 	{
+		clear();
 	}
 
 	void WarpField::init(TsdfVolume* vol, Param param)
@@ -55,6 +56,35 @@ namespace dfusion
 		m_nodesGridSize = make_int3(std::ceil(res.x*vsz/m_param.warp_radius_search_epsilon),
 			std::ceil(res.y*vsz/m_param.warp_radius_search_epsilon),
 			std::ceil(res.z*vsz/m_param.warp_radius_search_epsilon));
+	}
+
+	void WarpField::clear()
+	{
+		for (int k = 0; k < GraphLevelNum; k++)
+		{
+			if (m_nodeTree[k])
+			{
+				delete m_nodeTree[k];
+				m_nodeTree[k] = nullptr;
+			}
+		}
+		if (m_knnField)
+		{
+			cudaSafeCall(cudaFreeArray(m_knnField), "cudaFreeArray");
+			m_knnField = nullptr;
+		}
+		m_nodesQuatTransVw.release();
+		m_nodesGraph.release();
+
+		m_meshPointsSorted.release();
+		m_meshPointsKey.release();
+		m_meshPointsFlags.release();
+		m_tmpBuffer.release();
+
+		m_current_point_buffer_size = 0;
+		memset(m_numNodes, 0, sizeof(m_numNodes));
+		memset(m_lastNumNodes, 0, sizeof(m_lastNumNodes));
+		m_activeVisualizeNodeId = -1;
 	}
 
 	void WarpField::updateWarpNodes(GpuMesh& src)
