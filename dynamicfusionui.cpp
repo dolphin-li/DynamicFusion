@@ -411,10 +411,10 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		if (!dir.exists())
 			throw std::exception(("error input path:" + m_currentPath.toStdString()).c_str());
 		int fid = 0;
-
 		// 1. load a pre-saved volume and then start by this frame.
 		int vol_fid = 0;
 		g_dataholder.m_processor.reset();
+		
 		for (; vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame;)
 		{
 			std::string volname = fullfile(m_currentPath.toStdString(), std::to_string(vol_fid) + ".rawvol");
@@ -428,7 +428,7 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		}
 		if (vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame)
 			fid = vol_fid;
-		
+
 		// 2. find the smallest available frame
 		for (; fid < g_dataholder.m_dparam.fusion_dumping_max_frame; )
 		{

@@ -432,6 +432,7 @@ namespace dfusion
 
 	void GpuMesh::release()
 	{
+		wglMakeCurrent(g_hdc, g_glrc);
 		if (m_vbo_id != 0)
 			glDeleteBuffers(1, &m_vbo_id);
 		if (m_cuda_res)

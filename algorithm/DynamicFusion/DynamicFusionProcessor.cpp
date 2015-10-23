@@ -323,13 +323,13 @@ namespace dfusion
 		int3 new_res = m_volume->getResolution();
 		if (old_res.x != new_res.x || old_res.y != new_res.y || old_res.z != new_res.z)
 			throw std::exception("error in loading volumes, size not matched with pre-allocated!");
-
+		
 		std::string path, purename, ext;
 		ldp::fileparts(volume_name, path, purename, ext);
 		std::string name1 = fullfile(path, purename + ".warpfield");
 		m_warpField->load(name1.c_str());
-
-		surfaceExtractionMC();
+		
+		surfaceExtractionMC(); 
 		m_warpedMesh->renderToCanonicalMaps(*m_camera, m_canoMesh, m_vmap_cano, m_nmap_cano);
 		m_warpField->warp(m_vmap_cano, m_nmap_cano, m_vmap_warp, m_nmap_warp);
 		m_frame_id = 1; // !=0 to prevent trivial case.

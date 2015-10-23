@@ -54,7 +54,7 @@ namespace dfusion
 			else
 				process_a_tile(m_tiles[tid], m_tiledMeshes[tid]);
 		}// end for tid
-
+		
 		if (m_tiles.size() > 1)
 		{
 			// scan to get the start index of each tile
