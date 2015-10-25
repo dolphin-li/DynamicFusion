@@ -346,7 +346,7 @@ namespace dfusion
 					cublasSaxpy(m_cublasHandle, m_Jrcols, &alpha,
 						m_h.ptr(), 1, m_twist.ptr(), 1);
 					new_energy = calcTotalEnergy();
-					if (new_energy < old_energy*0.999)
+					if (new_energy < old_energy)
 						break;
 					// reset x
 					cudaSafeCall(cudaMemcpy(m_twist.ptr(), m_tmpvec.ptr(), 

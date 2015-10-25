@@ -15,6 +15,8 @@ public:
 	void setImage_d(PtrStepSz<dfusion::depthtype> image_d);
 	void setNormal_d(const dfusion::MapArr& image_d);
 
+	void download_currentmap(std::vector<uchar4>& hostmap);
+
 	void initializeGL();
 	void resizeGL(int w, int h);
 	void paintGL();

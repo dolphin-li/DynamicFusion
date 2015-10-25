@@ -713,7 +713,7 @@ namespace dfusion
 						Tbx::Dual_quat_cu dqj;
 						dqj.from_twist(rj, tj);
 						Tbx::Vec3 vj = convert(read_float3_from_4(nodesVw_[knnNodeId]));
-						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
 						val = reg_term_penalty(val);
 
 						real ww = sqrt(lambda * alpha_ij);
@@ -721,7 +721,7 @@ namespace dfusion
 						f[nRow++] = val.y * ww;
 						f[nRow++] = val.z * ww;
 #ifdef ENABLE_DOUBLE_EDGE
-						Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
+						Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 						val1 = reg_term_penalty(val1);
 
 						f[nRow++] = val1.x * ww;
@@ -831,10 +831,10 @@ namespace dfusion
 						Tbx::Dual_quat_cu dqj;
 						dqj.from_twist(rj, tj);
 						Tbx::Vec3 vj = convert(read_float3_from_4(nodesVw_[knnNodeId]));
-						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+						Tbx::Vec3 val = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
 						total_energy += reg_term_energy(val) * lambda * alpha_ij;
 #ifdef ENABLE_DOUBLE_EDGE
-						Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
+						Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 						total_energy += reg_term_energy(val1) * lambda * alpha_ij;
 #endif
 					}
@@ -1153,20 +1153,20 @@ namespace dfusion
 							{
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
 									iNode * VarPerNode + ialpha, 
-									p_psi_p_alphai_j[ixyz]);
+									p_psi_p_alphai_i[ixyz]);
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + ixyz,
 									knnNodeId * VarPerNode + ialpha,
-									p_psi_p_alphaj_j[ixyz]);
+									p_psi_p_alphaj_i[ixyz]);
 							}
 #ifdef ENABLE_DOUBLE_EDGE
 							for (int ixyz = 0; ixyz < 3; ixyz++)
 							{
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + 3 + ixyz,
 									iNode * VarPerNode + ialpha,
-									p_psi_p_alphai_i[ixyz]);
+									p_psi_p_alphai_j[ixyz]);
 								m_cooSys[cooPos++] = Eigen::Triplet<real>(nRow + 3 + ixyz,
 									knnNodeId * VarPerNode + ialpha,
-									p_psi_p_alphaj_i[ixyz]);
+									p_psi_p_alphaj_j[ixyz]);
 							}
 #endif
 						}// end for ialpha

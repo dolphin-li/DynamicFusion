@@ -290,27 +290,50 @@ void DynamicFusionUI::updateDynamicFusion()
 		&& m_state != Pause)
 	{
 		// warp view
-		std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
-			*g_dataholder.m_warpedview_shading.cols());
-		g_dataholder.m_warpedview_shading.download(tmpMap.data(),
-			g_dataholder.m_warpedview_shading.cols()*sizeof(uchar4));
-		QImage img = QImage(g_dataholder.m_warpedview_shading.cols(),
-			g_dataholder.m_warpedview_shading.rows(), QImage::Format::Format_ARGB32);
-		for (int y = 0; y < g_dataholder.m_warpedview_shading.rows(); y++)
-		for (int x = 0; x < g_dataholder.m_warpedview_shading.cols(); x++)
 		{
-			uchar4 v = tmpMap[y*g_dataholder.m_warpedview_shading.cols() + x];
-			img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
-		}
-		int fid = g_dataholder.m_processor.getFrameId();
+			std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
+			*g_dataholder.m_warpedview_shading.cols());
+			g_dataholder.m_warpedview_shading.download(tmpMap.data(),
+				g_dataholder.m_warpedview_shading.cols()*sizeof(uchar4));
+			QImage img = QImage(g_dataholder.m_warpedview_shading.cols(),
+				g_dataholder.m_warpedview_shading.rows(), QImage::Format::Format_ARGB32);
+			for (int y = 0; y < g_dataholder.m_warpedview_shading.rows(); y++)
+			for (int x = 0; x < g_dataholder.m_warpedview_shading.cols(); x++)
+			{
+				uchar4 v = tmpMap[y*g_dataholder.m_warpedview_shading.cols() + x];
+				img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+			}
+			int fid = g_dataholder.m_processor.getFrameId();
 
-		QString name;
-		name.sprintf("data/screenshots/%06d_%d_%d_%d_%d.png", fid,
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
-		img.save(name);
+			QString name;
+			name.sprintf("data/screenshots/%06d_%d_%d_%d_%d.png", fid,
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
+			img.save(name);
+		}
+		// raw view
+		{
+			std::vector<uchar4> tmpMap;
+			ui.widgetDepth->download_currentmap(tmpMap);
+			QImage img = QImage(dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT, QImage::Format::Format_ARGB32);
+			for (int y = 0; y < dfusion::KINECT_HEIGHT; y++)
+			for (int x = 0; x < dfusion::KINECT_WIDTH; x++)
+			{
+				uchar4 v = tmpMap[y*dfusion::KINECT_WIDTH + x];
+				img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+			}
+			int fid = g_dataholder.m_processor.getFrameId();
+
+			QString name;
+			name.sprintf("data/screenshots/raw_%06d_%d_%d_%d_%d.png", fid,
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
+			img.save(name);
+		}
 #if 0
 		// error map
 		img = QImage(g_dataholder.m_errorMap_shading.cols(),
@@ -447,13 +470,13 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		m_frameIndex = fid;
 
 		setState(DynamicFusionUI::Loading);
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 
 		// for convinience, if there exists pre-defined volumes, we
 		// just pause to visualize it.
 		if (vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame)
 		{
 			frameLoading();
-			g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 			g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
 			setState(DynamicFusionUI::Pause);
 		}

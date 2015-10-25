@@ -23,6 +23,7 @@ namespace dfusion
 //#define USE_FLOAT_TSDF_VOLUME 
 //#define USE_SHORT_TSDF_VOLUME
 #define USE_HALF_TSDF_VOLUME
+
 	/** **********************************************************************
 	* types
 	* ***********************************************************************/

@@ -73,7 +73,7 @@ void DepthViewer::setNormal_d(const dfusion::MapArr& image_d)
 	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res),
 		"DepthViewer::setNormal_d 2");
 	dfusion::ColorMap map(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH, 
-		m_pbo_buffer, dfusion::KINECT_WIDTH*sizeof(uchar4));
+		m_pbo_buffer.data, dfusion::KINECT_WIDTH*sizeof(uchar4));
 	dfusion::generateNormalMap(image_d, map);
 	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0),
 		"DepthViewer::setNormal_d 3");
@@ -85,6 +85,23 @@ void DepthViewer::setNormal_d(const dfusion::MapArr& image_d)
 	m_gl_func->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 	CHECK_GL_ERROR("setImage_d");
 	updateGL();
+}
+
+void DepthViewer::download_currentmap(std::vector<uchar4>& hostmap)
+{
+	makeCurrent();
+
+	size_t num_bytes = 0;
+	cudaSafeCall(cudaGraphicsMapResources(1, &m_pbo_cuda_res, 0),
+		"DepthViewer::setNormal_d 1");
+	cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&m_pbo_buffer.data, &num_bytes, m_pbo_cuda_res),
+		"DepthViewer::setNormal_d 2");
+	dfusion::ColorMap map(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH,
+		m_pbo_buffer.data, dfusion::KINECT_WIDTH*sizeof(uchar4));
+	hostmap.resize(dfusion::KINECT_HEIGHT*dfusion::KINECT_WIDTH);
+	map.download(hostmap.data(), dfusion::KINECT_WIDTH*sizeof(uchar4));
+	cudaSafeCall(cudaGraphicsUnmapResources(1, &m_pbo_cuda_res, 0),
+		"DepthViewer::setNormal_d 3");
 }
 
 void DepthViewer::initializeGL()

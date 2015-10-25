@@ -15,6 +15,7 @@
 namespace dfusion
 {
 //#define ENABLE_CPU_DEBUG
+//#define ENABLE_BILATERAL_PRE_FILTER
 
 #define DFUSION_SAFE_DELETE(buffer)\
 	if (buffer){ delete buffer; buffer = nullptr; }
@@ -446,8 +447,11 @@ namespace dfusion
 
 	Tbx::Transfo DynamicFusionProcessor::rigid_align()
 	{
-		//bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
+#ifdef ENABLE_BILATERAL_PRE_FILTER
+		bilateralFilter(m_depth_input, m_depth_curr_pyd[0]);
+#else
 		m_depth_input.copyTo(m_depth_curr_pyd[0]);
+#endif
 		createVMap(m_kinect_intr(0), m_depth_curr_pyd[0], m_vmap_curr_pyd[0]);
 		createNMap(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0]);
 

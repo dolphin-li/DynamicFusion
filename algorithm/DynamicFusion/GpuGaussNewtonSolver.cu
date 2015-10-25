@@ -6,6 +6,13 @@
 #include "GpuCholeSky.h"
 namespace dfusion
 {
+//#define DEFINE_USE_HALF_GRAPH_EDGE
+
+#ifdef DEFINE_USE_HALF_GRAPH_EDGE
+	enum{RowPerNode_RegTerm = 3};
+#else
+	enum{ RowPerNode_RegTerm = 6 };
+#endif
 //#define USE_L2_NORM_DATA_TERM
 //#define USE_L2_NORM_REG_TERM
 #define CHECK(a, msg){if(!(a)) throw std::exception(msg);} 
@@ -1035,7 +1042,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 
 		// each node generate 6*maxK rows
-		rctptr[i] = (numK+1) * 6;
+		rctptr[i] = (numK + 1) * RowPerNode_RegTerm;
 		
 		if (i == 0)
 			rctptr[nMaxNodes] = 0;
@@ -1053,8 +1060,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			{
 				GpuGaussNewtonSolver::JrRow2NodeMapper mp;
 				mp.nodeId = iNode;
-				mp.k = (r - row_b) / 6;
-				mp.ixyz = r - 6 * mp.k;
+				mp.k = (r - row_b) / RowPerNode_RegTerm;
+				mp.ixyz = r - RowPerNode_RegTerm * mp.k;
 				row2nodeId[r] = mp;
 			}
 		}
@@ -1492,7 +1499,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		__device__ __forceinline__ void operator () () const
 		{
-			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x)*6;
+			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x)*RowPerNode_RegTerm;
 		
 			if (iRow >= nRows)
 				return;
@@ -1532,11 +1539,13 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			fptr[iRow + 1] = val.y * ww;
 			fptr[iRow + 2] = val.z * ww;
 
+#ifndef DEFINE_USE_HALF_GRAPH_EDGE
 			Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
 			val1 = reg_term_penalty(val1);
 			fptr[iRow + 3] = val1.x * ww;
 			fptr[iRow + 4] = val1.y * ww;
 			fptr[iRow + 5] = val1.z * ww;
+#endif
 
 			// debug
 			//ww = 1;
@@ -1551,24 +1560,28 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 				// partial_psi_partial_alpha
 				Tbx::Vec3 p_psi_p_alphai_j = (p_Ti_p_alpha * vj) * ww;
 				Tbx::Vec3 p_psi_p_alphaj_j = (p_Tj_p_alpha * vj) * (-ww);
+#ifndef DEFINE_USE_HALF_GRAPH_EDGE
 				Tbx::Vec3 p_psi_p_alphai_i = (p_Ti_p_alpha * vi) * ww;
 				Tbx::Vec3 p_psi_p_alphaj_i = (p_Tj_p_alpha * vi) * (-ww);
+#endif
 
 				for (int ixyz = 0; ixyz < 3; ixyz++)
 				{
 					int pos = cooPos + ixyz*ColPerRow + ialpha;
 					vptr[pos] = p_psi_p_alphai_j[ixyz];
 					vptr[pos + VarPerNode] = p_psi_p_alphaj_j[ixyz];
+#ifndef DEFINE_USE_HALF_GRAPH_EDGE
 					pos += 3 * ColPerRow;
 					vptr[pos] = p_psi_p_alphai_i[ixyz];
 					vptr[pos + VarPerNode] = p_psi_p_alphaj_i[ixyz];
+#endif
 				}
 			}// end for ialpha
 		}// end function ()
 
 		__device__ __forceinline__ void calcTotalEnergy () const
 		{
-			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x) * 6;
+			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x) * RowPerNode_RegTerm;
 
 			if (iRow >= nRows)
 				return;
@@ -1596,8 +1609,10 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			// energy=============================================
 			Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
 			float eg = ww2 * reg_term_energy(val);
+#ifndef DEFINE_USE_HALF_GRAPH_EDGE
 			Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
 			eg += ww2 * reg_term_energy(val1);
+#endif
 
 			atomicAdd(totalEnergy, eg);
 		}
@@ -1627,7 +1642,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		rj.fptr = m_f_r.ptr();
 
 		dim3 block(CTA_SIZE);
-		dim3 grid(divUp(m_Jrrows / 6, block.x));
+		dim3 grid(divUp(m_Jrrows / RowPerNode_RegTerm, block.x));
 
 		calcRegTerm_kernel << <grid, block >> >(rj);
 		cudaSafeCall(cudaGetLastError(), "calcRegTerm_kernel");
@@ -2167,7 +2182,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			rj.totalEnergy = &m_tmpvec[0];
 
 			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_Jrrows / 6, block.x));
+			dim3 grid(divUp(m_Jrrows / RowPerNode_RegTerm, block.x));
 
 			calcRegTermTotalEnergy_kernel << <grid, block >> >(rj);
 			cudaSafeCall(cudaGetLastError(), "calcRegTermTotalEnergy_kernel");
