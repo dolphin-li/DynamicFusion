@@ -518,7 +518,7 @@ namespace dfusion
 				return false;
 
 			float3 uvd = intr.xyz2uvd(vwarp);
-			int2 ukr = make_int2(uvd.x + 0.5, uvd.y + 0.5);
+			int2 ukr = make_int2(__float2int_rn(uvd.x), __float2int_rn(uvd.y));
 
 			// we use opengl coordinate, thus world.z should < 0
 			if (ukr.x < 0 || ukr.y < 0 || ukr.x >= imgWidth || ukr.y >= imgHeight || vwarp.z >= 0)

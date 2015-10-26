@@ -58,5 +58,10 @@ void GlobalDataHolder::loadDepth(std::vector<dfusion::depthtype>& depth_h, std::
 	for (size_t i = 0; i < tmp.size(); i++)
 		depth_h[i] = tmp[i];
 
+	//debug
+	//for (int y = 0; y < dfusion::KINECT_HEIGHT; y++)
+	//for (int x = 0; x < dfusion::KINECT_WIDTH; x++)
+	//	depth_h[y*dfusion::KINECT_WIDTH + x] = tmp[y*dfusion::KINECT_WIDTH + dfusion::KINECT_WIDTH-1-x];
+
 	stm.close();
 }

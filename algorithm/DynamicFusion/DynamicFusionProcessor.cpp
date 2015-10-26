@@ -83,7 +83,7 @@ namespace dfusion
 		const float t = m_camera->getViewPortTop();
 		const float b = m_camera->getViewPortBottom();
 		const float	f = (b - t) * 0.5f / tanf(m_camera->getFov() * fmath::DEG_TO_RAD * 0.5f);
-		m_kinect_intr = Intr(f, f, (l + r) / 2, (t + b) / 2);
+		m_kinect_intr = Intr(f, f, (l + r - 1) / 2, (t + b - 1) / 2);
 
 		// volume
 		if (m_volume == nullptr)
