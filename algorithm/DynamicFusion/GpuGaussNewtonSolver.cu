@@ -928,7 +928,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 				// the grad energy f
 				const float f = data_term_energy((dq.rotate(n)).dot(dq.transform(v) - Tlw_inv*vl));
-				atomicAdd(totalEnergy, f);
+				//atomicAdd(totalEnergy, f);
+				totalEnergy[y*imgWidth + x] = f;
 			}//end if find corr
 		}
 	};
@@ -1581,7 +1582,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		__device__ __forceinline__ void calcTotalEnergy () const
 		{
-			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x) * RowPerNode_RegTerm;
+			const int iNode = threadIdx.x + blockIdx.x * blockDim.x;
+			const int iRow = iNode * RowPerNode_RegTerm;
 
 			if (iRow >= nRows)
 				return;
@@ -1614,7 +1616,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			eg += ww2 * reg_term_energy(val1);
 #endif
 
-			atomicAdd(totalEnergy, eg);
+			//atomicAdd(totalEnergy, eg);
+			totalEnergy[iNode] = eg;
 		}
 	};
 
@@ -2116,6 +2119,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 	float GpuGaussNewtonSolver::calcTotalEnergy()
 	{
 		float total_energy = 0.f;
+		cudaMemset(m_energy_vec.ptr(), 0, m_energy_vec.sizeBytes());
 		{
 			DataTermCombined cs;
 			cs.angleThres = m_param->fusion_nonRigid_angleThreSin;
@@ -2135,11 +2139,11 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cs.nNodes = m_numNodes;
 			cs.Tlw_inv = m_pWarpField->get_rigidTransform().fast_invert();
 			cs.psi_data = m_param->fusion_psi_data;
-			cs.totalEnergy = &m_tmpvec[0];
+			cs.totalEnergy = m_energy_vec.ptr();
 
 			//int zero_mem_symbol = 0;
 			//cudaMemcpyToSymbol(g_totalEnergy, &zero_mem_symbol, sizeof(int));
-			cudaMemset(&m_tmpvec[0], 0, sizeof(float));
+			//cudaMemset(&m_tmpvec[0], 0, sizeof(float));
 
 			// 1. data term
 			//////////////////////////////
@@ -2179,7 +2183,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			rj.rptr = m_Jr_RowPtr.ptr();
 			rj.vptr = m_Jr_val.ptr();
 			rj.fptr = m_f_r.ptr();
-			rj.totalEnergy = &m_tmpvec[0];
+			rj.totalEnergy = m_energy_vec.ptr() + m_vmapKnn.rows()*m_vmapKnn.cols();
 
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Jrrows / RowPerNode_RegTerm, block.x));
@@ -2188,8 +2192,13 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cudaSafeCall(cudaGetLastError(), "calcRegTermTotalEnergy_kernel");
 		}
 
-		cudaSafeCall(cudaMemcpy(&total_energy,
-			&m_tmpvec[0], sizeof(float), cudaMemcpyDeviceToHost), "copy reg totalEnergy to host");
+		//cudaSafeCall(cudaMemcpy(&total_energy,
+		//	&m_tmpvec[0], sizeof(float), cudaMemcpyDeviceToHost), "copy reg totalEnergy to host");
+		cublasStatus_t st = cublasSnrm2(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm + 
+			m_vmapKnn.rows()*m_vmapKnn.cols(),
+			m_energy_vec.ptr(), 1, &total_energy);
+		if (st != CUBLAS_STATUS_SUCCESS)
+			throw std::exception("cublass error, in cublasSnrm2");
 
 		return total_energy;
 	}

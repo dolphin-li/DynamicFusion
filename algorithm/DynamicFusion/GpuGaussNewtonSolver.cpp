@@ -188,6 +188,9 @@ namespace dfusion
 			setzero(m_Hd_Linv);
 			m_Hd_LLtinv.create(m_Hd.size());
 			setzero(m_Hd_LLtinv);
+
+			// for total energy evaluation
+			m_energy_vec.create(m_vmapKnn.rows()*m_vmapKnn.cols() + m_nodes_for_buffer*WarpField::KnnK);
 		}
 
 		if (m_not_lv0_nodes_for_buffer < notLv0Nodes)
@@ -338,9 +341,10 @@ namespace dfusion
 				float old_energy = calcTotalEnergy();
 				float new_energy = 0.f;
 				float alpha = 1.f;
+				const static float alpha_stop = 1e-2;
 				cudaSafeCall(cudaMemcpy(m_tmpvec.ptr(), m_twist.ptr(), m_Jrcols*sizeof(float),
 					cudaMemcpyDeviceToDevice), "copy tmp vec to twist");
-				for (; alpha > 1e-6; alpha *= 0.5)
+				for (; alpha > alpha_stop; alpha *= 0.5)
 				{
 					// x += alpha * h
 					cublasSaxpy(m_cublasHandle, m_Jrcols, &alpha,
@@ -352,6 +356,8 @@ namespace dfusion
 					cudaSafeCall(cudaMemcpy(m_twist.ptr(), m_tmpvec.ptr(), 
 					m_Jrcols*sizeof(float), cudaMemcpyDeviceToDevice), "copy twist to tmp vec");
 				}
+				if (alpha <= alpha_stop)
+					break;
 			}
 			// else, we perform fixed step update.
 			else

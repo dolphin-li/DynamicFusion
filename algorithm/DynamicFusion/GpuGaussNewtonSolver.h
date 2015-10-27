@@ -177,6 +177,8 @@ namespace dfusion
 		// energy corresponding to Jr part.
 		DeviceArray<float> m_f_r;
 
+		DeviceArray<float> m_energy_vec;
+
 		//// params used in block solver
 
 		// Q = Hr - Bt * Hd^(-1) * B

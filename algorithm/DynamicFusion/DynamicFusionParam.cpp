@@ -41,7 +41,7 @@ namespace dfusion
 		fusion_rigid_distThre = 0.1f; // meter
 		fusion_rigid_ICP_iter[0] = 8; // coarse level
 		fusion_rigid_ICP_iter[1] = 4;
-		fusion_rigid_ICP_iter[2] = 0; // finest level
+		fusion_rigid_ICP_iter[2] = 2; // finest level
 		fusion_rigid_angleThreSin = sin(45.f*3.14159254f / 180.f);
 		fusion_nonRigid_distThre = 0.03f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
@@ -49,7 +49,7 @@ namespace dfusion
 		fusion_nonRigidICP_maxIter = 3;
 		fusion_GaussNewton_maxIter = 3;
 		fusion_GaussNewton_diag_regTerm = 1e-3;
-		fusion_GaussNewton_fixedStep = 0.5;// 5;
+		fusion_GaussNewton_fixedStep = 0.0;// 5;
 
 		// debuging related
 		fusion_dumping_each_frame = false;
