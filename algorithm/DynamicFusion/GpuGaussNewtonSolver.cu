@@ -1541,7 +1541,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			fptr[iRow + 2] = val.z * ww;
 
 #ifndef DEFINE_USE_HALF_GRAPH_EDGE
-			Tbx::Vec3 val1 = dqi.transform(Tbx::Point3(vi)) - dqj.transform(Tbx::Point3(vi));
+			Tbx::Vec3 val1 = dqj.transform(Tbx::Point3(vi)) - dqi.transform(Tbx::Point3(vi));
 			val1 = reg_term_penalty(val1);
 			fptr[iRow + 3] = val1.x * ww;
 			fptr[iRow + 4] = val1.y * ww;
@@ -1562,8 +1562,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 				Tbx::Vec3 p_psi_p_alphai_j = (p_Ti_p_alpha * vj) * ww;
 				Tbx::Vec3 p_psi_p_alphaj_j = (p_Tj_p_alpha * vj) * (-ww);
 #ifndef DEFINE_USE_HALF_GRAPH_EDGE
-				Tbx::Vec3 p_psi_p_alphai_i = (p_Ti_p_alpha * vi) * ww;
-				Tbx::Vec3 p_psi_p_alphaj_i = (p_Tj_p_alpha * vi) * (-ww);
+				Tbx::Vec3 p_psi_p_alphai_i = (p_Ti_p_alpha * vi) * (-ww);
+				Tbx::Vec3 p_psi_p_alphaj_i = (p_Tj_p_alpha * vi) * ww;
 #endif
 
 				for (int ixyz = 0; ixyz < 3; ixyz++)
