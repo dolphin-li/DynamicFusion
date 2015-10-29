@@ -494,6 +494,8 @@ namespace dfusion
 		//	if it is the first frame, no volume to align, so stop here
 		if (m_frame_id == 0)
 			return Tbx::Transfo().identity();
+		//else // ldp debug
+		//	return m_warpField->get_rigidTransform();
 
 		// now estimate rigid transform
 		Tbx::Transfo c2v = m_warpField->get_rigidTransform().fast_invert();

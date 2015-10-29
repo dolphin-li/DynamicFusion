@@ -3,7 +3,8 @@
 #include "LMSolver.h"
 #include <helper_math.h>
 #include <set>
-#include "ldpdef.h"
+#include "ldp_basic_mat.h"
+#include <queue>
 namespace dfusion
 {
 #define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
@@ -1355,6 +1356,88 @@ namespace dfusion
 		delete m_egc;
 	}
 
+	static void checkGraph(const std::vector<KnnIdx>& knnGraph, int nNodes)
+	{
+		std::vector<ldp::Int2> edges;
+		for (int i = 0; i < knnGraph.size(); i++)
+		{
+			KnnIdx knn = knnGraph[i];
+			for (int k = 0; k < WarpField::KnnK; k++)
+			{
+				int nb = knn_k(knn, k);
+				if (nb < nNodes)
+				{
+					edges.push_back(ldp::Int2(i, nb));
+					edges.push_back(ldp::Int2(nb, i));
+				}
+			}// k
+		}// i
+		std::sort(edges.begin(), edges.end());
+
+		std::vector<int> edgeHeader(nNodes + 1, 0);
+		for (int i = 1; i < edges.size(); i++)
+		{
+			if (edges[i][0] != edges[i - 1][0])
+				edgeHeader[edges[i][0]] = i;
+		}
+		edgeHeader[nNodes] = edges.size();
+
+		// find indepedent components
+		std::set<int> verts;
+		for (int i = 0; i < nNodes; i++)
+			verts.insert(i);
+		std::vector<std::vector<int>> components;
+
+		while (!verts.empty())
+		{
+			components.push_back(std::vector<int>());
+			std::vector<int>& cp = components.back();
+
+			auto set_iter = verts.begin();
+			std::queue<int> queue;
+			queue.push(*set_iter);
+			verts.erase(set_iter);
+
+			while (!queue.empty())
+			{
+				const int v = queue.front();
+				queue.pop();
+				cp.push_back(v);
+
+				for (int i = edgeHeader[v]; i < edgeHeader[v + 1]; i++)
+				{
+					const int v1 = edges[i][1];
+					if (edges[i][0] != v)
+						throw std::exception("edgeHeader error in find independent componnet debugging!");
+					set_iter = verts.find(v1);
+					if (set_iter != verts.end())
+					{
+						queue.push(v1);
+						verts.erase(set_iter);
+					}
+				}// end for i
+			}// end while
+		}
+
+		printf("Totally %d compoents:\n", components.size());
+		for (int i = 0; i < components.size(); i++)
+			printf("\t components %d, size %d\n", i, components[i].size());
+
+		// dump
+		FILE* pFile = fopen("D:/tmp/knnGraph_components.txt", "w");
+		if (pFile)
+		{
+			for (int i = 0; i < components.size(); i++)
+			{
+				fprintf(pFile, "components %d, size %d\n", i, components[i].size());
+				std::sort(components[i].begin(), components[i].end());
+				for (int j = 0; j < components[i].size(); j++)
+					fprintf(pFile, "%d\n", components[i][j]);
+			}
+			fclose(pFile);
+		}
+	}
+
 	void CpuGaussNewton::init(WarpField* pWarpField, const MapArr& vmap_cano, const MapArr& nmap_cano,
 		Param param, Intr intr)
 	{
@@ -1390,6 +1473,25 @@ namespace dfusion
 		m_egc->x_.resize(m_twist.size());
 		for (int i = 0; i < tmpx.size(); i++)
 			m_egc->x_[i] = tmpx[i];
+
+		// debug: checking the deformation graph
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+		checkGraph(m_egc->nodesKnn_, pWarpField->getNumAllNodes());
+		{
+			FILE* pFile = fopen("D:/tmp/knnGraph.txt", "w");
+			if (pFile)
+			{
+				for (int i = 0; i < m_egc->nodesKnn_.size(); i++)
+				{
+					KnnIdx knn = m_egc->nodesKnn_[i];
+					for (int k = 0; k < WarpField::KnnK; k++)
+					if (knn_k(knn, k) < m_egc->nodesKnn_.size())
+						fprintf(pFile, "%d %d\n", i, knn_k(knn, k));
+				}
+				fclose(pFile);
+			}
+		}
+#endif
 	}
 
 	void CpuGaussNewton::findCorr(const MapArr& vmap_live, const MapArr& nmap_live,
