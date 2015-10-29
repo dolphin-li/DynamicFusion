@@ -446,7 +446,7 @@
        <number>0</number>
       </property>
       <property name="maximum">
-       <number>99</number>
+       <number>9999</number>
       </property>
       <property name="value">
        <number>0</number>
@@ -478,7 +478,7 @@
        <number>0</number>
       </property>
       <property name="maximum">
-       <number>99</number>
+       <number>9999</number>
       </property>
       <property name="value">
        <number>0</number>
@@ -531,6 +531,9 @@
         <width>62</width>
         <height>22</height>
        </rect>
+      </property>
+      <property name="decimals">
+       <number>4</number>
       </property>
      </widget>
      <widget class="QCheckBox" name="cbEnableNonRigid">

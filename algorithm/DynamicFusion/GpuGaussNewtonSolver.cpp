@@ -365,6 +365,13 @@ namespace dfusion
 				totalEnergy = new_energy;
 				if (alpha <= alpha_stop)
 					break;
+				float norm_h = 0.f, norm_g = 0.f;
+				cublasStatus_t st = cublasSnrm2(m_cublasHandle, m_Jrcols,
+					m_h.ptr(), 1, &norm_h);
+				st = cublasSnrm2(m_cublasHandle, m_Jrcols,
+					m_g.ptr(), 1, &norm_g);
+				if (norm_h < (norm_g + 1e-3f) * 1e-3f)
+					break;
 			}
 			// else, we perform fixed step update.
 			else
