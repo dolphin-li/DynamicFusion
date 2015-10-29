@@ -1527,6 +1527,10 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
 			float ww = sqrt(lambda * alpha_ij);
 
+			//if (isinf(nodeVwj.w))
+			//	printf("inf found: %d %d %f %f %f %f\n", mapper.nodeId, knnNodeId, 
+			//	nodeVwj.w, 1.f / nodeVwj.w, alpha_ij, ww);
+
 			// debug
 			//float ww2 = ww*ww;
 			//ww = 1;

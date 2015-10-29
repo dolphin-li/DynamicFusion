@@ -35,6 +35,8 @@ namespace dfusion
 		WarpField* getWarpField();
 		const TsdfVolume* getVolume()const;
 		TsdfVolume* getVolume();
+		const GpuGaussNewtonSolver* getSolver()const;
+		GpuGaussNewtonSolver* getSolver();
 
 		void updateParam(const Param& param);
 

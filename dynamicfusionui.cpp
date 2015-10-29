@@ -1,6 +1,7 @@
 #include "dynamicfusionui.h"
 #include "global_data_holder.h"
 #include "WarpField.h"
+#include "GpuGaussNewtonSolver.h"
 DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	: QMainWindow(parent)
 {
@@ -225,7 +226,8 @@ void DynamicFusionUI::frameSaving()
 
 void DynamicFusionUI::frameLive()
 {
-	g_dataholder.m_kinect.GetDepthColorIntoBuffer(g_dataholder.m_depth_h.data(), nullptr);
+	g_dataholder.m_kinect.GetDepthColorIntoBuffer(g_dataholder.m_depth_h.data(), 
+		nullptr, false, g_dataholder.m_dparam.mirror_input);
 	g_dataholder.m_depth_d.upload(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH*sizeof(dfusion::depthtype),
 		dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
 }
@@ -875,4 +877,9 @@ void DynamicFusionUI::on_dbGSStep_valueChanged(double v)
 {
 	g_dataholder.m_dparam.fusion_GaussNewton_fixedStep = v;
 	g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+}
+
+void DynamicFusionUI::on_pbDebug_clicked()
+{
+	g_dataholder.m_processor.getSolver()->debug_print();
 }

@@ -52,7 +52,8 @@ void Microsoft_Kinect::FreeSpace(){
 #endif
 }
 
-int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, bool map2depth)
+int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, 
+	bool map2depth, bool mirror_input)
 {
 	GetDepthMap();
 
@@ -61,11 +62,20 @@ int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigne
 	{
 		for (int y = 0; y < dep_height; y++)
 		for (int x = 0; x < dep_width; x++)
+		{
+
 #ifdef ENABLE_KINECT_10
-			*depth++ = depth_map[y*dep_width + x].depth;
+			if (mirror_input)
+				*depth++ = depth_map[y*dep_width + dep_width - 1 - x].depth;
+			else
+				*depth++ = depth_map[y*dep_width + x].depth;
 #else
-			*depth++ = depth_map[y*dep_width + x];
+			if (mirror_input)
+				*depth++ = depth_map[y*dep_width + dep_width - 1 - x];
+			else
+				*depth++ = depth_map[y*dep_width + x];
 #endif
+		}
 	}
 
 #ifdef ENABLE_KINECT_20

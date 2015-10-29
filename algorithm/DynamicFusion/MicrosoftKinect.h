@@ -60,7 +60,8 @@ public:
 
 	// the size of buffer must be 640*480 and continues.
 	// if depth/pBGRA==nullptr, then ignored.
-	int GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, bool map2depth = true);
+	int GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, 
+		bool map2depth = true, bool mirror_input = true);
 
 	//	get data
 	int GetDepthMap();

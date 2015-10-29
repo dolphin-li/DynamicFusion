@@ -63,6 +63,8 @@ public:
 	void on_sbAutoResetSeconds_valueChanged(int v);
 	void on_sbMaxWeights_valueChanged(int v);
 	void on_dbGSStep_valueChanged(double v);
+
+	void on_pbDebug_clicked();
 protected:
 	void updateUiFromParam();
 

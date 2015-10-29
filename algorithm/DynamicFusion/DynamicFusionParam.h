@@ -110,6 +110,7 @@ namespace dfusion
 		bool fusion_enable_nonRigidSolver;
 		bool fusion_loading_mode;
 		int fusion_dumping_max_frame;
+		bool mirror_input;
 
 		/** *****************************************************
 		* visualization related

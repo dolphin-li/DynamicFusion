@@ -83,7 +83,7 @@ namespace dfusion
 		const float t = m_camera->getViewPortTop();
 		const float b = m_camera->getViewPortBottom();
 		const float	f = (b - t) * 0.5f / tanf(m_camera->getFov() * fmath::DEG_TO_RAD * 0.5f);
-		m_kinect_intr = Intr(f, f, (l + r - 1) / 2, (t + b - 1) / 2);
+		m_kinect_intr = Intr(f, f, (l + r) / 2, (t + b) / 2);
 
 		// volume
 		if (m_volume == nullptr)
@@ -93,9 +93,9 @@ namespace dfusion
 			m_param.volume_resolution[1], 
 			m_param.volume_resolution[2]),
 			1.f/m_param.voxels_per_meter, 
-			make_float3(-m_param.volume_resolution[0]*0.5f/m_param.voxels_per_meter, 
-			-m_param.volume_resolution[1] * 0.5f / m_param.voxels_per_meter, 
-			-KINECT_NEAREST_METER - float(m_param.volume_resolution[2]) / m_param.voxels_per_meter)
+			make_float3(-(m_param.volume_resolution[0]-1)*0.5f/m_param.voxels_per_meter, 
+			-(m_param.volume_resolution[1]-1) * 0.5f / m_param.voxels_per_meter, 
+			-KINECT_NEAREST_METER - float(m_param.volume_resolution[2]-1) / m_param.voxels_per_meter)
 			);
 
 		// mesh
@@ -327,6 +327,16 @@ namespace dfusion
 	TsdfVolume* DynamicFusionProcessor::getVolume()
 	{
 		return m_volume;
+	}
+
+	const GpuGaussNewtonSolver* DynamicFusionProcessor::getSolver()const
+	{
+		return m_gsSolver;
+	}
+
+	GpuGaussNewtonSolver* DynamicFusionProcessor::getSolver()
+	{
+		return m_gsSolver;
 	}
 
 	void DynamicFusionProcessor::save(const char* volume_name)

@@ -60,9 +60,9 @@ namespace dfusion
 			Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 
 			float3 p1 = (make_float3(p.x, p.y, p.z) - origion)*invVoxelSize;
-			int x = int(p1.x);
-			int y = int(p1.y);
-			int z = int(p1.z);
+			int x = __float2int_rn(p1.x);
+			int y = __float2int_rn(p1.y);
+			int z = __float2int_rn(p1.z);
 			KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
 			tex3D(&knnIdx, knnTex, x, y, z);
 

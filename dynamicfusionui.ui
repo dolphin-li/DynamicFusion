@@ -391,6 +391,19 @@
        <string>no rigid</string>
       </property>
      </widget>
+     <widget class="QPushButton" name="pbDebug">
+      <property name="geometry">
+       <rect>
+        <x>150</x>
+        <y>110</y>
+        <width>75</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>debug</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QGroupBox" name="groupBox_7">
      <property name="geometry">

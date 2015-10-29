@@ -19,7 +19,7 @@ namespace dfusion
 		marching_cube_tile_size = 256;
 		marching_cube_max_activeVoxel_ratio = 0.2;
 		marching_cube_isoValue = 0.f;
-		marchingCube_min_valied_weight = 5.f;
+		marchingCube_min_valied_weight = 2.f;
 
 		/** *****************************************************
 		* warp field related
@@ -46,8 +46,8 @@ namespace dfusion
 		fusion_nonRigid_distThre = 0.03f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 
-		fusion_nonRigidICP_maxIter = 3;
-		fusion_GaussNewton_maxIter = 3;
+		fusion_nonRigidICP_maxIter = 2;
+		fusion_GaussNewton_maxIter = 2;
 		fusion_GaussNewton_diag_regTerm = 1e-3;
 		fusion_GaussNewton_fixedStep = 0.0;// 5;
 
@@ -57,6 +57,7 @@ namespace dfusion
 		fusion_enable_nonRigidSolver = true;
 		fusion_post_rigid_factor = true;
 		fusion_dumping_max_frame = 800;
+		mirror_input = true; 
 
 		/** *****************************************************
 		* visualization related
