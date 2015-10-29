@@ -53,7 +53,7 @@ namespace dfusion
 
 		// debuging related
 		fusion_dumping_each_frame = false;
-		fusion_loading_mode = true;
+		fusion_loading_mode = false;
 		fusion_enable_nonRigidSolver = true;
 		fusion_enable_rigidSolver = true;
 		fusion_post_rigid_factor = true;

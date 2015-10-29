@@ -7,6 +7,8 @@
 namespace dfusion
 {
 //#define DEFINE_USE_HALF_GRAPH_EDGE
+//#define CALC_DATA_TERM_NUMERIC
+//#define CALC_REG_TERM_NUMERIC
 
 #ifdef DEFINE_USE_HALF_GRAPH_EDGE
 	enum{RowPerNode_RegTerm = 3};
@@ -937,8 +939,11 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 	template<int maxK>
 	__global__ void dataTermCombinedKernel(const DataTermCombined cs)
 	{
+#ifdef CALC_DATA_TERM_NUMERIC
+		cs.calc_dataterm_numeric<maxK>();
+#else
 		cs.calc_dataterm<maxK>();
-		//cs.calc_dataterm_numeric<maxK>();
+#endif
 	}
 
 	void GpuGaussNewtonSolver::calcDataTerm()
@@ -1584,6 +1589,119 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			}// end for ialpha
 		}// end function ()
 
+		__device__ __forceinline__ float get_numeric_inc(float v) const
+		{
+			return max(1e-5f, v* 1e-3f);
+		}
+
+		__device__ __forceinline__ void calc_reg_numeric () const
+		{
+			const int iRow = (threadIdx.x + blockIdx.x * blockDim.x)*RowPerNode_RegTerm;
+
+			if (iRow >= nRows)
+				return;
+
+			Mapper mapper = rows2nodeIds[iRow];
+			int knnNodeId = knn_k(get_nodesKnn(mapper.nodeId), mapper.k);
+
+			if (knnNodeId >= nNodes)
+				return;
+
+			int cooPos = rptr[iRow];
+
+			Tbx::Dual_quat_cu dqi, dqj;
+			Tbx::Vec3 ri, ti, rj, tj;
+			get_twist(mapper.nodeId, ri, ti);
+			get_twist(knnNodeId, rj, tj);
+			dqi.from_twist(ri, ti);
+			dqj.from_twist(rj, tj);
+
+			float4 nodeVwi = get_nodesVw(mapper.nodeId);
+			float4 nodeVwj = get_nodesVw(knnNodeId);
+			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
+			Tbx::Point3 vj(convert(read_float3_4(nodeVwj)));
+			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
+			float ww = sqrt(lambda * alpha_ij);
+
+			// energy=============================================
+			Tbx::Vec3 val_j = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+			Tbx::Vec3 psi_val_j = reg_term_penalty(val_j);
+
+			fptr[iRow + 0] = psi_val_j.x * ww;
+			fptr[iRow + 1] = psi_val_j.y * ww;
+			fptr[iRow + 2] = psi_val_j.z * ww;
+
+#ifndef DEFINE_USE_HALF_GRAPH_EDGE
+			Tbx::Vec3 val_i = dqj.transform(Tbx::Point3(vi)) - dqi.transform(Tbx::Point3(vi));
+			Tbx::Vec3 psi_val_i = reg_term_penalty(val_i);
+			fptr[iRow + 3] = psi_val_i.x * ww;
+			fptr[iRow + 4] = psi_val_i.y * ww;
+			fptr[iRow + 5] = psi_val_i.z * ww;
+#endif
+
+			// jacobi=============================================
+			for (int ialpha = 0; ialpha < 3; ialpha++)
+			{
+				float inci = get_numeric_inc(ri[ialpha]);
+				ri[ialpha] += inci;
+				dqi.from_twist(ri, ti);
+				Tbx::Vec3 val_j_inci = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+				Tbx::Vec3 val_i_inci = dqj.transform(Tbx::Point3(vi)) - dqi.transform(Tbx::Point3(vi));
+				ri[ialpha] -= inci;
+				dqi.from_twist(ri, ti);
+
+				float incj = get_numeric_inc(rj[ialpha]);
+				rj[ialpha] += incj;
+				dqj.from_twist(rj, tj);
+				Tbx::Vec3 val_j_incj = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+				Tbx::Vec3 val_i_incj = dqj.transform(Tbx::Point3(vi)) - dqi.transform(Tbx::Point3(vi));
+				rj[ialpha] -= incj;
+				dqj.from_twist(rj, tj);
+
+				for (int ixyz = 0; ixyz < 3; ixyz++)
+				{
+					int pos = cooPos + ixyz*ColPerRow + ialpha;
+					vptr[pos] = ww * (val_j_inci[ixyz] - val_j[ixyz]) / inci;
+					vptr[pos + VarPerNode] = ww * (val_j_incj[ixyz] - val_j[ixyz]) / incj;
+#ifndef DEFINE_USE_HALF_GRAPH_EDGE
+					pos += 3 * ColPerRow;
+					vptr[pos] = ww * (val_i_inci[ixyz] - val_i[ixyz]) / inci;
+					vptr[pos + VarPerNode] = ww * (val_i_incj[ixyz] - val_i[ixyz]) / incj;
+#endif
+				}
+			}// end for ialpha
+			for (int ialpha = 0; ialpha < 3; ialpha++)
+			{
+				float inci = get_numeric_inc(ti[ialpha]);
+				ti[ialpha] += inci;
+				dqi.from_twist(ri, ti);
+				Tbx::Vec3 val_j_inci = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+				Tbx::Vec3 val_i_inci = dqj.transform(Tbx::Point3(vi)) - dqi.transform(Tbx::Point3(vi));
+				ti[ialpha] -= inci;
+				dqi.from_twist(ri, ti);
+
+				float incj = get_numeric_inc(tj[ialpha]);
+				tj[ialpha] += incj;
+				dqj.from_twist(rj, tj);
+				Tbx::Vec3 val_j_incj = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
+				Tbx::Vec3 val_i_incj = dqj.transform(Tbx::Point3(vi)) - dqi.transform(Tbx::Point3(vi));
+				tj[ialpha] -= incj;
+				dqj.from_twist(rj, tj);
+
+				for (int ixyz = 0; ixyz < 3; ixyz++)
+				{
+					int pos = cooPos + ixyz*ColPerRow + ialpha + 3;
+					vptr[pos] = ww * (val_j_inci[ixyz] - val_j[ixyz]) / inci;
+					vptr[pos + VarPerNode] = ww * (val_j_incj[ixyz] - val_j[ixyz]) / incj;
+#ifndef DEFINE_USE_HALF_GRAPH_EDGE
+					pos += 3 * ColPerRow;
+					vptr[pos] = ww * (val_i_inci[ixyz] - val_i[ixyz]) / inci;
+					vptr[pos + VarPerNode] = ww * (val_i_incj[ixyz] - val_i[ixyz]) / incj;
+#endif
+				}
+			}// end for ialpha
+		}// end function ()
+
 		__device__ __forceinline__ void calcTotalEnergy () const
 		{
 			const int iNode = threadIdx.x + blockIdx.x * blockDim.x;
@@ -1627,7 +1745,11 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 	__global__ void calcRegTerm_kernel(RegTermJacobi rj)
 	{
+#ifdef CALC_REG_TERM_NUMERIC
+		rj.calc_reg_numeric();
+#else
 		rj();
+#endif
 	}
 	__global__ void calcRegTermTotalEnergy_kernel(RegTermJacobi rj)
 	{
