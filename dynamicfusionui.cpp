@@ -191,6 +191,8 @@ void DynamicFusionUI::updateUiFromParam()
 	ui.sbAutoResetSeconds->setValue(g_dataholder.m_dparam.view_autoreset_seconds);
 	ui.sbMaxWeights->setValue(g_dataholder.m_dparam.fusion_max_weight);
 	ui.dbGSStep->setValue(g_dataholder.m_dparam.fusion_GaussNewton_fixedStep);
+
+	ui.sbFrmIdxPlus->setValue(g_dataholder.m_dparam.load_frameIndx_plus_num);
 }
 
 void DynamicFusionUI::frameLoading()
@@ -198,7 +200,8 @@ void DynamicFusionUI::frameLoading()
 	QDir dir(m_currentPath);
 	if (!dir.exists())
 		throw std::exception(("error input path:" + m_currentPath.toStdString()).c_str());
-	QString name = dir.absoluteFilePath(QString().sprintf("%08d.depth", m_frameIndex++));
+	QString name = dir.absoluteFilePath(QString().sprintf("%08d.depth", m_frameIndex));
+	m_frameIndex += g_dataholder.m_dparam.load_frameIndx_plus_num;
 
 	try
 	{
@@ -882,4 +885,14 @@ void DynamicFusionUI::on_dbGSStep_valueChanged(double v)
 void DynamicFusionUI::on_pbDebug_clicked()
 {
 	g_dataholder.m_processor.getSolver()->debug_print();
+}
+
+void DynamicFusionUI::on_sbFrmIdxPlus_valueChanged(int v)
+{
+	g_dataholder.m_dparam.load_frameIndx_plus_num = v;
+}
+
+void DynamicFusionUI::on_pbUpdateParam_clicked()
+{
+	g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 }

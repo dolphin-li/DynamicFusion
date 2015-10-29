@@ -55,6 +55,7 @@ namespace dfusion
 		float calcTotalEnergy();
 
 		void checkNan(const DeviceArray<float>& x, int n, const char* msg);
+		void checkLinearSolver();
 
 		void bindTextures();
 		void unBindTextures();

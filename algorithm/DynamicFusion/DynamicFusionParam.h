@@ -111,6 +111,7 @@ namespace dfusion
 		bool fusion_loading_mode;
 		int fusion_dumping_max_frame;
 		bool mirror_input;
+		int load_frameIndx_plus_num;
 
 		/** *****************************************************
 		* visualization related

@@ -2308,4 +2308,11 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 	}
 #pragma endregion
+
+#pragma region --check linear solver
+	void GpuGaussNewtonSolver::checkLinearSolver()
+	{
+
+	}
+#pragma endregion
 }

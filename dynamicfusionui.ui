@@ -391,19 +391,6 @@
        <string>no rigid</string>
       </property>
      </widget>
-     <widget class="QPushButton" name="pbDebug">
-      <property name="geometry">
-       <rect>
-        <x>150</x>
-        <y>110</y>
-        <width>75</width>
-        <height>23</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>debug</string>
-      </property>
-     </widget>
     </widget>
     <widget class="QGroupBox" name="groupBox_7">
      <property name="geometry">
@@ -702,6 +689,68 @@
      <property name="maximum">
       <number>9999</number>
      </property>
+    </widget>
+    <widget class="QGroupBox" name="groupBox_8">
+     <property name="geometry">
+      <rect>
+       <x>1090</x>
+       <y>10</y>
+       <width>181</width>
+       <height>141</height>
+      </rect>
+     </property>
+     <property name="title">
+      <string>debug</string>
+     </property>
+     <widget class="QPushButton" name="pbDebug">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>120</y>
+        <width>75</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>debug dump</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_12">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>20</y>
+        <width>51</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>frmIdx+:</string>
+      </property>
+     </widget>
+     <widget class="QSpinBox" name="sbFrmIdxPlus">
+      <property name="geometry">
+       <rect>
+        <x>70</x>
+        <y>20</y>
+        <width>42</width>
+        <height>22</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pbUpdateParam">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>90</y>
+        <width>75</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>update param</string>
+      </property>
+     </widget>
     </widget>
    </widget>
   </widget>

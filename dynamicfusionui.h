@@ -65,6 +65,8 @@ public:
 	void on_dbGSStep_valueChanged(double v);
 
 	void on_pbDebug_clicked();
+	void on_sbFrmIdxPlus_valueChanged(int v);
+	void on_pbUpdateParam_clicked();
 protected:
 	void updateUiFromParam();
 
