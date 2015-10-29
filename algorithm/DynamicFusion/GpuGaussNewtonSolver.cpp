@@ -59,6 +59,12 @@ namespace dfusion
 				debug_print();
 				system("pause");
 			}
+			if (isinf(hx.at(i)))
+			{
+				printf("[%d]inf(%s): %d %f\n", a, msg, i, hx[i]);
+				debug_print();
+				system("pause");
+			}
 		}
 		a++;
 #endif
@@ -287,8 +293,8 @@ namespace dfusion
 		setzero(m_Q);
 	}
 
-	void GpuGaussNewtonSolver::solve(const MapArr& vmap_live, const MapArr& nmap_live,
-		const MapArr& vmap_warp, const MapArr& nmap_warp)
+	float GpuGaussNewtonSolver::solve(const MapArr& vmap_live, const MapArr& nmap_live,
+		const MapArr& vmap_warp, const MapArr& nmap_warp, float* data_energy_, float* reg_energy_)
 	{
 		if (m_pWarpField == nullptr)
 			throw std::exception("GpuGaussNewtonSolver::solve: null pointer");
@@ -297,7 +303,7 @@ namespace dfusion
 		if (m_pWarpField->getNumNodesInLevel(0) == 0)
 		{
 			printf("no warp nodes, return\n");
-			return;
+			return FLT_MAX;
 		}
 
 		m_vmap_warp = &vmap_warp;
@@ -307,7 +313,7 @@ namespace dfusion
 
 		// perform Gauss-Newton iteration
 		//for (int k = 0; k < 100; k++)
-		float totalEnergy = 0.f;
+		float totalEnergy = 0.f, data_energy=0.f, reg_energy=0.f;
 		m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
@@ -338,7 +344,7 @@ namespace dfusion
 			// if not fix step, we perform line search
 			if (m_param->fusion_GaussNewton_fixedStep <= 0.f)
 			{
-				float old_energy = calcTotalEnergy();
+				float old_energy = calcTotalEnergy(data_energy, reg_energy);
 				float new_energy = 0.f;
 				float alpha = 1.f;
 				const static float alpha_stop = 1e-2;
@@ -349,13 +355,14 @@ namespace dfusion
 					// x += alpha * h
 					cublasSaxpy(m_cublasHandle, m_Jrcols, &alpha,
 						m_h.ptr(), 1, m_twist.ptr(), 1);
-					new_energy = calcTotalEnergy();
+					new_energy = calcTotalEnergy(data_energy, reg_energy);
 					if (new_energy < old_energy)
 						break;
 					// reset x
 					cudaSafeCall(cudaMemcpy(m_twist.ptr(), m_tmpvec.ptr(), 
 					m_Jrcols*sizeof(float), cudaMemcpyDeviceToDevice), "copy twist to tmp vec");
 				}
+				totalEnergy = new_energy;
 				if (alpha <= alpha_stop)
 					break;
 			}
@@ -367,6 +374,16 @@ namespace dfusion
 					m_h.ptr(), 1, m_twist.ptr(), 1);
 			}
 		}// end for iter
+
+		if (m_param->fusion_GaussNewton_fixedStep > 0.f)
+			totalEnergy = calcTotalEnergy(data_energy, reg_energy);
+
+		if (data_energy_)
+			*data_energy_ = data_energy;
+		if (reg_energy_)
+			*reg_energy_ = reg_energy;
+
+		return totalEnergy;
 	}
 
 	// update warpField by calling this function explicitly

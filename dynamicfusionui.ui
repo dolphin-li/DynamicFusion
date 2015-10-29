@@ -537,7 +537,7 @@
       <property name="geometry">
        <rect>
         <x>220</x>
-        <y>50</y>
+        <y>30</y>
         <width>91</width>
         <height>17</height>
        </rect>
@@ -616,6 +616,19 @@
         <width>62</width>
         <height>22</height>
        </rect>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="cbEnableRigid">
+      <property name="geometry">
+       <rect>
+        <x>220</x>
+        <y>50</y>
+        <width>91</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>enable rigid</string>
       </property>
      </widget>
     </widget>

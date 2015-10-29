@@ -33,8 +33,10 @@ namespace dfusion
 			const MapArr& nmap_cano, Param param, Intr intr);
 
 		// after solve, the interel twists are optimized, but th warpField are not touched
-		void solve(const MapArr& vmap_live, const MapArr& nmap_live,
-			const MapArr& vmap_warp, const MapArr& nmap_warp);
+		// the current energy is returned.
+		float solve(const MapArr& vmap_live, const MapArr& nmap_live,
+			const MapArr& vmap_warp, const MapArr& nmap_warp,
+			float* data_energy=nullptr, float* reg_energy=nullptr);
 
 		// optional, factor out common rigid transformations among all nodes
 		void factor_out_rigid();
@@ -52,7 +54,7 @@ namespace dfusion
 		void calcRegTerm();
 		void calcHessian();
 		void blockSolve();
-		float calcTotalEnergy();
+		float calcTotalEnergy(float& data_energy, float& reg_energy);
 
 		void checkNan(const DeviceArray<float>& x, int n, const char* msg);
 		void checkLinearSolver();

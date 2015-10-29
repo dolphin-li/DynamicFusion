@@ -391,6 +391,7 @@ namespace dfusion
 
 		// icp iteration
 		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
+		float energy = FLT_MAX;
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{
 #ifdef ENABLE_CPU_DEBUG
@@ -398,7 +399,13 @@ namespace dfusion
 			solver.solve(false);
 #else
 			// Gauss-Newton Optimization, findding correspondence internal
-			m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], m_vmap_warp, m_nmap_warp);
+			float oldEnergy = energy, data_energy=0.f, reg_energy=0.f;
+			energy = m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], 
+				m_vmap_warp, m_nmap_warp, &data_energy, &reg_energy);
+
+			printf("icp, energy(data,reg): %d %f = %f + %f\n", icp_iter, energy, data_energy, reg_energy);
+			//if (energy > oldEnergy)
+			//	break;
 
 			// update the warp field
 			m_gsSolver->updateWarpField();
@@ -494,8 +501,8 @@ namespace dfusion
 		//	if it is the first frame, no volume to align, so stop here
 		if (m_frame_id == 0)
 			return Tbx::Transfo().identity();
-		//else // ldp debug
-		//	return m_warpField->get_rigidTransform();
+		else if(!m_param.fusion_enable_rigidSolver)// ldp debug
+			return m_warpField->get_rigidTransform();
 
 		// now estimate rigid transform
 		Tbx::Transfo c2v = m_warpField->get_rigidTransform().fast_invert();

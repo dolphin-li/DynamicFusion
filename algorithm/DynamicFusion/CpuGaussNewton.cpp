@@ -7,7 +7,7 @@
 #include <queue>
 namespace dfusion
 {
-#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+//#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
 #define SHOW_LAST_NODE_INFO
 
 #define USE_ROBUST_HUBER_PENALTY

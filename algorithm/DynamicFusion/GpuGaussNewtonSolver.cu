@@ -2120,7 +2120,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 	}
 
-	float GpuGaussNewtonSolver::calcTotalEnergy()
+	float GpuGaussNewtonSolver::calcTotalEnergy(float& data_energy, float& reg_energy)
 	{
 		float total_energy = 0.f;
 		cudaMemset(m_energy_vec.ptr(), 0, m_energy_vec.sizeBytes());
@@ -2203,6 +2203,14 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			m_energy_vec.ptr(), 1, &total_energy);
 		if (st != CUBLAS_STATUS_SUCCESS)
 			throw std::exception("cublass error, in cublasSnrm2");
+
+		// debug get both data and reg term energy
+#if 1
+		cublasSnrm2(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm,
+			m_energy_vec.ptr() + m_vmapKnn.rows()*m_vmapKnn.cols(),
+			1, &reg_energy);
+		data_energy = sqrt(total_energy*total_energy - reg_energy*reg_energy);
+#endif
 
 		return total_energy;
 	}

@@ -108,6 +108,7 @@ namespace dfusion
 		// debugging related
 		bool fusion_dumping_each_frame;
 		bool fusion_enable_nonRigidSolver;
+		bool fusion_enable_rigidSolver;
 		bool fusion_loading_mode;
 		int fusion_dumping_max_frame;
 		bool mirror_input;
