@@ -55,7 +55,7 @@ namespace dfusion
 		fusion_dumping_each_frame = false;
 		fusion_loading_mode = true;
 		fusion_enable_nonRigidSolver = true;
-		fusion_post_rigid_factor = true;
+		fusion_post_rigid_factor = false;
 		fusion_dumping_max_frame = 800;
 		mirror_input = true; 
 		load_frameIndx_plus_num = 1;

@@ -127,8 +127,8 @@ namespace dfusion
 		//if (m_lastNumNodes[0] != m_numNodes[0])
 
 		//// ldp debug
-		//for (int lv = 1; lv < GraphLevelNum; lv++)
-		for (int lv = 1; lv < 2; lv++)
+		for (int lv = 1; lv < GraphLevelNum; lv++)
+		//for (int lv = 1; lv < 2; lv++)
 			updateGraph(lv);
 	}
 
