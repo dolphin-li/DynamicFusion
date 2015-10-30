@@ -929,7 +929,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 				dq = dq * (1.f / norm_dq); // normalize
 
 				// the grad energy f
-				const float f = data_term_energy((dq.rotate(n)).dot(dq.transform(v) - Tlw_inv*vl));
+				const float f = data_term_energy((Tlw*dq.rotate(n)).dot(Tlw*dq.transform(v) - vl));
 				//atomicAdd(totalEnergy, f);
 				totalEnergy[y*imgWidth + x] = f;
 			}//end if find corr
@@ -2263,6 +2263,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cs.vmap_warp = *m_vmap_warp;
 			cs.vmapKnn = m_vmapKnn;
 			cs.nNodes = m_numNodes;
+			cs.Tlw = m_pWarpField->get_rigidTransform();
 			cs.Tlw_inv = m_pWarpField->get_rigidTransform().fast_invert();
 			cs.psi_data = m_param->fusion_psi_data;
 			cs.totalEnergy = m_energy_vec.ptr();
@@ -2320,7 +2321,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		//cudaSafeCall(cudaMemcpy(&total_energy,
 		//	&m_tmpvec[0], sizeof(float), cudaMemcpyDeviceToHost), "copy reg totalEnergy to host");
-		cublasStatus_t st = cublasSnrm2(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm + 
+		cublasStatus_t st = cublasSasum(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm + 
 			m_vmapKnn.rows()*m_vmapKnn.cols(),
 			m_energy_vec.ptr(), 1, &total_energy);
 		if (st != CUBLAS_STATUS_SUCCESS)
@@ -2328,10 +2329,10 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		// debug get both data and reg term energy
 #if 1
-		cublasSnrm2(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm,
+		cublasSasum(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm,
 			m_energy_vec.ptr() + m_vmapKnn.rows()*m_vmapKnn.cols(),
 			1, &reg_energy);
-		data_energy = sqrt(total_energy*total_energy - reg_energy*reg_energy);
+		data_energy = total_energy - reg_energy;
 #endif
 
 		return total_energy;
