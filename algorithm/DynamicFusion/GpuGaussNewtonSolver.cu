@@ -9,6 +9,8 @@ namespace dfusion
 //#define DEFINE_USE_HALF_GRAPH_EDGE
 //#define CALC_DATA_TERM_NUMERIC
 //#define CALC_REG_TERM_NUMERIC
+//#define DEBUG_ASSIGN_10M_TO_NO_CORR
+//#define DEBUG_ASSIGN_BIG_ENERGY_TO_NO_CORR
 
 #ifdef DEFINE_USE_HALF_GRAPH_EDGE
 	enum{RowPerNode_RegTerm = 3};
@@ -531,6 +533,7 @@ namespace dfusion
 			if (isnan(nlive.x) || isnan(vlive.x))
 				return false;
 
+#ifndef DEBUG_ASSIGN_10M_TO_NO_CORR
 			float dist = norm(vwarp - vlive);
 			if (!(dist <= distThres))
 				return false;
@@ -538,6 +541,7 @@ namespace dfusion
 			float sine = norm(cross(nwarp, nlive));
 			if (!(sine < angleThres))
 				return false;
+#endif
 
 			vl = Tbx::Point3(vlive.x, vlive.y, vlive.z);
 
@@ -707,8 +711,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 						}
 						atomicAdd(&g_[shift_g + i], p_f_p_alpha[i] * f);
 						shift += VarPerNode;
-					}// end for i
-					
+					}// end for i					
 				}// end for knnK
 			}// end if found corr
 		}// end function ()
@@ -933,6 +936,12 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 				//atomicAdd(totalEnergy, f);
 				totalEnergy[y*imgWidth + x] = f;
 			}//end if find corr
+#ifdef DEBUG_ASSIGN_BIG_ENERGY_TO_NO_CORR
+			else // debug: add constant penalty
+			{
+				totalEnergy[y*imgWidth + x] = data_term_energy(psi_data);
+			}
+#endif
 		}
 	};
 

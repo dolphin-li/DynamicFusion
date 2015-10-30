@@ -273,5 +273,8 @@ namespace dfusion
 		fclose(pFile);
 
 		updateAnnField();
+
+		printf("warp field loaded: %d %d %d %d nodes\n", m_numNodes[0],
+			m_numNodes[1], m_numNodes[2], m_numNodes[3]);
 	}
 }

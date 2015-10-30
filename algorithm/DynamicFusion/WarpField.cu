@@ -959,8 +959,15 @@ namespace dfusion
 			{
 				m_nodeTree[level]->buildTree(getNodesDqVwPtr(level) + 2, m_numNodes[level], 3);
 
+				dim3 block1(256);
+				dim3 grid1(divUp(getNumNodesInLevel(level-1)*KnnK, block1.x));
+				initKnnFieldKernel1 << <grid1, block1 >> >(getNodesEdgesPtr(level - 1), 
+					getNumNodesInLevel(level - 1)*KnnK);
+				cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel1-1");
+
 				m_nodeTree[level]->knnSearchGpu(getNodesDqVwPtr(level - 1) + 2, 3,
-					(IdxType*)getNodesEdgesPtr(level - 1), nullptr, KnnK, getNumNodesInLevel(level - 1));
+					(IdxType*)getNodesEdgesPtr(level - 1), nullptr, m_param.warp_knn_k_eachlevel[level], 
+					getNumNodesInLevel(level - 1), KnnK);
 			}
 		}// end if (m_lastNumNodes[0] != m_numNodes[0])
 		else if (m_numNodes[level])// else we only update the graph quaternions

@@ -36,7 +36,7 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
-
+		int warp_knn_k_eachlevel[4];
 		// meters, for radius search
 		// the larger, the less freedom for warping
 		float warp_radius_search_epsilon; 

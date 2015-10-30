@@ -50,13 +50,14 @@ namespace dfusion
 		* \brief Perform k-nearest neighbor search
 		* \param[in] queries The query points for which to find the nearest neighbors, size n
 		* \param[out] indices The indices of the nearest neighbors found, size knn*n
-		* \param[out] dists Distances to the nearest neighbors found, size knn*n
+		* \param[out] dists Distances to the nearest neighbors found, size knnStride*n
 		* \param[in] knn Number of nearest neighbors to return
+		* \param[in] knnStride stride of input indices
 		*/
 		void knnSearchGpu(const float4* queries, int query_stride_in_float4, 
-			int* indices, float* dists, size_t knn, size_t n) const;
+			int* indices, float* dists, size_t knn, size_t n, size_t knnStride) const;
 		void knnSearchGpu(const float4* queries, int query_stride_in_float4,
-			ushort* indices, float* dists, size_t knn, size_t n) const;
+			ushort* indices, float* dists, size_t knn, size_t n, size_t knnStride) const;
 
 		/**
 		* \brief Perform k-nearest neighbor search on a grid: (x,y,z) = origion + (ix,iy,iz)*voxelSize

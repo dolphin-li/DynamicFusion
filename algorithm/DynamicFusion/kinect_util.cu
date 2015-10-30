@@ -3,6 +3,9 @@
 #include <set>
 namespace dfusion
 {
+//#define DEBUG_ASSIGN_BIG_ENERGY_TO_NO_CORR
+//#define INVALID_DEPTH_VALUE 10
+
 	__device__ __forceinline__ float3 read_float3_4(float4 a)
 	{
 		return make_float3(a.x, a.y, a.z);
@@ -352,11 +355,17 @@ namespace dfusion
 			if (z > KINECT_NEAREST_METER)
 			{
 				float3 xyz = intr.uvd2xyz((float)u, (float)v, z);
-
 				vmap(v, u) = make_float4(xyz.x, xyz.y, xyz.z, 1.f);
 			}
 			else
-				vmap(v,u).x = numeric_limits<float>::quiet_NaN();
+			{
+#ifdef DEBUG_ASSIGN_BIG_ENERGY_TO_NO_CORR
+				float3 xyz = intr.uvd2xyz((float)u, (float)v, INVALID_DEPTH_VALUE);
+				vmap(v, u) = make_float4(xyz.x, xyz.y, xyz.z, 1.f);
+#else
+				vmap(v, u).x = numeric_limits<float>::quiet_NaN();
+#endif
+			}
 		}
 	}
 

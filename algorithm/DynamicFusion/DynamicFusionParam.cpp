@@ -24,6 +24,11 @@ namespace dfusion
 		/** *****************************************************
 		* warp field related
 		* ******************************************************/
+		// cannot be larger than warpField::knnK
+		warp_knn_k_eachlevel[0] = 4;
+		warp_knn_k_eachlevel[1] = 4;
+		warp_knn_k_eachlevel[2] = 4;
+		warp_knn_k_eachlevel[3] = 4;
 		set_warp_radius_search_epsilon(0.025);
 		warp_param_dw = warp_radius_search_epsilon * 1.733 * 0.5f; // sqrt(3)/2
 		warp_param_dw_for_fusion = warp_param_dw * 0.5f; // sqrt(3)/2
@@ -35,7 +40,7 @@ namespace dfusion
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 512;
-		fusion_lambda = 3000;
+		fusion_lambda = 15000;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_rigid_distThre = 0.1f; // meter
@@ -46,10 +51,10 @@ namespace dfusion
 		fusion_nonRigid_distThre = 0.03f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 
-		fusion_nonRigidICP_maxIter = 2;
-		fusion_GaussNewton_maxIter = 2;
+		fusion_nonRigidICP_maxIter = 3;
+		fusion_GaussNewton_maxIter = 5;
 		fusion_GaussNewton_diag_regTerm = 1e-3;
-		fusion_GaussNewton_fixedStep = 0.0;// 5;
+		fusion_GaussNewton_fixedStep = 0.;// 5;
 
 		// debuging related
 		fusion_dumping_each_frame = false;

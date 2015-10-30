@@ -93,7 +93,7 @@ namespace dfusion
 				ldp::tic();
 				for (int k = 0; k < 10; k++)
 				tree_d.knnSearchGpu(points_d_query.ptr(), 1, index_d.ptr(), 
-				dist_d.ptr(), Knn, points_d_query.size());
+				dist_d.ptr(), Knn, points_d_query.size(), Knn);
 				cudaThreadSynchronize();
 				ldp::toc("gpu search time");
 
