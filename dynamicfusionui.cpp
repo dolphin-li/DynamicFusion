@@ -2,6 +2,65 @@
 #include "global_data_holder.h"
 #include "WarpField.h"
 #include "GpuGaussNewtonSolver.h"
+
+QMutex* g_mutex;
+class SaveThread : public QThread
+{
+public:
+	SaveThread() :QThread()
+	{
+		m_depths.reserve(g_dataholder.m_dparam.fusion_dumping_max_frame);
+		m_ids.reserve(g_dataholder.m_dparam.fusion_dumping_max_frame);
+	}
+	void set_path(QString path)
+	{
+		QMutexLocker locker(g_mutex);
+		m_currentPath = path;
+		QDir dir(m_currentPath);
+		if (!dir.exists())
+			mkdir(m_currentPath.toStdString());
+	}
+	void push_depth(const std::vector<dfusion::depthtype>& depth, int id)
+	{
+		QMutexLocker locker(g_mutex);
+		m_depths.push_back(depth);
+		m_ids.push_back(id);
+	}
+protected:
+	void run()
+	{
+		while (1)
+		{
+			if (!m_depths.empty())
+			{
+				int id = 0;
+				const std::vector<dfusion::depthtype>* depth = nullptr;
+				{
+					QMutexLocker locker(g_mutex);
+					id = m_ids.front();
+					depth = &m_depths.front();
+				}
+
+				QDir dir(m_currentPath);
+				QString name = dir.absoluteFilePath(QString().sprintf("%08d.depth", id));
+				g_dataholder.saveDepth(*depth, name.toStdString());
+				printf("saved: %s\n", name.toStdString().c_str());
+
+				{
+					QMutexLocker locker(g_mutex);
+					m_ids.pop_front();
+					m_depths.pop_front();
+				}
+			}
+		}
+	}
+private:
+	QQueue<std::vector<dfusion::depthtype>> m_depths;
+	QQueue<int> m_ids;
+	QString m_currentPath;
+};
+SaveThread g_saveThread;
+
 DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	: QMainWindow(parent)
 {
@@ -22,11 +81,15 @@ DynamicFusionUI::DynamicFusionUI(QWidget *parent)
 	m_fpsTimerId = startTimer(30);
 	m_autoResetTimerId = startTimer(g_dataholder.m_dparam.view_autoreset_seconds*1000);
 	m_autoResetRemaingTime = g_dataholder.m_dparam.view_autoreset_seconds;
+
+	g_mutex = new QMutex();
+	g_saveThread.start();
 }
 
 DynamicFusionUI::~DynamicFusionUI()
 {
-
+	g_saveThread.terminate();
+	delete g_mutex;
 }
 
 void DynamicFusionUI::timerEvent(QTimerEvent* ev)
@@ -219,13 +282,7 @@ void DynamicFusionUI::frameLoading()
 
 void DynamicFusionUI::frameSaving()
 {
-	QDir dir(m_currentPath);
-	if (!dir.exists())
-		mkdir(m_currentPath.toStdString());
-	QString name = dir.absoluteFilePath(QString().sprintf("%08d.depth", m_frameIndex++));
-
-	g_dataholder.saveDepth(g_dataholder.m_depth_h, name.toStdString());
-	printf("saved: %s\n", name.toStdString().c_str());
+	g_saveThread.push_depth(g_dataholder.m_depth_h, m_frameIndex++);
 }
 
 void DynamicFusionUI::frameLive()
@@ -499,6 +556,7 @@ void DynamicFusionUI::on_actionRecord_frames_triggered()
 		if (m_currentPath != "")
 		{
 			m_frameIndex = 0;
+			g_saveThread.set_path(m_currentPath);
 			setState(DynamicFusionUI::Saving);
 		}
 		else
