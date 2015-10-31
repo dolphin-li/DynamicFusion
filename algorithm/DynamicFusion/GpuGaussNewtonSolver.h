@@ -71,6 +71,7 @@ namespace dfusion
 		static void dumpSymLowerMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
 		static void dumpMat(std::string name, const DeviceArray<float>& A, int nRowsCols);
 		static void dumpVec(std::string name, const DeviceArray<float>& A, int n);
+		static void dumpQuats(std::string name, const DeviceArray<float>& twist, int n);
 		static void dumpBlocks(std::string name, const DeviceArray<float>& A, int nBlocks, int blockRowCol);
 	private:
 		WarpField* m_pWarpField;

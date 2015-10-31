@@ -6,6 +6,9 @@ namespace dfusion
 	{
 		Param();
 
+		void save(const char* filename)const;
+		void load(const char* filename);
+
 		/** *****************************************************
 		* tsdf volume related
 		* ******************************************************/
@@ -113,6 +116,7 @@ namespace dfusion
 		int fusion_dumping_max_frame;
 		bool mirror_input;
 		int load_frameIndx_plus_num;
+		bool solver_enable_nan_check;
 
 		/** *****************************************************
 		* visualization related

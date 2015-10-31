@@ -19,6 +19,7 @@ public:
 		QDir dir(m_currentPath);
 		if (!dir.exists())
 			mkdir(m_currentPath.toStdString());
+		g_dataholder.m_dparam.save(fullfile(m_currentPath.toStdString(), "_param.param.txt").c_str());
 	}
 	void push_depth(const std::vector<dfusion::depthtype>& depth, int id)
 	{
@@ -497,8 +498,21 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		QDir dir(m_currentPath);
 		if (!dir.exists())
 			throw std::exception(("error input path:" + m_currentPath.toStdString()).c_str());
-		int fid = 0;
+
+		// 0. firstly we try to load existed param files, if existed, we update params.
+		try
+		{
+			g_dataholder.m_dparam.load(fullfile(m_currentPath.toStdString(), "_param.param.txt").c_str());
+			updateUiFromParam();
+			g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+		}
+		catch (std::exception e)
+		{
+			std::cout << e.what() << std::endl;
+		}
+
 		// 1. load a pre-saved volume and then start by this frame.
+		int fid = 0;
 		int vol_fid = 0;
 		g_dataholder.m_processor.reset();
 		

@@ -2,7 +2,7 @@
 #include <string>
 namespace dfusion
 {
-//#define ENABLE_NAN_CHECKING
+#define ENABLE_NAN_CHECKING
 #pragma comment(lib, "cusparse.lib")
 #pragma comment(lib, "cublas.lib")
 #pragma comment(lib, "cusolver.lib")
@@ -48,25 +48,28 @@ namespace dfusion
 	void GpuGaussNewtonSolver::checkNan(const DeviceArray<float>& x, int n, const char* msg)
 	{
 #ifdef ENABLE_NAN_CHECKING
-		static int a = 0;
-		std::vector<float> hx;
-		x.download(hx);
-		for (size_t i = 0; i < n; i++)
+		if (m_param->solver_enable_nan_check)
 		{
-			if (isnan(hx.at(i)))
+			static int a = 0;
+			std::vector<float> hx;
+			x.download(hx);
+			for (size_t i = 0; i < n; i++)
 			{
-				printf("[%d]nan(%s): %d %f\n", a, msg, i, hx[i]);
-				debug_print();
-				system("pause");
+				if (isnan(hx.at(i)))
+				{
+					printf("[%d]nan(%s): %d %f\n", a, msg, i, hx[i]);
+					debug_print();
+					system("pause");
+				}
+				if (isinf(hx.at(i)))
+				{
+					printf("[%d]inf(%s): %d %f\n", a, msg, i, hx[i]);
+					debug_print();
+					system("pause");
+				}
 			}
-			if (isinf(hx.at(i)))
-			{
-				printf("[%d]inf(%s): %d %f\n", a, msg, i, hx[i]);
-				debug_print();
-				system("pause");
-			}
+			a++;
 		}
-		a++;
 #endif
 	}
 
@@ -437,6 +440,8 @@ namespace dfusion
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jrcols);
 		dumpVec("D:/tmp/gpu_u.txt", m_u, m_Jrcols);
 		dumpVec("D:/tmp/gpu_h.txt", m_h, m_Jrcols);
+		dumpVec("D:/tmp/gpu_twist.txt", m_twist, m_Jrcols);
+		dumpQuats("D:/tmp/gpu_quats.txt", m_twist, m_Jrcols);
 	}
 
 	void GpuGaussNewtonSolver::dumpSparseMatrix(
@@ -520,6 +525,33 @@ namespace dfusion
 		{
 			for (int y = 0; y < n; y++)
 				fprintf(pFile, "%ef\n", hA[y]);
+			fclose(pFile);
+		}
+	}
+
+	void GpuGaussNewtonSolver::dumpQuats(std::string name, const DeviceArray<float>& twist, int n)
+	{
+		int nNodes = n / 6;
+		if (nNodes * 6 != n)
+			throw std::exception("error: twist size incorrect");
+
+		std::vector<float> hA;
+		twist.download(hA);
+
+		FILE* pFile = fopen(name.c_str(), "w");
+		if (pFile)
+		{
+			for (int i = 0; i < n; i+=6)
+			{
+				Tbx::Vec3 r(hA[i + 0], hA[i + 1], hA[i + 2]);
+				Tbx::Vec3 t(hA[i + 3], hA[i + 4], hA[i + 5]);
+				Tbx::Dual_quat_cu dq;
+				dq.from_twist(r, t);
+				fprintf(pFile, "%ef %ef %ef; %ef %ef %ef; %ef %ef %ef %ef; %ef %ef %ef %ef\n", 
+					r[0], r[1], r[2], t[0], t[1], t[2],
+					dq[0], dq[1], dq[2], dq[3], dq[4], dq[5], dq[6], dq[7]
+					);
+			}
 			fclose(pFile);
 		}
 	}

@@ -347,6 +347,8 @@ namespace dfusion
 		ldp::fileparts(volume_name, path, purename, ext);
 		std::string name1 = fullfile(path, purename + ".warpfield");
 		m_warpField->save(name1.c_str());
+		std::string name2 = fullfile(path, purename + ".param.txt");
+		m_param.save(name2.c_str());
 	}
 
 	void DynamicFusionProcessor::load(const char* volume_name)
