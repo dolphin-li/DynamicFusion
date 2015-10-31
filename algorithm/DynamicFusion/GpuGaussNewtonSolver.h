@@ -189,6 +189,7 @@ namespace dfusion
 		// to save storage and a memcpy, 
 		// we factor Q = Lq*Lq' and directly store Lq in Q
 		DeviceArray<float> m_Q;
+		DeviceArray<float> m_Q_kept;
 
 		// m_Hd_L: Hd = L*Lt
 		DeviceArray<float> m_Hd_Linv;

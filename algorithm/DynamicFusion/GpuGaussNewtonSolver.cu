@@ -1164,7 +1164,6 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			thrust_wrapper::exclusive_scan(m_Jr_RowCounter.ptr(), m_Jr_RowCounter.ptr(), m_numNodes + 1);
 			cudaSafeCall(cudaMemcpy(&m_Jrrows, m_Jr_RowCounter.ptr() + m_numNodes,
 				sizeof(int), cudaMemcpyDeviceToHost), "copy Jr rows to host");
-			CHECK_LE(1, m_Jrrows);
 		}
 
 		// 1.1. collect nodes edges info:
@@ -1173,12 +1172,14 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		//  thus when processing each node, we add 2*k edges, w.r.t. 2*k*3 rows: each (x,y,z) a row
 		//	for each row, there are exactly 2*VarPerNode values
 		//	after this step, we can get the CSR/COO structure
+		if (m_Jrrows > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_numNodes, block.x));
 			compute_row_map_kernel << <grid, block >> >(m_Jr_RowMap2NodeId.ptr(), m_Jr_RowCounter.ptr(), m_numNodes);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::compute_row_map_kernel");
 		}
+		if (m_Jrrows > 0)
 		{
 			CHECK_LE(m_Jrrows + 1, m_Jr_RowPtr.size());
 			CHECK_LE(m_Jrcols + 1, m_Jrt_RowPtr.size());
@@ -1195,28 +1196,35 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		// 2. compute Jrt structure ==============================================
 		// 2.1. fill (row, col) as (col, row) from Jr and sort.
-		cudaMemcpy(m_Jrt_RowPtr_coo.ptr(), m_Jr_ColIdx.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
-		cudaMemcpy(m_Jrt_ColIdx.ptr(), m_Jr_RowPtr_coo.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
-		// !!!NOTE: we must use mergesort here, it can guarentees the order of values of the same key
-		modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_ColIdx.ptr(), m_Jrnnzs);
-		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key1");
+		if (m_Jrrows > 0)
+		{
+			cudaMemcpy(m_Jrt_RowPtr_coo.ptr(), m_Jr_ColIdx.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+			cudaMemcpy(m_Jrt_ColIdx.ptr(), m_Jr_RowPtr_coo.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+			// !!!NOTE: we must use mergesort here, it can guarentees the order of values of the same key
+			modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_ColIdx.ptr(), m_Jrnnzs);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key1");
 
-		// 2.2. extract CSR rowptr info.
-		if (CUSPARSE_STATUS_SUCCESS != cusparseXcoo2csr(m_cuSparseHandle,
-			m_Jrt_RowPtr_coo.ptr(), m_Jrnnzs, m_Jrcols,
-			m_Jrt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))
-			throw std::exception("GpuGaussNewtonSolver::initSparseStructure::cusparseXcoo2csr failed");
+			// 2.2. extract CSR rowptr info.
+			if (CUSPARSE_STATUS_SUCCESS != cusparseXcoo2csr(m_cuSparseHandle,
+				m_Jrt_RowPtr_coo.ptr(), m_Jrnnzs, m_Jrcols,
+				m_Jrt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))
+				throw std::exception("GpuGaussNewtonSolver::initSparseStructure::cusparseXcoo2csr failed");
+		}
 
 		// 3. compute B structure ==============================================
 		// 3.1 the row ptr of B is the same with the first L0 rows of Jrt.
-		CHECK_LE(m_Brows, m_B_RowPtr.size());
-		CHECK_LE(m_Bcols, m_Bt_RowPtr.size());
-		cudaMemcpy(m_B_RowPtr.ptr(), m_Jrt_RowPtr.ptr(), (m_Brows + 1)*sizeof(int), cudaMemcpyDeviceToDevice);
-		cudaSafeCall(cudaMemcpy(&m_Bnnzs, m_B_RowPtr.ptr() + m_Brows,
-			sizeof(int), cudaMemcpyDeviceToHost), "copy B nnz to host");
-		CHECK_LE(m_Bnnzs, m_B_RowPtr_coo.size());
+		if (m_Brows > 0)
+		{
+			CHECK_LE(m_Brows, m_B_RowPtr.size());
+			CHECK_LE(m_Bcols, m_Bt_RowPtr.size());
+			cudaMemcpy(m_B_RowPtr.ptr(), m_Jrt_RowPtr.ptr(), (m_Brows + 1)*sizeof(int), cudaMemcpyDeviceToDevice);
+			cudaSafeCall(cudaMemcpy(&m_Bnnzs, m_B_RowPtr.ptr() + m_Brows,
+				sizeof(int), cudaMemcpyDeviceToHost), "copy B nnz to host");
+			CHECK_LE(m_Bnnzs, m_B_RowPtr_coo.size());
+		}
 		
 		// 3.2 the col-idx of B
+		if (m_Brows > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Brows, block.x));
@@ -1226,14 +1234,17 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 
 		// 3.3 sort to compute Bt
-		cudaMemcpy(m_Bt_RowPtr_coo.ptr(), m_B_ColIdx.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
-		cudaMemcpy(m_Bt_ColIdx.ptr(), m_B_RowPtr_coo.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
-		modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_ColIdx.ptr(), m_Bnnzs);
-		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key2");
-		if (CUSPARSE_STATUS_SUCCESS != cusparseXcoo2csr(m_cuSparseHandle,
-			m_Bt_RowPtr_coo.ptr(), m_Bnnzs, m_Bcols,
-			m_Bt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))
-			throw std::exception("GpuGaussNewtonSolver::initSparseStructure::cusparseXcoo2csr failed");
+		if (m_Bnnzs > 0)
+		{
+			cudaMemcpy(m_Bt_RowPtr_coo.ptr(), m_B_ColIdx.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+			cudaMemcpy(m_Bt_ColIdx.ptr(), m_B_RowPtr_coo.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+			modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_ColIdx.ptr(), m_Bnnzs);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::initSparseStructure::mergesort_by_key2");
+			if (CUSPARSE_STATUS_SUCCESS != cusparseXcoo2csr(m_cuSparseHandle,
+				m_Bt_RowPtr_coo.ptr(), m_Bnnzs, m_Bcols,
+				m_Bt_RowPtr.ptr(), CUSPARSE_INDEX_BASE_ZERO))
+				throw std::exception("GpuGaussNewtonSolver::initSparseStructure::cusparseXcoo2csr failed");
+		}
 	}
 
 #pragma endregion
@@ -1767,30 +1778,33 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 	void GpuGaussNewtonSolver::calcRegTerm()
 	{
-		CHECK_LE(1, m_Jrrows);
-		RegTermJacobi rj;
-		rj.cidx = m_Jr_ColIdx.ptr();
-		rj.lambda = m_param->fusion_lambda;
-		rj.nNodes = m_numNodes;
-		rj.nRows = m_Jrrows;
-		rj.psi_reg = m_param->fusion_psi_reg;
-		rj.rows2nodeIds = m_Jr_RowMap2NodeId;
-		rj.rptr = m_Jr_RowPtr.ptr();
-		rj.vptr = m_Jr_val.ptr();
-		rj.fptr = m_f_r.ptr();
+		if (m_Jrrows > 0)
+		{
+			CHECK_LE(1, m_Jrrows);
+			RegTermJacobi rj;
+			rj.cidx = m_Jr_ColIdx.ptr();
+			rj.lambda = m_param->fusion_lambda;
+			rj.nNodes = m_numNodes;
+			rj.nRows = m_Jrrows;
+			rj.psi_reg = m_param->fusion_psi_reg;
+			rj.rows2nodeIds = m_Jr_RowMap2NodeId;
+			rj.rptr = m_Jr_RowPtr.ptr();
+			rj.vptr = m_Jr_val.ptr();
+			rj.fptr = m_f_r.ptr();
 
-		dim3 block(CTA_SIZE);
-		dim3 grid(divUp(m_Jrrows / RowPerNode_RegTerm, block.x));
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_Jrrows / RowPerNode_RegTerm, block.x));
 
-		calcRegTerm_kernel << <grid, block >> >(rj);
-		cudaSafeCall(cudaGetLastError(), "calcRegTerm_kernel");
+			calcRegTerm_kernel << <grid, block >> >(rj);
+			cudaSafeCall(cudaGetLastError(), "calcRegTerm_kernel");
 
-		// 2. compute Jrt ==============================================
-		// 2.1. fill (row, col) as (col, row) from Jr and sort.
-		cudaMemcpy(m_Jrt_RowPtr_coo.ptr(), m_Jr_ColIdx.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
-		cudaMemcpy(m_Jrt_val.ptr(), m_Jr_val.ptr(), m_Jrnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
-		modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_val.ptr(), m_Jrnnzs);
-		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcRegTerm::mergesort_by_key");
+			// 2. compute Jrt ==============================================
+			// 2.1. fill (row, col) as (col, row) from Jr and sort.
+			cudaMemcpy(m_Jrt_RowPtr_coo.ptr(), m_Jr_ColIdx.ptr(), m_Jrnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+			cudaMemcpy(m_Jrt_val.ptr(), m_Jr_val.ptr(), m_Jrnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
+			modergpu_wrapper::mergesort_by_key(m_Jrt_RowPtr_coo.ptr(), m_Jrt_val.ptr(), m_Jrnnzs);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcRegTerm::mergesort_by_key");
+		}
 	}
 #pragma endregion
 
@@ -1930,21 +1944,28 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 	void GpuGaussNewtonSolver::calcHessian()
 	{
 		// 1. compute Jr0'Jr0 and accumulate into Hd
+		if (m_Jrrows > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
 			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes, 
 				m_Jrt_RowPtr.ptr(), m_param->fusion_GaussNewton_diag_regTerm);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcJr0tJr0_add_to_Hd_kernel");
+		}
 
-			// 1.1 fill the upper tri part of Hd
-			// previously, we only calculate the lower triangular pert of Hd;
-			// now that the computation of Hd is ready, we fill the mission upper part
+		// 1.1 fill the upper tri part of Hd
+		// previously, we only calculate the lower triangular pert of Hd;
+		// now that the computation of Hd is ready, we fill the mission upper part
+		if (m_numLv0Nodes > 0)
+		{
+			dim3 block(CTA_SIZE);
+			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
 			fill_Hd_upper_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::fill_Hd_upper_kernel");
 		}
 
 		// 2. compute B = Jr0'Jr1
+		if (m_Bnnzs > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Bnnzs, block.x));
@@ -1954,13 +1975,17 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 
 		// 3. compute Bt
-		cudaMemcpy(m_Bt_RowPtr_coo.ptr(), m_B_ColIdx.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
-		cudaMemcpy(m_Bt_val.ptr(), m_B_val.ptr(), m_Bnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
-		modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_val.ptr(), m_Bnnzs);
-		cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::mergesort_by_key");
+		if (m_Bnnzs > 0)
+		{
+			cudaMemcpy(m_Bt_RowPtr_coo.ptr(), m_B_ColIdx.ptr(), m_Bnnzs*sizeof(int), cudaMemcpyDeviceToDevice);
+			cudaMemcpy(m_Bt_val.ptr(), m_B_val.ptr(), m_Bnnzs*sizeof(float), cudaMemcpyDeviceToDevice);
+			modergpu_wrapper::mergesort_by_key(m_Bt_RowPtr_coo.ptr(), m_Bt_val.ptr(), m_Bnnzs);
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::mergesort_by_key");
+		}
 
 		// 4. compute Hr
 		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Hr.size());
+		if (m_HrRowsCols > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_HrRowsCols*(m_HrRowsCols+1)/2, block.x));
@@ -1970,13 +1995,16 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 
 		// 5. compute g = -(g + Jr'*fr)
-		float alpha = -1.f;
-		float beta = -1.f;
-		if (CUSPARSE_STATUS_SUCCESS != cusparseScsrmv(
-			m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, m_Jrcols,
-			m_Jrrows, m_Jrnnzs, &alpha, m_Jrt_desc, m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr(),
-			m_Jrt_ColIdx.ptr(), m_f_r.ptr(), &beta, m_g.ptr()))
-			throw std::exception("GpuGaussNewtonSolver::calcHessian::cusparseScsrmv failed!\n");
+		if (m_Jrrows > 0)
+		{
+			float alpha = -1.f;
+			float beta = -1.f;
+			if (CUSPARSE_STATUS_SUCCESS != cusparseScsrmv(
+				m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, m_Jrcols,
+				m_Jrrows, m_Jrnnzs, &alpha, m_Jrt_desc, m_Jrt_val.ptr(), m_Jrt_RowPtr.ptr(),
+				m_Jrt_ColIdx.ptr(), m_f_r.ptr(), &beta, m_g.ptr()))
+				throw std::exception("GpuGaussNewtonSolver::calcHessian::cusparseScsrmv failed!\n");
+		}
 	}
 #pragma endregion
 
@@ -2133,6 +2161,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		// 2. compute Q = Hr - Bt * inv(Hd) * B ======================================
 		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Q.size());
 		// 2.1 compute Bt*Ltinv
+		if (m_HrRowsCols > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Bnnzs, block.x));
@@ -2142,40 +2171,50 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 
 		// 2.2 compute Q
+		if (m_HrRowsCols > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_HrRowsCols*(m_HrRowsCols+1)/2, block.x));
 			calcQ_kernel << <grid, block >> >(m_Q.ptr(), m_Hr.ptr(), m_Bt_RowPtr.ptr(),
 				m_HrRowsCols, m_Brows);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcQ_kernel");
+
+			// kept Q before factorize, for debug
+			if (m_Q_kept.size() == m_Q.size())
+				cudaMemcpy(m_Q_kept.ptr(), m_Q.ptr(),
+					m_HrRowsCols*m_HrRowsCols*m_Q.elem_size,
+					cudaMemcpyDeviceToDevice);
+			checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q");
 		}
-		checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q");
 
 		// 3. llt decompostion of Q ==================================================
 		// 3.1 decide the working space of the solver
-		int lwork = 0;
-		cusolverDnSpotrf_bufferSize(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER,
-			m_HrRowsCols, m_Q.ptr(), m_HrRowsCols, &lwork);
-		if (lwork > m_cuSolverWorkSpace.size())
+		if (m_HrRowsCols > 0)
 		{
-			// we store dev info in the last element
-			m_cuSolverWorkSpace.create(lwork * 1.5 + 1);
-			printf("cusolverDnSpotrf_bufferSize: %d\n", lwork);
-		}
+			int lwork = 0;
+			cusolverDnSpotrf_bufferSize(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER,
+				m_HrRowsCols, m_Q.ptr(), m_HrRowsCols, &lwork);
+			if (lwork > m_cuSolverWorkSpace.size())
+			{
+				// we store dev info in the last element
+				m_cuSolverWorkSpace.create(lwork * 1.5 + 1);
+				printf("cusolverDnSpotrf_bufferSize: %d\n", lwork);
+			}
 
-		// 3.2 Cholesky decomposition
-		// before this step, m_Q is calculated as filled as symmetric matrix
-		// note that cublas uses column majored storage, thus after this step
-		// the matrix m_Q should be viewed as column-majored matrix
-		cusolverStatus_t fst = cusolverDnSpotrf(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER, m_HrRowsCols,
-			m_Q.ptr(), m_HrRowsCols, m_cuSolverWorkSpace.ptr(), lwork,
-			(int*)m_cuSolverWorkSpace.ptr() + m_cuSolverWorkSpace.size() - 1);
-		if (CUSOLVER_STATUS_SUCCESS != fst)
-		{
-			printf("cusolverDnSpotrf failed: status: %d\n", fst);
-			throw std::exception();
+			// 3.2 Cholesky decomposition
+			// before this step, m_Q is calculated as filled as symmetric matrix
+			// note that cublas uses column majored storage, thus after this step
+			// the matrix m_Q should be viewed as column-majored matrix
+			cusolverStatus_t fst = cusolverDnSpotrf(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER, m_HrRowsCols,
+				m_Q.ptr(), m_HrRowsCols, m_cuSolverWorkSpace.ptr(), lwork,
+				(int*)m_cuSolverWorkSpace.ptr() + m_cuSolverWorkSpace.size() - 1);
+			if (CUSOLVER_STATUS_SUCCESS != fst)
+			{
+				printf("cusolverDnSpotrf failed: status: %d\n", fst);
+				throw std::exception();
+			}
+			checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q1");
 		}
-		checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q1");
 		// 4. solve H*h = g =============================================================
 		const int sz = m_Jrcols;
 		const int sz0 = m_Brows;
@@ -2184,8 +2223,10 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		CHECK_LE(sz, m_h.size());
 		CHECK_LE(sz, m_g.size());
 		CHECK_LE(sz, m_tmpvec.size());
+
 		// 4.1 let H = LL', first we solve for L*u=g;
 		// 4.1.1 u(0:sz0-1) = HdLinv*g(0:sz0-1)
+		if (sz0 > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(sz0, block.x));
@@ -2195,6 +2236,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		}
 	
 		// 4.1.2 u(sz0:sz-1) = LQinv*(g(sz0:sz-1) - Bt*HdLtinv*HdLinv*g(0:sz0-1))
+		if (sz1 > 0)
 		{
 			// tmpvec = HdLtinv*HdLinv*g(0:sz0-1)
 			dim3 block(CTA_SIZE);
@@ -2204,41 +2246,52 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
 
 			// u(sz0:sz-1) = g(sz0:sz-1) - Bt*tmpvec
-			float alpha = -1.f;
-			float beta = 1.f;
-			cudaMemcpy(m_u.ptr() + sz0, m_g.ptr() + sz0, sz1*sizeof(float), cudaMemcpyDeviceToDevice);
-			cuSparseStatus = cusparseScsrmv(m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, sz1, sz0,
-				m_Bnnzs, &alpha, m_Bt_desc, m_Bt_val.ptr(), m_Bt_RowPtr.ptr(),
-				m_Bt_ColIdx.ptr(), m_tmpvec.ptr(), &beta, m_u.ptr() + sz0);
-			if (cuSparseStatus != CUSPARSE_STATUS_SUCCESS)
-				printf("cuSparse error1: %d\n", cuSparseStatus);
-			
-			// solve LQ*u(sz0:sz-1) = u(sz0:sz-1)
-			// note cublas use column majored matrix, we assume m_Q is column majored in this step
-			cublasStrsv(m_cublasHandle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT,
-				sz1, m_Q.ptr(), sz1, m_u.ptr() + sz0, 1);
+			{
+				float alpha = -1.f;
+				float beta = 1.f;
+				cudaMemcpy(m_u.ptr() + sz0, m_g.ptr() + sz0, sz1*sizeof(float), cudaMemcpyDeviceToDevice);
+				cuSparseStatus = cusparseScsrmv(m_cuSparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, sz1, sz0,
+					m_Bnnzs, &alpha, m_Bt_desc, m_Bt_val.ptr(), m_Bt_RowPtr.ptr(),
+					m_Bt_ColIdx.ptr(), m_tmpvec.ptr(), &beta, m_u.ptr() + sz0);
+				if (cuSparseStatus != CUSPARSE_STATUS_SUCCESS)
+					printf("cuSparse error1: %d\n", cuSparseStatus);
+
+				// solve LQ*u(sz0:sz-1) = u(sz0:sz-1)
+				// note cublas use column majored matrix, we assume m_Q is column majored in this step
+				cublasStrsv(m_cublasHandle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT,
+					sz1, m_Q.ptr(), sz1, m_u.ptr() + sz0, 1);
+			}
 		}
 		checkNan(m_u, sz, "u");
 		
 		// 4.2 then we solve for L'*h=u;
 		// 4.2.1 h(sz0:sz-1) = UQinv*u(sz0:sz-1)
-		cudaMemcpy(m_h.ptr() + sz0, m_u.ptr() + sz0, sz1*sizeof(float), cudaMemcpyDeviceToDevice);
-		cublasStrsv(m_cublasHandle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, CUBLAS_DIAG_NON_UNIT,
-			sz1, m_Q.ptr(), sz1, m_h.ptr() + sz0, 1);
+		if (sz1 > 0)
+		{
+			cudaMemcpy(m_h.ptr() + sz0, m_u.ptr() + sz0, sz1*sizeof(float), cudaMemcpyDeviceToDevice);
+			cublasStrsv(m_cublasHandle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, CUBLAS_DIAG_NON_UNIT,
+				sz1, m_Q.ptr(), sz1, m_h.ptr() + sz0, 1);
+		}
 		
 		// 4.2.2 h(0:sz0-1) = HdLtinv*( u(0:sz0-1) - HdLinv*B*h(sz0:sz-1) )
 		// tmpvec = B*h(sz0:sz-1)
-		float alpha = 1.f;
-		float beta = 0.f;
-		cuSparseStatus = cusparseScsrmv(m_cuSparseHandle,
-			CUSPARSE_OPERATION_NON_TRANSPOSE, sz0, sz1,
-			m_Bnnzs, &alpha, m_B_desc, m_B_val.ptr(), m_B_RowPtr.ptr(),
-			m_B_ColIdx.ptr(), m_h.ptr() + sz0, &beta, m_tmpvec.ptr());
-		if (cuSparseStatus != CUSPARSE_STATUS_SUCCESS)
-			printf("cuSparse error2: %d\n", cuSparseStatus);
+		if (sz1 > 0)
+		{
+			float alpha = 1.f;
+			float beta = 0.f;
+			cuSparseStatus = cusparseScsrmv(m_cuSparseHandle,
+				CUSPARSE_OPERATION_NON_TRANSPOSE, sz0, sz1,
+				m_Bnnzs, &alpha, m_B_desc, m_B_val.ptr(), m_B_RowPtr.ptr(),
+				m_B_ColIdx.ptr(), m_h.ptr() + sz0, &beta, m_tmpvec.ptr());
+			if (cuSparseStatus != CUSPARSE_STATUS_SUCCESS)
+				printf("cuSparse error2: %d\n", cuSparseStatus);
+		}
+		else if (sz0 > 0)
+			cudaSafeCall(cudaMemset(m_tmpvec.ptr(), 0, sz1*m_tmpvec.elem_size));
 
 		// u(0:sz0-1) = u(0:sz0-1) - HdLinv * tmpvec
 		// h(0:sz0-1) = HdLtinv*u(0:sz0-1)
+		if (sz0 > 0)
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(sz0, block.x));
@@ -2308,6 +2361,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			cudaSafeCall(cudaGetLastError(), "calcDataTermTotalEnergyKernel");
 		}
 
+		if (m_Jrrows > 0)
 		{
 			RegTermJacobi rj;
 			rj.cidx = m_Jr_ColIdx.ptr();
@@ -2338,9 +2392,13 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		// debug get both data and reg term energy
 #if 1
-		cublasSasum(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm,
-			m_energy_vec.ptr() + m_vmapKnn.rows()*m_vmapKnn.cols(),
-			1, &reg_energy);
+		reg_energy = 0.f;
+		if (m_Jrrows > 0)
+		{
+			cublasSasum(m_cublasHandle, m_Jrrows / RowPerNode_RegTerm,
+				m_energy_vec.ptr() + m_vmapKnn.rows()*m_vmapKnn.cols(),
+				1, &reg_energy);
+		}
 		data_energy = total_energy - reg_energy;
 #endif
 

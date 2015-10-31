@@ -17,6 +17,12 @@ namespace dfusion
 //#define ENABLE_CPU_DEBUG
 //#define ENABLE_BILATERAL_PRE_FILTER
 
+	static void check(const char* msg)
+	{
+		cudaSafeCall(cudaThreadSynchronize());
+		printf("%s\n", msg);
+	}
+
 #define DFUSION_SAFE_DELETE(buffer)\
 	if (buffer){ delete buffer; buffer = nullptr; }
 
@@ -373,7 +379,7 @@ namespace dfusion
 	void DynamicFusionProcessor::estimateWarpField()
 	{
 		Tbx::Transfo rigid = rigid_align();
-
+		
 		m_warpField->set_rigidTransform(rigid);
 
 		if (m_frame_id == 0)
@@ -393,6 +399,7 @@ namespace dfusion
 
 		// icp iteration
 		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
+
 		float energy = FLT_MAX;
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{

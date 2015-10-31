@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 namespace dfusion
 {
 	Param::Param()
@@ -58,7 +59,7 @@ namespace dfusion
 
 		fusion_nonRigidICP_maxIter = 3;
 		fusion_GaussNewton_maxIter = 3;
-		fusion_GaussNewton_diag_regTerm = 0;// 1e-3;
+		fusion_GaussNewton_diag_regTerm = 1e-3;
 		fusion_GaussNewton_fixedStep = 0.;// 5;
 
 		// debuging related
@@ -98,7 +99,7 @@ namespace dfusion
 	void Param::set_warp_radius_search_epsilon(float v)
 	{
 		warp_radius_search_epsilon = v;
-		warp_valid_point_num_each_node = 300 * pow(v / 0.025f * voxels_per_meter / 387.f, 3);
+		warp_valid_point_num_each_node = 300.f * pow(v / 0.025f * voxels_per_meter / 387.f, 3);
 	}
 
 #define VAR2STR(a) #a

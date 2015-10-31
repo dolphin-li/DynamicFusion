@@ -301,6 +301,8 @@ namespace dfusion
 					float dif = dot(nearestV - p, nearestV - p) * inv_search_radius_sqr;
 					flag = (dif > 1.f);
 				}
+				else
+					flag = 1.f;
 			}
 
 			int total = __popc(__ballot(flag>0));
@@ -672,6 +674,8 @@ namespace dfusion
 		int num_after_compact = 0;
 		cudaSafeCall(cudaMemcpyFromSymbol(&num_after_compact, 
 			validVoxel_output_count, sizeof(int)), "copy voxel count from symbol");
+		if (num_after_compact == 0)
+			num_after_compact = 1; // at least one point needed.
 		m_numNodes[0] = min(m_lastNumNodes[0] + num_after_compact, MaxNodeNum);
 		if (num_after_compact + m_lastNumNodes[0] > MaxNodeNum)
 			printf("warning: too many nodes %d vs %d\n", num_after_compact + m_lastNumNodes[0], MaxNodeNum);

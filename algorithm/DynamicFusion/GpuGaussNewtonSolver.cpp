@@ -76,8 +76,6 @@ namespace dfusion
 	void GpuGaussNewtonSolver::init(WarpField* pWarpField, const MapArr& vmap_cano, 
 		const MapArr& nmap_cano, Param param, Intr intr)
 	{
-		if (pWarpField->getNumLevels() < 2)
-			throw std::exception("non-supported levels of warp field!");
 		if (pWarpField->getNumNodesInLevel(0) == 0)
 		{
 			printf("no warp nodes, return\n");
@@ -212,6 +210,11 @@ namespace dfusion
 			setzero(m_Hr);
 			m_Q.create(m_Hr.size());
 			setzero(m_Q);
+			if (m_param->solver_enable_nan_check)
+			{
+				m_Q_kept.create(m_Q.size());
+				setzero(m_Q_kept);
+			}
 		}
 
 		bindTextures();
@@ -301,8 +304,6 @@ namespace dfusion
 	{
 		if (m_pWarpField == nullptr)
 			throw std::exception("GpuGaussNewtonSolver::solve: null pointer");
-		if (m_pWarpField->getNumLevels() < 2)
-			throw std::exception("non-supported levels of warp field!");
 		if (m_pWarpField->getNumNodesInLevel(0) == 0)
 		{
 			printf("no warp nodes, return\n");
@@ -401,8 +402,6 @@ namespace dfusion
 	{
 		if (m_pWarpField == nullptr)
 			throw std::exception("GpuGaussNewtonSolver::solve: null pointer");
-		if (m_pWarpField->getNumLevels() < 2)
-			throw std::exception("non-supported levels of warp field!");
 		if (m_pWarpField->getNumNodesInLevel(0) == 0)
 		{
 			printf("no warp nodes, return\n");
@@ -436,6 +435,8 @@ namespace dfusion
 		dumpSparseMatrix("D:/tmp/gpu_BtLtinv.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_Ltinv_val, m_Bcols);
 		dumpMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
 		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_HrRowsCols);
+		if (m_Q_kept.size() == m_Q.size())
+			dumpMat("D:/tmp/gpu_Qkept.txt", m_Q_kept, m_HrRowsCols);
 		dumpVec("D:/tmp/gpu_fr.txt", m_f_r, m_Jrrows);
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jrcols);
 		dumpVec("D:/tmp/gpu_u.txt", m_u, m_Jrcols);
