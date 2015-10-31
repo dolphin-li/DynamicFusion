@@ -118,6 +118,7 @@ namespace dfusion
 				dumpSparseMatrix(A, "D:/H.txt");
 				dumpVec(x, "D:/x.txt");
 				dumpVec(b, "D:/g.txt");
+				system("pause");
 				throw std::exception("linear solver failed");
 			}
 		}
@@ -194,7 +195,6 @@ namespace dfusion
 #else
 				blockSolve(JacTJac, h, g);
 #endif
-
 				checkNanAndInf(h, fx, g, JacTJac);
 				checkLinearSolver(JacTJac, h, g);
 
@@ -267,45 +267,53 @@ namespace dfusion
 			L0L0tinv.resize(m_diagBlocks.size() * 6, m_diagBlocks.size() * 6);
 			L0L0tinv.setFromTriplets(L0L0tinvsys.begin(), L0L0tinvsys.end());
 
+			int res = H.rows() - nodesInLevel0_ * 6;
 			// 
-			SpMat BtD = H.bottomRows(H.rows() - nodesInLevel0_ * 6);
-			SpMat::ColsBlockXpr Bt = BtD.leftCols(nodesInLevel0_ * 6);
-			SpMat::ColsBlockXpr D = BtD.rightCols(BtD.cols() - Bt.cols());
-			Mat Q = D - (Bt * L0L0tinv) * Bt.transpose();
-			Mat L1 = Q.llt().matrixL();
-
-			// solve for Lu=b
-			Vec u;
-			u.resize(H.rows());
-			u.topRows(L0inv.rows()) = L0inv * rhs.topRows(L0inv.cols());
-			u.bottomRows(L1.rows()) = L1.triangularView<Eigen::Lower>().solve(
-				rhs.bottomRows(L1.rows()) - Bt * (L0L0tinv * rhs.topRows(L0L0tinv.cols())).eval());
-
-			// solve for Lt x = u
-			x.resize(H.cols());
-			x.topRows(L0inv.cols()) = L0inv.transpose() * u.topRows(L0inv.rows()) 
-				- L0L0tinv.transpose() * (Bt.transpose() *
-				L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()))).eval();
-			x.bottomRows(L1.cols()) = L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()));
-#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+			if (res > 0)
 			{
-				static int a = 0;
-				{
-					std::string name = ("D:/tmp/cpu_Q_" + std::to_string(a) + ".txt").c_str();
-					dumpMat(Q, name.c_str());
-				}
-				{
-					std::string name = ("D:/tmp/cpu_u_" + std::to_string(a) + ".txt").c_str();
-					dumpVec(u, name.c_str());
-				}
-				{
-					std::string name = ("D:/tmp/cpu_h_" + std::to_string(a) + ".txt").c_str();
-					dumpVec(x, name.c_str());
-				}
+				SpMat BtD = H.bottomRows(H.rows() - nodesInLevel0_ * 6);
+				SpMat::ColsBlockXpr Bt = BtD.leftCols(nodesInLevel0_ * 6);
+				SpMat::ColsBlockXpr D = BtD.rightCols(BtD.cols() - Bt.cols());
+				Mat Q = D - (Bt * L0L0tinv) * Bt.transpose();
+				Mat L1 = Q.llt().matrixL();
 
-				a++;
-			}
+				// solve for Lu=b
+				Vec u;
+				u.resize(H.rows());
+				u.topRows(L0inv.rows()) = L0inv * rhs.topRows(L0inv.cols());
+				u.bottomRows(L1.rows()) = L1.triangularView<Eigen::Lower>().solve(
+					rhs.bottomRows(L1.rows()) - Bt * (L0L0tinv * rhs.topRows(L0L0tinv.cols())).eval());
+
+				// solve for Lt x = u
+				x.resize(H.cols());
+				x.topRows(L0inv.cols()) = L0inv.transpose() * u.topRows(L0inv.rows())
+					- L0L0tinv.transpose() * (Bt.transpose() *
+					L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()))).eval();
+				x.bottomRows(L1.cols()) = L1.triangularView<Eigen::Lower>().transpose().solve(u.bottomRows(L1.cols()));
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+				{
+					static int a = 0;
+					{
+						std::string name = ("D:/tmp/cpu_Q_" + std::to_string(a) + ".txt").c_str();
+						dumpMat(Q, name.c_str());
+					}
+					{
+						std::string name = ("D:/tmp/cpu_u_" + std::to_string(a) + ".txt").c_str();
+						dumpVec(u, name.c_str());
+					}
+					{
+						std::string name = ("D:/tmp/cpu_h_" + std::to_string(a) + ".txt").c_str();
+						dumpVec(x, name.c_str());
+					}
+
+					a++;
+				}
 #endif
+			}
+			else
+			{
+				x = L0L0tinv * rhs;
+			}
 		}
 
 		inline real data_term_energy(real f)const
@@ -850,7 +858,13 @@ namespace dfusion
 #ifdef ENABLE_DIALG_HESSIAN
 			// reg term, use full representation
 			SpMat jacReg = jac_.bottomRows(jac_.rows() - nPixel_rows_);
-			H = jacReg.transpose()*jacReg;
+
+			if (jacReg.rows()>0)
+				H = jacReg.transpose()*jacReg;
+			else
+			{
+				H = jact_ * jac_ * 0.f;
+			}
 
 			// data term, only compute diag block
 			SpMat jacData = jac_.topRows(nPixel_rows_).eval();
@@ -1584,9 +1598,9 @@ namespace dfusion
 			m_egc->x_[m_egc->x_.size() - 1]);
 #endif
 #endif
-
 		m_egc->Optimize(m_egc->x_, m_egc->param_.fusion_GaussNewton_maxIter);
 
+		printf("#5\n");
 		if (factor_rigid_out)
 		{
 			Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0,0,0,0), Tbx::Quat_cu(0,0,0,0));

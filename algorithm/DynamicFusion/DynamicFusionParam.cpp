@@ -36,8 +36,6 @@ namespace dfusion
 		warp_knn_k_eachlevel[2] = 1;
 		warp_knn_k_eachlevel[3] = 1;
 		set_warp_radius_search_epsilon(0.025);
-		warp_param_dw = warp_radius_search_epsilon * 1.733 * 0.5f; // sqrt(3)/2
-		warp_param_dw_for_fusion = warp_param_dw * 0.5f; // sqrt(3)/2
 		warp_radius_search_beta = 2;
 		warp_param_dw_lvup_scale = 1.f;
 		warp_point_step_before_update_node = 1;
@@ -64,7 +62,7 @@ namespace dfusion
 
 		// debuging related
 		fusion_dumping_each_frame = false;
-		fusion_loading_mode = false;
+		fusion_loading_mode = true;
 		fusion_enable_nonRigidSolver = true;
 		fusion_enable_rigidSolver = true;
 		fusion_post_rigid_factor = false;
@@ -100,6 +98,8 @@ namespace dfusion
 	{
 		warp_radius_search_epsilon = v;
 		warp_valid_point_num_each_node = 300.f * pow(v / 0.025f * voxels_per_meter / 387.f, 3);
+		warp_param_dw = warp_radius_search_epsilon * 1.733 * 0.5f; // sqrt(3)/2
+		warp_param_dw_for_fusion = warp_param_dw * 0.5f; // sqrt(3)/2
 	}
 
 #define VAR2STR(a) #a
@@ -243,73 +243,75 @@ namespace dfusion
 			* tsdf volume related
 			* ******************************************************/
 			READ_3_IF(volume_resolution)
-			READ_ONE_ELSE_IF(voxels_per_meter)
+				READ_ONE_ELSE_IF(voxels_per_meter)
 
-			/** *****************************************************
-			* marching cube related
-			* ******************************************************/
-			READ_ONE_ELSE_IF(marching_cube_level)
-			READ_ONE_ELSE_IF(marching_cube_tile_size)
-			READ_ONE_ELSE_IF(marching_cube_max_activeVoxel_ratio)
-			READ_ONE_ELSE_IF(marching_cube_isoValue)
-			READ_ONE_ELSE_IF(marchingCube_min_valied_weight)
+				/** *****************************************************
+				* marching cube related
+				* ******************************************************/
+				READ_ONE_ELSE_IF(marching_cube_level)
+				READ_ONE_ELSE_IF(marching_cube_tile_size)
+				READ_ONE_ELSE_IF(marching_cube_max_activeVoxel_ratio)
+				READ_ONE_ELSE_IF(marching_cube_isoValue)
+				READ_ONE_ELSE_IF(marchingCube_min_valied_weight)
 
-			/** *****************************************************
-			* warp field related
-			* ******************************************************/
-			READ_4_ELSE_IF(warp_knn_k_eachlevel)
-			READ_ONE_ELSE_IF(warp_radius_search_epsilon)
-			READ_ONE_ELSE_IF(warp_valid_point_num_each_node)
-			READ_ONE_ELSE_IF(warp_param_dw)
-			READ_ONE_ELSE_IF(warp_param_dw_for_fusion)
-			READ_ONE_ELSE_IF(warp_radius_search_beta)
-			READ_ONE_ELSE_IF(warp_param_dw_lvup_scale)
-			READ_ONE_ELSE_IF(warp_point_step_before_update_node)
+				/** *****************************************************
+				* warp field related
+				* ******************************************************/
+				READ_4_ELSE_IF(warp_knn_k_eachlevel)
+				READ_ONE_ELSE_IF(warp_radius_search_epsilon)
+				READ_ONE_ELSE_IF(warp_valid_point_num_each_node)
+				READ_ONE_ELSE_IF(warp_param_dw)
+				READ_ONE_ELSE_IF(warp_param_dw_for_fusion)
+				READ_ONE_ELSE_IF(warp_radius_search_beta)
+				READ_ONE_ELSE_IF(warp_param_dw_lvup_scale)
+				READ_ONE_ELSE_IF(warp_point_step_before_update_node)
 
-			/** *****************************************************
-			* dynamic fusion related
-			* ******************************************************/
-			READ_ONE_ELSE_IF(fusion_max_weight)
-			READ_ONE_ELSE_IF(fusion_lambda)
-			READ_ONE_ELSE_IF(fusion_psi_data)
-			READ_ONE_ELSE_IF(fusion_psi_reg)
-			READ_ONE_ELSE_IF(fusion_rigid_distThre)
-			READ_ONE_ELSE_IF(fusion_rigid_distThre)
-			READ_3_ELSE_IF(fusion_rigid_ICP_iter)
-			READ_ONE_ELSE_IF(fusion_rigid_angleThreSin)
-			READ_ONE_ELSE_IF(fusion_nonRigid_distThre)
-			READ_ONE_ELSE_IF(fusion_nonRigid_angleThreSin)
-			READ_ONE_ELSE_IF(fusion_nonRigidICP_maxIter)
-			READ_ONE_ELSE_IF(fusion_GaussNewton_maxIter)
-			READ_ONE_ELSE_IF(fusion_GaussNewton_diag_regTerm)
-			READ_ONE_ELSE_IF(fusion_GaussNewton_fixedStep)
+				/** *****************************************************
+				* dynamic fusion related
+				* ******************************************************/
+				READ_ONE_ELSE_IF(fusion_max_weight)
+				READ_ONE_ELSE_IF(fusion_lambda)
+				READ_ONE_ELSE_IF(fusion_psi_data)
+				READ_ONE_ELSE_IF(fusion_psi_reg)
+				READ_ONE_ELSE_IF(fusion_rigid_distThre)
+				READ_ONE_ELSE_IF(fusion_rigid_distThre)
+				READ_3_ELSE_IF(fusion_rigid_ICP_iter)
+				READ_ONE_ELSE_IF(fusion_rigid_angleThreSin)
+				READ_ONE_ELSE_IF(fusion_nonRigid_distThre)
+				READ_ONE_ELSE_IF(fusion_nonRigid_angleThreSin)
+				READ_ONE_ELSE_IF(fusion_nonRigidICP_maxIter)
+				READ_ONE_ELSE_IF(fusion_GaussNewton_maxIter)
+				READ_ONE_ELSE_IF(fusion_GaussNewton_diag_regTerm)
+				READ_ONE_ELSE_IF(fusion_GaussNewton_fixedStep)
 
-			// debuging related
-			READ_ONE_ELSE_IF(fusion_dumping_each_frame)
-			READ_ONE_ELSE_IF(fusion_loading_mode)
-			READ_ONE_ELSE_IF(fusion_enable_nonRigidSolver)
-			READ_ONE_ELSE_IF(fusion_enable_rigidSolver)
-			READ_ONE_ELSE_IF(fusion_post_rigid_factor)
-			READ_ONE_ELSE_IF(fusion_dumping_max_frame)
-			READ_ONE_ELSE_IF(mirror_input)
-			READ_ONE_ELSE_IF(load_frameIndx_plus_num)
-			READ_ONE_ELSE_IF(solver_enable_nan_check)
+				// debuging related
+				READ_ONE_ELSE_IF(fusion_dumping_each_frame)
+				READ_ONE_ELSE_IF(fusion_loading_mode)
+				READ_ONE_ELSE_IF(fusion_enable_nonRigidSolver)
+				READ_ONE_ELSE_IF(fusion_enable_rigidSolver)
+				READ_ONE_ELSE_IF(fusion_post_rigid_factor)
+				READ_ONE_ELSE_IF(fusion_dumping_max_frame)
+				READ_ONE_ELSE_IF(mirror_input)
+				READ_ONE_ELSE_IF(load_frameIndx_plus_num)
+				READ_ONE_ELSE_IF(solver_enable_nan_check)
 
-			/** *****************************************************
-			* visualization related
-			* ******************************************************/
-			READ_ONE_ELSE_IF(view_no_rigid)
-			READ_ONE_ELSE_IF(view_show_mesh)
-			READ_ONE_ELSE_IF(view_show_nodes)
-			READ_ONE_ELSE_IF(view_show_graph)
-			READ_ONE_ELSE_IF(view_show_corr)
-			READ_ONE_ELSE_IF(view_show_graph_level)
-			READ_ONE_ELSE_IF(view_errorMap_range)
-			READ_ONE_ELSE_IF(view_activeNode_id)
-			READ_2_ELSE_IF(view_click_vert_xy)
-			READ_ONE_ELSE_IF(view_autoreset)
-			READ_ONE_ELSE_IF(view_autoreset_seconds)
+				/** *****************************************************
+				* visualization related
+				* ******************************************************/
+				READ_ONE_ELSE_IF(view_no_rigid)
+				READ_ONE_ELSE_IF(view_show_mesh)
+				READ_ONE_ELSE_IF(view_show_nodes)
+				READ_ONE_ELSE_IF(view_show_graph)
+				READ_ONE_ELSE_IF(view_show_corr)
+				READ_ONE_ELSE_IF(view_show_graph_level)
+				READ_ONE_ELSE_IF(view_errorMap_range)
+				READ_ONE_ELSE_IF(view_activeNode_id)
+				READ_2_ELSE_IF(view_click_vert_xy)
+				READ_ONE_ELSE_IF(view_autoreset)
+				READ_ONE_ELSE_IF(view_autoreset_seconds)
 		}
+		set_voxels_per_meter(voxels_per_meter);
+		set_warp_radius_search_epsilon(warp_radius_search_epsilon);
 
 		stm.close();
 

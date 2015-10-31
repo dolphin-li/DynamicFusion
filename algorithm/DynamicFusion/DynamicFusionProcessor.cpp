@@ -395,11 +395,10 @@ namespace dfusion
 #ifdef ENABLE_CPU_DEBUG
 		CpuGaussNewton solver;
 		solver.init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
-#endif
-
+#else
 		// icp iteration
 		m_gsSolver->init(m_warpField, m_vmap_cano, m_nmap_cano, m_param, m_kinect_intr);
-
+#endif
 		float energy = FLT_MAX;
 		for (int icp_iter = 0; icp_iter < m_param.fusion_nonRigidICP_maxIter; icp_iter++)
 		{

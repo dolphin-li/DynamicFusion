@@ -417,7 +417,7 @@
        <number>1</number>
       </property>
       <property name="maximum">
-       <number>999</number>
+       <number>9999</number>
       </property>
      </widget>
      <widget class="QLabel" name="label_3">
