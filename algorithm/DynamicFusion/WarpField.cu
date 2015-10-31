@@ -23,7 +23,7 @@ namespace dfusion
 		GpuMesh::PointType* ndst;
 		int num;
 
-		Tbx::Mat3 R;
+		Tbx::Quat_cu R;
 		float3 t;
 
 		float3 origion;
@@ -40,8 +40,8 @@ namespace dfusion
 			Tbx::Point3 dq_p = dq_blend.transform(Tbx::Point3(convert(p)));
 			Tbx::Vec3 dq_n = dq_blend.rotate(convert(n));
 
-			vdst[tid] = GpuMesh::to_point(convert(R*(dq_p)) + t);
-			ndst[tid] = GpuMesh::to_point(convert(R*(dq_n)));
+			vdst[tid] = GpuMesh::to_point(convert(R.rotate(dq_p)) + t);
+			ndst[tid] = GpuMesh::to_point(convert(R.rotate(dq_n)));
 		}
 	};
 
@@ -71,7 +71,7 @@ namespace dfusion
 		int w;
 		int h;
 
-		Tbx::Mat3 R;
+		Tbx::Quat_cu R;
 		float3 t;
 
 		float3 origion;
@@ -88,8 +88,8 @@ namespace dfusion
 			Tbx::Point3 dq_p = dq_blend.transform(Tbx::Point3(convert(p)));
 			Tbx::Vec3 dq_n = dq_blend.rotate(convert(n));
 
-			vdst(y, x) = GpuMesh::to_point(convert(R*(dq_p)) + t);
-			ndst(y, x) = GpuMesh::to_point(convert(R*(dq_n)));
+			vdst(y, x) = GpuMesh::to_point(convert(R.rotate(dq_p)) + t);
+			ndst(y, x) = GpuMesh::to_point(convert(R.rotate(dq_n)));
 		}
 	};
 
@@ -101,6 +101,9 @@ namespace dfusion
 		if (x < warper.w && y < warper.h)
 			warper(x, y);
 	}
+
+
+
 
 	void WarpField::warp(GpuMesh& src, GpuMesh& dst)
 	{
@@ -114,7 +117,7 @@ namespace dfusion
 
 		MeshWarper warper;
 		warper.t = convert(m_rigidTransform.get_translation());
-		warper.R = m_rigidTransform.get_mat3();
+		warper.R = Tbx::Quat_cu(m_rigidTransform);
 		warper.knnTex = getKnnFieldTexture();
 		warper.nodesDqVwTex = getNodesDqVwTexture();
 		warper.vsrc = src.verts();
@@ -146,7 +149,7 @@ namespace dfusion
 
 		MapWarper warper;
 		warper.t = convert(m_rigidTransform.get_translation());
-		warper.R = m_rigidTransform.get_mat3();
+		warper.R = Tbx::Quat_cu(m_rigidTransform);
 		warper.knnTex = getKnnFieldTexture();
 		warper.nodesDqVwTex = getNodesDqVwTexture();
 		warper.vsrc = srcVmap;

@@ -544,6 +544,7 @@ class __align__(16) Quat_cu{
 
     /// Construct the quaternion from the transformation matrix 't'
     /// Translation of 't' is ignored as quaternions can't represent it
+	/// NOTE: normalize is performed inside
 	__device__ __host__ Quat_cu(const Transfo& t)
     {
         // Compute trace of matrix 't'
@@ -590,6 +591,7 @@ class __align__(16) Quat_cu{
         }
 
         coeff0 = W; coeff1 = -X; coeff2 = -Y; coeff3 = -Z;
+		normalize();
     }
 
 
