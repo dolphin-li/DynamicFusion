@@ -7,7 +7,7 @@
 #include <queue>
 namespace dfusion
 {
-//#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+#define ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
 #define SHOW_LAST_NODE_INFO
 
 #define USE_ROBUST_HUBER_PENALTY
@@ -313,6 +313,17 @@ namespace dfusion
 			else
 			{
 				x = L0L0tinv * rhs;
+#ifdef ENABLE_DEBUG_DUMP_MATRIX_EACH_ITER
+				{
+					static int a = 0;
+					{
+						std::string name = ("D:/tmp/cpu_h_" + std::to_string(a) + ".txt").c_str();
+						dumpVec(x, name.c_str());
+					}
+
+					a++;
+				}
+#endif
 			}
 		}
 
@@ -918,7 +929,7 @@ namespace dfusion
 					{
 						for (int y = 0; y < 6; y++)
 						for (int x = 0; x < 6; x++)
-							fprintf(pFile, "%f ", m_diagBlocks[i](y, x));
+							fprintf(pFile, "%ef ", m_diagBlocks[i](y, x));
 						fprintf(pFile, "\n");
 					}
 					fclose(pFile);

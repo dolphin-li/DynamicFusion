@@ -2126,7 +2126,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		for (int k = 0; k < GpuGaussNewtonSolver::VarPerNode-rshift; k++)
 			sum += get_HdLinv(iPos + k*GpuGaussNewtonSolver::VarPerNode) * vec_in[iRow + k];
 
-		vec_out[iRow] = sum;
+		vec_out[iRow] = alpha * sum + beta * vec_out[iRow];
 	}
 
 	void GpuGaussNewtonSolver::blockSolve()
@@ -2286,8 +2286,6 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			if (cuSparseStatus != CUSPARSE_STATUS_SUCCESS)
 				printf("cuSparse error2: %d\n", cuSparseStatus);
 		}
-		else if (sz0 > 0)
-			cudaSafeCall(cudaMemset(m_tmpvec.ptr(), 0, sz1*m_tmpvec.elem_size));
 
 		// u(0:sz0-1) = u(0:sz0-1) - HdLinv * tmpvec
 		// h(0:sz0-1) = HdLtinv*u(0:sz0-1)
@@ -2295,12 +2293,21 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(sz0, block.x));
-			calc_Hd_Linv_x_vec_kernel << <grid, block >> >(m_u.ptr(),
-				m_tmpvec.ptr(), sz0, -1.f, 1.f);
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Linv_x_vec_kernel");
-			calc_Hd_Ltinv_x_vec_kernel << <grid, block >> >(m_h.ptr(),
-				m_u.ptr(), sz0);
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
+			if (sz1 > 0)
+			{
+				calc_Hd_Linv_x_vec_kernel << <grid, block >> >(m_u.ptr(),
+					m_tmpvec.ptr(), sz0, -1.f, 1.f);
+				cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Linv_x_vec_kernel");
+				calc_Hd_Ltinv_x_vec_kernel << <grid, block >> >(m_h.ptr(),
+					m_u.ptr(), sz0);
+				cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
+			}
+			else
+			{
+				calc_Hd_Ltinv_x_vec_kernel << <grid, block >> >(m_h.ptr(),
+					m_u.ptr(), sz0, -1.f);
+				cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
+			}
 		}
 	}
 

@@ -345,6 +345,10 @@ namespace dfusion
 			blockSolve();
 			checkNan(m_h, m_Jrcols, ("h_" + std::to_string(iter)).c_str());
 
+			//debug_print();
+			//printf("@\n");
+			//system("pause");
+
 			// if not fix step, we perform line search
 			if (m_param->fusion_GaussNewton_fixedStep <= 0.f)
 			{
