@@ -511,6 +511,10 @@ namespace dfusion
 
 		Tbx::Mat3	c2v_Rcurr = c2v_Rprev;
 		Tbx::Vec3	c2v_tcurr = c2v_tprev;
+
+
+		printf("====================\n");
+		c2v_Rprev.print();
 		
 		const int icp_iterations[] = { m_param.fusion_rigid_ICP_iter[2], 
 			m_param.fusion_rigid_ICP_iter[1],
@@ -558,8 +562,21 @@ namespace dfusion
 				//compose
 				c2v_tcurr = convert(Rinc) * c2v_tcurr + convert(tinc);
 				c2v_Rcurr = convert(Rinc) * c2v_Rcurr;
+
+				if (level_index == 2 && iter < 3)
+				{
+					printf("\t%f %f %f\n###\n", alpha, beta, gamma);
+					printf("%f %f %f\n%f %f %f\n%f %f %f\n@@@\n",
+						Rinc(0, 0), Rinc(0, 1), Rinc(0, 2),
+						Rinc(1, 0), Rinc(1, 1), Rinc(1, 2),
+						Rinc(2, 0), Rinc(2, 1), Rinc(2, 2));
+					c2v_Rcurr.print();
+				}
 			}
 		}
+		printf("------------------\n");
+		c2v_Rcurr.print();
+		Tbx::Transfo(c2v_Rcurr, c2v_tcurr).fast_invert().print();
 
 		return Tbx::Transfo(c2v_Rcurr, c2v_tcurr).fast_invert();
 	}

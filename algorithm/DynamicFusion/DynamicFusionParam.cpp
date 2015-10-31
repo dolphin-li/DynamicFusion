@@ -27,20 +27,20 @@ namespace dfusion
 		// cannot be larger than warpField::knnK
 		warp_knn_k_eachlevel[0] = 4;
 		warp_knn_k_eachlevel[1] = 4;
-		warp_knn_k_eachlevel[2] = 4;
-		warp_knn_k_eachlevel[3] = 4;
+		warp_knn_k_eachlevel[2] = 1;
+		warp_knn_k_eachlevel[3] = 1;
 		set_warp_radius_search_epsilon(0.025);
 		warp_param_dw = warp_radius_search_epsilon * 1.733 * 0.5f; // sqrt(3)/2
 		warp_param_dw_for_fusion = warp_param_dw * 0.5f; // sqrt(3)/2
 		warp_radius_search_beta = 2;
-		warp_param_dw_lvup_scale = 0.01f;
+		warp_param_dw_lvup_scale = 1.f;
 		warp_point_step_before_update_node = 1;
 
 		/** *****************************************************
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 512;
-		fusion_lambda = 15000;
+		fusion_lambda = 5000;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_rigid_distThre = 0.1f; // meter
@@ -52,17 +52,17 @@ namespace dfusion
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 
 		fusion_nonRigidICP_maxIter = 3;
-		fusion_GaussNewton_maxIter = 5;
+		fusion_GaussNewton_maxIter = 3;
 		fusion_GaussNewton_diag_regTerm = 1e-3;
 		fusion_GaussNewton_fixedStep = 0.;// 5;
 
 		// debuging related
 		fusion_dumping_each_frame = false;
-		fusion_loading_mode = true;
+		fusion_loading_mode = false;
 		fusion_enable_nonRigidSolver = true;
 		fusion_enable_rigidSolver = true;
 		fusion_post_rigid_factor = true;
-		fusion_dumping_max_frame = 800;
+		fusion_dumping_max_frame = 8000;
 		mirror_input = true; 
 		load_frameIndx_plus_num = 1;
 
