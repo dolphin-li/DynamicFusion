@@ -267,10 +267,11 @@ class __align__(16) Dual_quat_cu{
 	// assume self-normalized.
 	__device__ __host__ void to_twist(Vec3& r, Vec3& t)const
 	{
-		float norm = acos(_quat_0.w());
+		float sign = (_quat_0.w() > 0.f) - (_quat_0.w() < 0.f);
+		float norm = acos(_quat_0.w()*sign);
 		if (norm > epsilon())
 		{
-			float inv_sinNorm_norm = norm / sin(norm);
+			float inv_sinNorm_norm = norm / sin(norm) * sign;
 			r.x = _quat_0.i() * inv_sinNorm_norm;
 			r.y = _quat_0.j() * inv_sinNorm_norm;
 			r.z = _quat_0.k() * inv_sinNorm_norm;
@@ -289,7 +290,9 @@ class __align__(16) Dual_quat_cu{
 		if (norm > epsilon())
 		{
 			float cosNorm = cos(norm);
-			float sinNorm_norm = sin(norm) / norm;
+			float sign = (cosNorm > 0.f) - (cosNorm < 0.f);
+			cosNorm *= sign;
+			float sinNorm_norm = sign * sin(norm) / norm;
 			_quat_0 = Quat_cu(cosNorm, r.x*sinNorm_norm, r.y*sinNorm_norm, r.z*sinNorm_norm);
 		}
 		else

@@ -54,6 +54,7 @@ namespace dfusion
 		void calcRegTerm();
 		void calcHessian();
 		void blockSolve();
+		void updateTwist_inch(const float* h, float step);
 		float calcTotalEnergy(float& data_energy, float& reg_energy);
 
 		void checkNan(const DeviceArray<float>& x, int n, const char* msg);

@@ -361,8 +361,7 @@ namespace dfusion
 				for (; alpha > alpha_stop; alpha *= 0.5)
 				{
 					// x += alpha * h
-					cublasSaxpy(m_cublasHandle, m_Jrcols, &alpha,
-						m_h.ptr(), 1, m_twist.ptr(), 1);
+					updateTwist_inch(m_h.ptr(), alpha);
 					new_energy = calcTotalEnergy(data_energy, reg_energy);
 					if (new_energy < old_energy)
 						break;
@@ -378,15 +377,14 @@ namespace dfusion
 					m_h.ptr(), 1, &norm_h);
 				st = cublasSnrm2(m_cublasHandle, m_Jrcols,
 					m_g.ptr(), 1, &norm_g);
-				if (norm_h < (norm_g + 1e-3f) * 1e-3f)
+				if (norm_h < (norm_g + 1e-6f) * 1e-6f)
 					break;
 			}
 			// else, we perform fixed step update.
 			else
 			{
 				// 5. accumulate: x += step * h;
-				cublasSaxpy(m_cublasHandle, m_Jrcols, &m_param->fusion_GaussNewton_fixedStep,
-					m_h.ptr(), 1, m_twist.ptr(), 1);
+				updateTwist_inch(m_h.ptr(), m_param->fusion_GaussNewton_fixedStep);
 			}
 		}// end for iter
 

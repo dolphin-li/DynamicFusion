@@ -2413,6 +2413,37 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 	}
 #pragma endregion
 
+#pragma region --update twist
+
+	__global__ void updateTwist_inch_kernel(float* twist, const float* h, float step, int nNodes)
+	{
+		int i = threadIdx.x + blockIdx.x*blockDim.x;
+		if (i < nNodes)
+		{
+			int i6 = i * 6;
+			Tbx::Vec3 r(twist[i6] + step*h[i6], twist[i6 + 1] + step*h[i6 + 1], twist[i6 + 2] + step*h[i6 + 2]);
+			Tbx::Vec3 t(twist[i6+3] + step*h[i6+3], twist[i6 + 4] + step*h[i6 + 4], twist[i6 + 5] + step*h[i6 + 5]);
+			Tbx::Dual_quat_cu dq;
+			dq.from_twist(r, t);
+			dq.to_twist(r, t);
+			twist[i6] = r[0];
+			twist[i6 + 1] = r[1];
+			twist[i6 + 2] = r[2];
+			twist[i6 + 3] = t[0];
+			twist[i6 + 4] = t[1];
+			twist[i6 + 5] = t[2];
+		}
+	}
+
+	void GpuGaussNewtonSolver::updateTwist_inch(const float* h, float step)
+	{
+		dim3 block(CTA_SIZE);
+		dim3 grid(divUp(m_numNodes, block.x));
+		updateTwist_inch_kernel << <grid, block >> >(m_twist.ptr(), h, step, m_numNodes);
+		cudaSafeCall(cudaGetLastError(), "updateTwist_inch_kernel");
+	}
+#pragma endregion
+
 #pragma region --factor out rigid
 
 	__device__ float _g_common_q[8];
