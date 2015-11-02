@@ -1284,10 +1284,56 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		mutable float* vptr;
 		mutable float* fptr;
 
+		int nNodesEachLevel[WarpField::GraphLevelNum];
+		float dw_scale_each_level;
+		float dw_softness;
+
 		float psi_reg;
 		float lambda;
 
 		float* totalEnergy;
+
+
+		__device__ __forceinline__ int getNodeLevel(int nodeId)const
+		{
+			for (int k = 0; k < WarpField::GraphLevelNum; k++)
+			if (nodeId < nNodesEachLevel[k])
+				return k;
+			return WarpField::GraphLevelNum;
+		}
+
+		__device__ __forceinline__ float calc_alpha_reg(int nodeId, int k, int nMaxNodes)const
+		{
+			WarpField::KnnIdx knn = get_nodesKnn(nodeId);
+
+			float4 nodeVwi = get_nodesVw(nodeId);
+			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
+			float4 nodeVwj = get_nodesVw(knn_k(knn, k));
+			float invW = min(nodeVwi.w, nodeVwj.w);
+
+			float wk = 0.f, sum_w = 0.f;
+			for (int knn_idx = 0; knn_idx < WarpField::KnnK; knn_idx++)
+			{
+				if (knn_idx < nMaxNodes)
+				{
+					float4 nodeVwj = get_nodesVw(knn_k(knn, knn_idx));
+					Tbx::Point3 vj(convert(read_float3_4(nodeVwj)));
+					float w = __expf(-dw_softness * (vi - vj).dot(vi - vj) * invW * invW);
+					sum_w += w;
+					if (knn_idx == k)
+						wk = w;
+				}
+			}
+
+			// if all neighbors are too far to give valid weightings, 
+			// we just take an average.
+			if (sum_w < 1e-6f)
+				wk = 0.25f;
+			else
+				wk /= sum_w;
+
+			return wk * __powf(dw_scale_each_level, getNodeLevel(nodeId));
+		}
 
 		__device__ __forceinline__  Tbx::Dual_quat_cu p_qk_p_alpha_func(Tbx::Dual_quat_cu dq, int i)const
 		{
@@ -1562,7 +1608,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			float4 nodeVwj = get_nodesVw(knnNodeId);
 			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
 			Tbx::Point3 vj(convert(read_float3_4(nodeVwj)));
-			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
+			float alpha_ij = calc_alpha_reg(mapper.nodeId, mapper.k, nNodes);
 			float ww = sqrt(lambda * alpha_ij);
 
 			//if (isinf(nodeVwj.w))
@@ -1653,7 +1699,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			float4 nodeVwj = get_nodesVw(knnNodeId);
 			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
 			Tbx::Point3 vj(convert(read_float3_4(nodeVwj)));
-			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
+			float alpha_ij = calc_alpha_reg(mapper.nodeId, mapper.k, nNodes);
 			float ww = sqrt(lambda * alpha_ij);
 
 			// energy=============================================
@@ -1761,7 +1807,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
 			Tbx::Point3 vj(convert(read_float3_4(nodeVwj)));
 			float alpha_ij = max(1.f / nodeVwi.w, 1.f / nodeVwj.w);
-			float ww2 = lambda * alpha_ij;
+			float ww2 = lambda * calc_alpha_reg(mapper.nodeId, mapper.k, nNodes);
 
 			// energy=============================================
 			Tbx::Vec3 val = dqi.transform(Tbx::Point3(vj)) - dqj.transform(Tbx::Point3(vj));
@@ -1804,6 +1850,12 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			rj.rptr = m_Jr_RowPtr.ptr();
 			rj.vptr = m_Jr_val.ptr();
 			rj.fptr = m_f_r.ptr();
+			for (int k = 0; k < WarpField::GraphLevelNum; k++)
+				rj.nNodesEachLevel[k] = m_pWarpField->getNumNodesInLevel(k);
+			for (int k = 1; k < WarpField::GraphLevelNum; k++)
+				rj.nNodesEachLevel[k] += rj.nNodesEachLevel[k-1];
+			rj.dw_scale_each_level = m_param->warp_param_dw_lvup_scale;
+			rj.dw_softness = m_param->warp_param_softness;
 
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Jrrows / RowPerNode_RegTerm, block.x));
@@ -2396,6 +2448,12 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			rj.vptr = m_Jr_val.ptr();
 			rj.fptr = m_f_r.ptr();
 			rj.totalEnergy = m_energy_vec.ptr() + m_vmapKnn.rows()*m_vmapKnn.cols();
+			for (int k = 0; k < WarpField::GraphLevelNum; k++)
+				rj.nNodesEachLevel[k] = m_pWarpField->getNumNodesInLevel(k);
+			for (int k = 1; k < WarpField::GraphLevelNum; k++)
+				rj.nNodesEachLevel[k] += rj.nNodesEachLevel[k - 1];
+			rj.dw_scale_each_level = m_param->warp_param_dw_lvup_scale;
+			rj.dw_softness = m_param->warp_param_softness;
 
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_Jrrows / RowPerNode_RegTerm, block.x));

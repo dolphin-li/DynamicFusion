@@ -33,18 +33,19 @@ namespace dfusion
 		// cannot be larger than warpField::knnK
 		warp_knn_k_eachlevel[0] = 4;
 		warp_knn_k_eachlevel[1] = 4;
-		warp_knn_k_eachlevel[2] = 1;
-		warp_knn_k_eachlevel[3] = 1;
+		warp_knn_k_eachlevel[2] = 4;
+		warp_knn_k_eachlevel[3] = 4;
 		set_warp_radius_search_epsilon(0.025);
+		warp_param_softness = 0.5;
 		warp_radius_search_beta = 2;
-		warp_param_dw_lvup_scale = 1.0f;
+		warp_param_dw_lvup_scale = 0.01f;
 		warp_point_step_before_update_node = 1;
 
 		/** *****************************************************
 		* dynamic fusion related
 		* ******************************************************/
 		fusion_max_weight = 512;
-		fusion_lambda = 5000;
+		fusion_lambda = 200;
 		fusion_psi_data = 0.01;
 		fusion_psi_reg = 0.0001;
 		fusion_rigid_distThre = 0.1f; // meter
@@ -55,10 +56,10 @@ namespace dfusion
 		fusion_nonRigid_distThre = 0.03f; // meter
 		fusion_nonRigid_angleThreSin = sin(90.f*3.14159254f / 180.f);
 
-		fusion_nonRigidICP_maxIter = 2;
+		fusion_nonRigidICP_maxIter = 3;
 		fusion_GaussNewton_maxIter = 2;
 		fusion_GaussNewton_diag_regTerm = 1e-5;
-		fusion_GaussNewton_fixedStep = 0.;// 5;
+		fusion_GaussNewton_fixedStep = 0.5;// 5;
 
 		// debuging related
 		fusion_dumping_each_frame = false;
@@ -146,6 +147,7 @@ namespace dfusion
 		WRITE_ONE(warp_param_dw_for_fusion);
 		WRITE_ONE(warp_radius_search_beta);
 		WRITE_ONE(warp_param_dw_lvup_scale);
+		WRITE_ONE(warp_param_softness);
 		WRITE_ONE(warp_point_step_before_update_node);
 
 		/** *****************************************************
@@ -264,6 +266,7 @@ namespace dfusion
 				READ_ONE_ELSE_IF(warp_param_dw_for_fusion)
 				READ_ONE_ELSE_IF(warp_radius_search_beta)
 				READ_ONE_ELSE_IF(warp_param_dw_lvup_scale)
+				READ_ONE_ELSE_IF(warp_param_softness)
 				READ_ONE_ELSE_IF(warp_point_step_before_update_node)
 
 				/** *****************************************************

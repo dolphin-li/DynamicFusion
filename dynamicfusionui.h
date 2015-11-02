@@ -52,6 +52,7 @@ public:
 
 	void on_sbNodeRadius_valueChanged(int v);
 	void on_dbDwLvScale_valueChanged(double v);
+	void on_dbDwSoft_valueChanged(double v);
 	void on_sbICPIter_valueChanged(int v);
 	void on_sbGSIter_valueChanged(int v);
 	void on_cbDumpFrames_clicked();

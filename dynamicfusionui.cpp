@@ -244,6 +244,7 @@ void DynamicFusionUI::updateUiFromParam()
 
 	ui.sbNodeRadius->setValue(g_dataholder.m_dparam.warp_radius_search_epsilon*1000);
 	ui.dbDwLvScale->setValue(g_dataholder.m_dparam.warp_param_dw_lvup_scale);
+	ui.dbDwSoft->setValue(g_dataholder.m_dparam.warp_param_softness);
 	ui.sbICPIter->setValue(g_dataholder.m_dparam.fusion_nonRigidICP_maxIter);
 	ui.sbGSIter->setValue(g_dataholder.m_dparam.fusion_GaussNewton_maxIter);
 	ui.cbDumpFrames->setChecked(g_dataholder.m_dparam.fusion_dumping_each_frame);
@@ -898,6 +899,11 @@ void DynamicFusionUI::on_sbNodeRadius_valueChanged(int v)
 void DynamicFusionUI::on_dbDwLvScale_valueChanged(double v)
 {
 	g_dataholder.m_dparam.warp_param_dw_lvup_scale = v;
+}
+
+void DynamicFusionUI::on_dbDwSoft_valueChanged(double v)
+{
+	g_dataholder.m_dparam.warp_param_softness = v;
 }
 
 void DynamicFusionUI::on_sbICPIter_valueChanged(int v)

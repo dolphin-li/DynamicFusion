@@ -55,6 +55,10 @@ namespace dfusion
 		// the larger, the more rigid
 		float warp_param_dw_lvup_scale;
 
+		// controls the softness of lv0-lv1 graph:
+		// exp(-softness * dist)
+		float warp_param_softness;
+
 		// scalar of epsilon for different levels, as in the paper \beta
 		// the larger, the less graph level-nodes.
 		float warp_radius_search_beta;

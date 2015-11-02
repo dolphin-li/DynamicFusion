@@ -674,7 +674,7 @@ namespace dfusion
 		int num_after_compact = 0;
 		cudaSafeCall(cudaMemcpyFromSymbol(&num_after_compact, 
 			validVoxel_output_count, sizeof(int)), "copy voxel count from symbol");
-		if (num_after_compact == 0)
+		if (num_after_compact == 0 && m_lastNumNodes[0] == 0)
 			num_after_compact = 1; // at least one point needed.
 		m_numNodes[0] = min(m_lastNumNodes[0] + num_after_compact, MaxNodeNum);
 		if (num_after_compact + m_lastNumNodes[0] > MaxNodeNum)
@@ -955,7 +955,7 @@ namespace dfusion
 				nw.index = m_meshPointsFlags.ptr();
 				nw.nodesDqVw = getNodesDqVwPtr(level);
 				nw.num = m_numNodes[level];
-				nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_param_dw_lvup_scale, level));
+				nw.inv_weight_radius = 1.f / (m_param.warp_param_dw*pow(m_param.warp_radius_search_beta, level));
 				nw.origion = m_volume->getOrigion();
 				nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
 				nw.knnTex = getKnnFieldTexture();
