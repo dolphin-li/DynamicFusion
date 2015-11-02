@@ -412,8 +412,8 @@ namespace dfusion
 				m_vmap_warp, m_nmap_warp, &data_energy, &reg_energy);
 
 			printf("icp, energy(data,reg): %d %f = %f + %f\n", icp_iter, energy, data_energy, reg_energy);
-			//if (energy > oldEnergy)
-			//	break;
+			if (energy > oldEnergy)
+				break;
 
 			// update the warp field
 			m_gsSolver->updateWarpField();

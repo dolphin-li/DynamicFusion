@@ -11,6 +11,7 @@ namespace dfusion
 //#define CALC_REG_TERM_NUMERIC
 //#define DEBUG_ASSIGN_10M_TO_NO_CORR
 //#define DEBUG_ASSIGN_BIG_ENERGY_TO_NO_CORR
+//#define ENABLE_ANTI_PODALITY
 
 #ifdef DEFINE_USE_HALF_GRAPH_EDGE
 	enum{RowPerNode_RegTerm = 3};
@@ -595,8 +596,12 @@ namespace dfusion
 					Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw))-v);
 					Tbx::Dual_quat_cu dqk_k;
 					dqk_k.from_twist(r, t);
+#ifdef ENABLE_ANTI_PODALITY
 					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
 						 *sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
+#else
+					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
+#endif
 					dq = dq + dqk_k * wk[k];		
 				}
 
@@ -743,8 +748,12 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 				Tbx::Vec3 r, t;
 				get_twist(knn_k(knn, k), r, t);
 				dqk_k.from_twist(r, t);
+#ifdef ENABLE_ANTI_PODALITY
 				wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
 					*sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
+#else
+				wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
+#endif
 				dq += dqk_k * wk[k];
 			}
 			return dq;
@@ -921,8 +930,12 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 					Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw)) - v);
 					Tbx::Dual_quat_cu dqk_k;
 					dqk_k.from_twist(r, t);
+#ifdef ENABLE_ANTI_PODALITY
 					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w)
 						*sign(dqk_0.get_non_dual_part().dot(dqk_k.get_non_dual_part()));
+#else
+					wk[k] = __expf(-0.5f * nodesV.dot(nodesV) * nodeVw.w * nodeVw.w);
+#endif
 					dq = dq + dqk_k * wk[k];
 				}
 
@@ -1809,7 +1822,6 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 #pragma endregion
 
 #pragma region --calc Hessian
-#define ENABLE_GPU_DUMP_DEBUG_H
 	__global__ void calcJr0tJr0_add_to_Hd_kernel(float* Hd, int nLv0Nodes, 
 		const int* Jrt_rptr, float diag_eps)
 	{
@@ -1833,11 +1845,12 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		const int row_len = Jrt_rptr[row0 + rowShift + 1] - row0_begin;
 		const int row1_begin = Jrt_rptr[row0 + colShift];
 
-		float sum = diag_eps * (rowShift == colShift);
+		float sum = Hd[iNode * VarPerNode2 + rowShift*VarPerNode + colShift]; 
 		for (int i = 0; i < row_len; i++)
 			sum += get_JrtVal(row1_begin + i) * get_JrtVal(row0_begin + i);
+		sum *= (1 + diag_eps * (rowShift == colShift));
 
-		Hd[iNode * VarPerNode2 + rowShift*VarPerNode+colShift] += sum;
+		Hd[iNode * VarPerNode2 + rowShift*VarPerNode+colShift] = sum;
 	}
 	
 	__global__ void fill_Hd_upper_kernel(float* Hd, int nLv0Nodes)
@@ -1919,7 +1932,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		int Jrt13_jb = Jrt_rptr[x + nBrows];
 		int Jrt13_je = Jrt_rptr[x + nBrows + 1];
 
-		float sum = diag_eps * (x == y);
+		float sum = 0.f;
 		for (int i = Jrt13_ib, j = Jrt13_jb; i < Jrt13_ie && j < Jrt13_je;)
 		{
 			int ci = get_JrtCidx(i);
@@ -1937,6 +1950,8 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			i += (ci < cj) * GpuGaussNewtonSolver::VarPerNode;
 			j += (ci > cj) * GpuGaussNewtonSolver::VarPerNode;
 		}// i
+
+		sum *= (1+diag_eps * (x == y));
 
 		Hr[y*HrRowsCols + x] = Hr[x*HrRowsCols + y] = sum;
 	}
