@@ -6,6 +6,7 @@
 #include <cublas_v2.h>
 #include <cusparse.h>
 #include <cusolverDn.h>
+#include "CudaDiagBlockMatrix.h"
 namespace dfusion
 {
 	class GpuGaussNewtonSolver
@@ -112,7 +113,7 @@ namespace dfusion
 		// It is symmetric, during calculation, 
 		// we thus only touch the lower part of each block
 		// after calculation finished, we filled the upper part then.
-		DeviceArray<float> m_Hd;
+		CudaDiagBlockMatrix m_Hd;
 
 		// Hessian of the bottom-right of the data+reg term, 
 		// it is a dense matrix and symmetric
@@ -193,8 +194,8 @@ namespace dfusion
 		DeviceArray<float> m_Q_kept;
 
 		// m_Hd_L: Hd = L*Lt
-		DeviceArray<float> m_Hd_Linv;
-		DeviceArray<float> m_Hd_LLtinv;
+		CudaDiagBlockMatrix m_Hd_Linv;
+		CudaDiagBlockMatrix m_Hd_LLtinv;
 
 		// inv(Lt) * Bt; 
 		// its sparse pattern is the same with Bt

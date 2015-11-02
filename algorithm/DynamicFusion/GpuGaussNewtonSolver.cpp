@@ -139,8 +139,6 @@ namespace dfusion
 			setzero(m_u);
 			m_tmpvec.create(m_nodes_for_buffer * VarPerNode);
 			setzero(m_tmpvec);
-			m_Hd.create(VarPerNode * VarPerNode * m_nodes_for_buffer);
-			setzero(m_Hd);
 
 			// each node create 2*3*k rows and each row create at most VarPerNode*2 cols
 			m_Jr_RowCounter.create(m_nodes_for_buffer + 1);
@@ -190,15 +188,16 @@ namespace dfusion
 			m_f_r.create(m_Jr_RowPtr.size());
 			setzero(m_f_r);
 
-			// for block solver
-			m_Hd_Linv.create(m_Hd.size());
-			setzero(m_Hd_Linv);
-			m_Hd_LLtinv.create(m_Hd.size());
-			setzero(m_Hd_LLtinv);
-
 			// for total energy evaluation
 			m_energy_vec.create(m_vmapKnn.rows()*m_vmapKnn.cols() + m_nodes_for_buffer*WarpField::KnnK);
 		}
+
+		m_Hd.resize(m_numLv0Nodes, VarPerNode);
+		m_Hd = 0.f;
+		m_Hd_Linv.resize(m_numLv0Nodes, VarPerNode);
+		m_Hd_Linv = 0.f;
+		m_Hd_LLtinv.resize(m_numLv0Nodes, VarPerNode);
+		m_Hd_LLtinv = 0.f;
 
 		if (m_not_lv0_nodes_for_buffer < notLv0Nodes)
 		{
@@ -261,7 +260,7 @@ namespace dfusion
 		setzero(m_g);
 		setzero(m_u);
 		setzero(m_tmpvec);
-		setzero(m_Hd);
+		m_Hd = 0.f;
 
 		// each node create 2*3*k rows and each row create at most VarPerNode*2 cols
 		setzero(m_Jr_RowCounter);
@@ -292,8 +291,8 @@ namespace dfusion
 		setzero(m_f_r);
 
 		// for block solver
-		setzero(m_Hd_Linv);
-		setzero(m_Hd_LLtinv);
+		m_Hd_Linv = 0.f;
+		m_Hd_LLtinv = 0.f;
 
 		setzero(m_Hr);
 		setzero(m_Q);
@@ -321,14 +320,15 @@ namespace dfusion
 		m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
-			cudaSafeCall(cudaMemset(m_Hd.ptr(), 0, sizeof(float)*m_Hd.size()), "GpuGaussNewtonSolver::solve, setHd=0");
+			m_Hd = 0.f;
 			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()), "GpuGaussNewtonSolver::solve, setg=0");
 
 			checkNan(m_twist, m_numNodes, ("twist_" + std::to_string(iter)).c_str());
 
 			// 1. calculate data term: Hd += Jd'Jd; g += Jd'fd
 			calcDataTerm();
-			checkNan(m_Hd, m_numLv0Nodes*VarPerNode*VarPerNode, ("Hd_data_" + std::to_string(iter)).c_str());
+			checkNan(m_Hd.toDeviceArray(), m_numLv0Nodes*VarPerNode*VarPerNode, 
+				("Hd_data_" + std::to_string(iter)).c_str());
 			checkNan(m_g, m_numLv0Nodes*VarPerNode, ("g_data_" + std::to_string(iter)).c_str());
 
 			// 2. calculate reg term: Jr = [Jr0 Jr1; 0 Jr3]; fr;
@@ -338,7 +338,8 @@ namespace dfusion
 
 			// 3. calculate Hessian: Hd += Jr0'Jr0; B = Jr0'Jr1; Hr = Jr1'Jr1 + Jr3'Jr3; g=-(g+Jr'*fr)
 			calcHessian();
-			checkNan(m_Hd, m_numLv0Nodes*VarPerNode*VarPerNode, ("Hd_reg_" + std::to_string(iter)).c_str());
+			checkNan(m_Hd.toDeviceArray(), m_numLv0Nodes*VarPerNode*VarPerNode, 
+				("Hd_reg_" + std::to_string(iter)).c_str());
 			checkNan(m_g, m_Jrcols, ("g_" + std::to_string(iter)).c_str());
 
 			// 4. solve H*h = g
@@ -426,9 +427,9 @@ namespace dfusion
 
 	void GpuGaussNewtonSolver::debug_print()
 	{
-		dumpBlocks("D:/tmp/gpu_Hd.txt", m_Hd, m_numLv0Nodes, VarPerNode);
-		dumpBlocks("D:/tmp/gpu_Hd_Linv.txt", m_Hd_Linv, m_numLv0Nodes, VarPerNode);
-		dumpBlocks("D:/tmp/gpu_Hd_LLtinv.txt", m_Hd_LLtinv, m_numLv0Nodes, VarPerNode);
+		dumpBlocks("D:/tmp/gpu_Hd.txt", m_Hd.toDeviceArray(), m_numLv0Nodes, VarPerNode);
+		dumpBlocks("D:/tmp/gpu_Hd_Linv.txt", m_Hd_Linv.toDeviceArray(), m_numLv0Nodes, VarPerNode);
+		dumpBlocks("D:/tmp/gpu_Hd_LLtinv.txt", m_Hd_LLtinv.toDeviceArray(), m_numLv0Nodes, VarPerNode);
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_numNodes*VarPerNode);
 		dumpSparseMatrix("D:/tmp/gpu_Jr.txt", m_Jr_RowPtr, m_Jr_ColIdx, m_Jr_val, m_Jrrows);
 		dumpSparseMatrix("D:/tmp/gpu_Jrt.txt", m_Jrt_RowPtr, m_Jrt_ColIdx, m_Jrt_val, m_Jrcols);

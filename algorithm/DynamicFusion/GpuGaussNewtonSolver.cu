@@ -31,7 +31,6 @@ namespace dfusion
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_BtValTex;
 	texture<int, cudaTextureType1D, cudaReadModeElementType> g_BtCidxTex;
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_BtLtinvValTex;
-	texture<float, cudaTextureType1D, cudaReadModeElementType> g_HdLinvTex;
 
 	__device__ __forceinline__ float4 get_nodesVw(int i)
 	{
@@ -70,11 +69,6 @@ namespace dfusion
 	__device__ __forceinline__ int get_BtCidx(int i)
 	{
 		return tex1Dfetch(g_BtCidxTex, i);
-	}
-
-	__device__ __forceinline__ float get_HdLinv(int i)
-	{
-		return tex1Dfetch(g_HdLinvTex, i);
 	}
 
 	__device__ __forceinline__ float get_BtLtinvVal(int i)
@@ -241,15 +235,6 @@ namespace dfusion
 			if (offset != 0)
 				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error8!");
 		}
-		if (1)
-		{
-			size_t offset;
-			cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
-			cudaBindTexture(&offset, &g_HdLinvTex, m_Hd_Linv.ptr(), &desc,
-				m_Hd_Linv.size() * sizeof(float));
-			if (offset != 0)
-				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error9!");
-		}
 	}
 
 	void GpuGaussNewtonSolver::unBindTextures()
@@ -262,7 +247,6 @@ namespace dfusion
 		cudaUnbindTexture(g_BtValTex);
 		cudaUnbindTexture(g_BtCidxTex);
 		cudaUnbindTexture(g_BtLtinvValTex);
-		cudaUnbindTexture(g_HdLinvTex);
 	}
 #pragma endregion
 
@@ -310,13 +294,6 @@ namespace dfusion
 		float psi_data;
 
 		float* totalEnergy;
-
-
-#ifdef ENABLE_GPU_DUMP_DEBUG
-		// for debug
-		float* debug_buffer_pixel_sum2;
-		float* debug_buffer_pixel_val;
-#endif
 
 		__device__ __forceinline__ float data_term_energy(float f)const
 		{
@@ -699,21 +676,7 @@ namespace dfusion
 					{
 #pragma unroll
 						for (int j = 0; j <= i; ++j)
-						{
 							atomicAdd(&Hd_[shift + j], p_f_p_alpha[i] * p_f_p_alpha[j]);
-#ifdef ENABLE_GPU_DUMP_DEBUG
-// debug
-if (knnNodeId == 390 && i == 5 && j == 1
-&& debug_buffer_pixel_sum2 && debug_buffer_pixel_val
-)
-{
-for (int k = 0; k < VarPerNode; k++)
-	debug_buffer_pixel_val[(y*imgWidth + x)*VarPerNode + k] =
-	p_f_p_alpha[k];
-debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
-}
-#endif
-						}
 						atomicAdd(&g_[shift_g + i], p_f_p_alpha[i] * f);
 						shift += VarPerNode;
 					}// end for i					
@@ -973,7 +936,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		DataTermCombined cs;
 		cs.angleThres = m_param->fusion_nonRigid_angleThreSin;
 		cs.distThres = m_param->fusion_nonRigid_distThre;
-		cs.Hd_ = m_Hd;
+		cs.Hd_ = m_Hd.value();
 		cs.g_ = m_g;
 		cs.imgHeight = m_vmap_cano->rows();
 		cs.imgWidth = m_vmap_cano->cols();
@@ -989,17 +952,6 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		cs.Tlw = m_pWarpField->get_rigidTransform();
 		cs.Tlw_inv = m_pWarpField->get_rigidTransform().fast_invert();
 		cs.psi_data = m_param->fusion_psi_data;
-
-#ifdef ENABLE_GPU_DUMP_DEBUG
-		// debugging
-		DeviceArray<float> pixelSum2, pixelVal;
-		pixelSum2.create(cs.imgHeight*cs.imgWidth);
-		cudaMemset(pixelSum2.ptr(), 0, pixelSum2.sizeBytes());
-		pixelVal.create(cs.imgHeight*cs.imgWidth*VarPerNode);
-		cudaMemset(pixelVal.ptr(), 0, pixelVal.sizeBytes());
-		cs.debug_buffer_pixel_sum2 = pixelSum2;
-		cs.debug_buffer_pixel_val = pixelVal;
-#endif
 
 		//////////////////////////////
 		dim3 block(CTA_SIZE_X, CTA_SIZE_Y);
@@ -1025,25 +977,6 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			throw std::exception("non supported KnnK in data term calc!");
 		}
 		cudaSafeCall(cudaGetLastError(), "dataTermCombinedKernel");
-
-		// debugging
-#ifdef ENABLE_GPU_DUMP_DEBUG
-		{
-			std::vector<float> ps, pv;
-			pixelSum2.download(ps);
-			pixelVal.download(pv);
-
-			FILE* pFile = fopen("D:/tmp/gpu_pixel.txt", "w");
-			for (int i = 0; i < ps.size(); i++)
-			{
-				fprintf(pFile, "%ef %ef %ef %ef %ef %ef %ef\n",
-					pv[i * 6 + 0], pv[i * 6 + 1], pv[i * 6 + 2],
-					pv[i * 6 + 3], pv[i * 6 + 4], pv[i * 6 + 5],
-					ps[i]);
-			}
-			fclose(pFile);
-		}
-#endif
 	}
 
 	template<int maxK>
@@ -1904,27 +1837,6 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		Hd[iNode * VarPerNode2 + rowShift*VarPerNode+colShift] = sum;
 	}
-	
-	__global__ void fill_Hd_upper_kernel(float* Hd, int nLv0Nodes)
-	{
-		enum
-		{
-			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
-			VarPerNode2 = VarPerNode*VarPerNode,
-			LowerPartNum = GpuGaussNewtonSolver::LowerPartNum
-		};
-
-		int tid = threadIdx.x + blockIdx.x * blockDim.x;
-		int iNode = tid / LowerPartNum;
-		if (iNode >= nLv0Nodes)
-			return;
-		int eleLowerShift = tid - iNode*LowerPartNum;
-		int rowShift = g_lower_2_rowShift_6x6[eleLowerShift];
-		int colShift = g_lower_2_colShift_6x6[eleLowerShift];
-		
-		Hd[iNode * VarPerNode2 + colShift * VarPerNode + rowShift] = 
-			Hd[iNode * VarPerNode2 + rowShift * VarPerNode + colShift];
-	}
 
 	__global__ void calcB_kernel(
 		float* B_val, const int* B_rptr_coo, const int* B_cidx, 
@@ -2015,7 +1927,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		{
 			dim3 block(CTA_SIZE);
 			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
-			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes, 
+			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd.value(), m_numLv0Nodes, 
 				m_Jrt_RowPtr.ptr(), m_param->fusion_GaussNewton_diag_regTerm);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcJr0tJr0_add_to_Hd_kernel");
 		}
@@ -2023,13 +1935,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		// 1.1 fill the upper tri part of Hd
 		// previously, we only calculate the lower triangular pert of Hd;
 		// now that the computation of Hd is ready, we fill the mission upper part
-		if (m_numLv0Nodes > 0)
-		{
-			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
-			fill_Hd_upper_kernel << <grid, block >> >(m_Hd, m_numLv0Nodes);
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::fill_Hd_upper_kernel");
-		}
+		m_Hd.transpose_L_to_U();
 
 		// 2. compute B = Jr0'Jr1
 		if (m_Bnnzs > 0)
@@ -2076,7 +1982,9 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 #pragma endregion
 
 #pragma region --block solve
-	__global__ void calcBtLtinv_kernel(float* BtLtinv, const int* Bt_rptr, 
+	__global__ void calcBtLtinv_kernel(
+		cudaTextureObject_t hdLinvTex,
+		float* BtLtinv, const int* Bt_rptr, 
 		const int* Bt_rptr_coo, int nLv0Nodes, int nnz)
 	{
 		enum{ VarPerNode = GpuGaussNewtonSolver::VarPerNode };
@@ -2112,7 +2020,11 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		{
 			Hd_row_b = (Hd_row_b + cshift) * VarPerNode;
 			for (int k = 0; k <= cshift; k++)
-				sum += get_BtVal(Bt_b + k) * get_HdLinv(Hd_row_b + k);
+			{
+				float val = 0.f;
+				tex1Dfetch(&val, hdLinvTex, Hd_row_b + k);
+				sum += get_BtVal(Bt_b + k) * val;
+			}
 		}
 
 		// write the result
@@ -2160,70 +2072,14 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		Q[y*HrRowsCols + x] = Q[x*HrRowsCols + y] = Hr[y*HrRowsCols + x] - sum;
 	}
 
-	// vec_out = alpha * Linv * vec_in + beta * vec_out
-	__global__ void calc_Hd_Linv_x_vec_kernel(float* vec_out, const float* vec_in, int nRows,
-		float alpha = 1.f, float beta = 0.f)
-	{
-		int iRow = threadIdx.x + blockIdx.x*blockDim.x;
-		if (iRow >= nRows)
-			return;
-		int iNode = iRow / GpuGaussNewtonSolver::VarPerNode;
-		int rshift = iRow - iNode * GpuGaussNewtonSolver::VarPerNode;
-		int iPos = iRow * GpuGaussNewtonSolver::VarPerNode + rshift;
-
-		float sum = 0.f;
-		for (int k = -rshift; k <= 0; k++)
-			sum += get_HdLinv(iPos + k) * vec_in[iRow + k];
-
-		vec_out[iRow] = alpha * sum + beta * vec_out[iRow];
-	}
-
-	// vec_out = alpha * Ltinv * vec_in + beta * vec_out
-	__global__ void calc_Hd_Ltinv_x_vec_kernel(float* vec_out, const float* vec_in, int nRows,
-		float alpha = 1.f, float beta = 0.f)
-	{
-		int iRow = threadIdx.x + blockIdx.x*blockDim.x;
-		if (iRow >= nRows)
-			return;
-		int iNode = iRow / GpuGaussNewtonSolver::VarPerNode;
-		int rshift = iRow - iNode * GpuGaussNewtonSolver::VarPerNode;
-		int iPos = iRow * GpuGaussNewtonSolver::VarPerNode + rshift;
-
-		float sum = 0.f;
-		for (int k = 0; k < GpuGaussNewtonSolver::VarPerNode-rshift; k++)
-			sum += get_HdLinv(iPos + k*GpuGaussNewtonSolver::VarPerNode) * vec_in[iRow + k];
-
-		vec_out[iRow] = alpha * sum + beta * vec_out[iRow];
-	}
-
 	void GpuGaussNewtonSolver::blockSolve()
 	{
 		cusparseStatus_t cuSparseStatus;
-		CHECK_LE(m_numLv0Nodes*VarPerNode*VarPerNode, m_Hd_Linv.size());
-		CHECK_LE(m_numLv0Nodes*VarPerNode*VarPerNode, m_Hd_LLtinv.size());
 
 		// 1. batch LLt the diag blocks Hd==================================================
-
-		// 1.0. copy Hd to Linv buffer
-		cudaSafeCall(cudaMemcpy(m_Hd_Linv.ptr(), m_Hd.ptr(), m_numLv0Nodes*VarPerNode
-			*VarPerNode*m_Hd.elem_size, cudaMemcpyDeviceToDevice), 
-			"GpuGaussNewtonSolver::blockSolve::copy Hd to Hd_L");
-
-		// 1.1 Hd = L*L'
-		gpu_cholesky::single_thread_cholesky_batched(m_Hd_Linv.ptr(), VarPerNode,
-			VarPerNode*VarPerNode, m_numLv0Nodes);
-		checkNan(m_Hd_Linv, m_numLv0Nodes*VarPerNode*VarPerNode, "Hd_L");
-
-		// 1.2 inv(L)
-		gpu_cholesky::single_thread_tril_inv_batched(m_Hd_Linv.ptr(), VarPerNode,
-			VarPerNode*VarPerNode, m_numLv0Nodes);
-		checkNan(m_Hd_Linv, m_numLv0Nodes*VarPerNode*VarPerNode, "Hd_Linv");
-
-		// 1.3 inv(L*L') = inv(L')*inv(L) = inv(L)'*inv(L)
-		gpu_cholesky::single_thread_LtL_batched(
-			m_Hd_LLtinv.ptr(), VarPerNode*VarPerNode, m_Hd_Linv.ptr(), 
-			VarPerNode*VarPerNode, VarPerNode, m_numLv0Nodes);
-		checkNan(m_Hd_LLtinv, m_numLv0Nodes*VarPerNode*VarPerNode, "Hd_LLtinv");
+		m_Hd_Linv = m_Hd;
+		m_Hd_Linv.cholesky().invL();
+		m_Hd_Linv.LtL(m_Hd_LLtinv);
 
 		// 2. compute Q = Hr - Bt * inv(Hd) * B ======================================
 		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Q.size());
@@ -2231,8 +2087,9 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 		if (m_HrRowsCols > 0)
 		{
 			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_Bnnzs, block.x));
-			calcBtLtinv_kernel << <grid, block >> >(m_Bt_Ltinv_val.ptr(),
+			dim3 grid(divUp(m_Bnnzs, block.x)); 
+			calcBtLtinv_kernel << <grid, block >> >(
+				m_Hd_Linv.getTexture(), m_Bt_Ltinv_val.ptr(),
 				m_Bt_RowPtr.ptr(), m_Bt_RowPtr_coo.ptr(), m_numLv0Nodes, m_Bnnzs);
 			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcBtLtinv_kernel");
 		}
@@ -2293,24 +2150,13 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 
 		// 4.1 let H = LL', first we solve for L*u=g;
 		// 4.1.1 u(0:sz0-1) = HdLinv*g(0:sz0-1)
-		if (sz0 > 0)
-		{
-			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(sz0, block.x));
-			calc_Hd_Linv_x_vec_kernel << <grid, block >> >(m_u.ptr(),
-				m_g.ptr(), sz0);
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Linv_x_vec_kernel");
-		}
+		m_Hd_Linv.Lv(m_g.ptr(), m_u.ptr());
 	
 		// 4.1.2 u(sz0:sz-1) = LQinv*(g(sz0:sz-1) - Bt*HdLtinv*HdLinv*g(0:sz0-1))
 		if (sz1 > 0)
 		{
 			// tmpvec = HdLtinv*HdLinv*g(0:sz0-1)
-			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(sz0, block.x));
-			calc_Hd_Ltinv_x_vec_kernel << <grid, block >> >(m_tmpvec.ptr(),
-				m_u.ptr(), sz0);
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
+			m_Hd_Linv.Ltv(m_u.ptr(), m_tmpvec.ptr());
 
 			// u(sz0:sz-1) = g(sz0:sz-1) - Bt*tmpvec
 			{
@@ -2362,18 +2208,12 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			dim3 grid(divUp(sz0, block.x));
 			if (sz1 > 0)
 			{
-				calc_Hd_Linv_x_vec_kernel << <grid, block >> >(m_u.ptr(),
-					m_tmpvec.ptr(), sz0, -1.f, 1.f);
-				cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Linv_x_vec_kernel");
-				calc_Hd_Ltinv_x_vec_kernel << <grid, block >> >(m_h.ptr(),
-					m_u.ptr(), sz0);
-				cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
+				m_Hd_Linv.Lv(m_tmpvec.ptr(), m_u.ptr(), -1.f, 1.f);
+				m_Hd_Linv.Ltv(m_u.ptr(), m_h.ptr());
 			}
 			else
 			{
-				calc_Hd_Ltinv_x_vec_kernel << <grid, block >> >(m_h.ptr(),
-					m_u.ptr(), sz0, -1.f);
-				cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calc_Hd_Ltinv_x_vec_kernel");
+				m_Hd_Linv.Ltv(m_u.ptr(), m_h.ptr(), -1.f);
 			}
 		}
 	}
@@ -2386,7 +2226,7 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 			DataTermCombined cs;
 			cs.angleThres = m_param->fusion_nonRigid_angleThreSin;
 			cs.distThres = m_param->fusion_nonRigid_distThre;
-			cs.Hd_ = m_Hd;
+			cs.Hd_ = m_Hd.value();
 			cs.g_ = m_g;
 			cs.imgHeight = m_vmap_cano->rows();
 			cs.imgWidth = m_vmap_cano->cols();
@@ -2609,7 +2449,6 @@ debug_buffer_pixel_sum2[y*imgWidth + x] = Hd_[shift + j];
 					GpuGaussNewtonSolver::CTA_SIZE >> >(m_pWarpField->getNodesDqVwPtr(lv), numLv, dq.conjugate());
 			}
 			cudaSafeCall(cudaGetLastError(), "factor_all_nodes_kernel");
-
 
 			// re-extract info
 			m_pWarpField->extract_nodes_info_no_allocation(m_nodesKnn, m_twist, m_nodesVw);

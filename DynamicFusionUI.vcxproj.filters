@@ -217,6 +217,12 @@
     <ClCompile Include="algorithm\DynamicFusion\GpuGaussNewtonSolver.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\CudaBsrMatrix.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -560,6 +566,12 @@
     <ClInclude Include="algorithm\DynamicFusion\GpuCholeSky.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\CudaBsrMatrix.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
@@ -599,6 +611,12 @@
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
     <CudaCompile Include="algorithm\DynamicFusion\GpuCholesky.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\CudaBsrMatrix.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.cu">
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
   </ItemGroup>
