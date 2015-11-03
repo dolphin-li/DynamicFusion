@@ -181,7 +181,7 @@ void CudaBsrMatrix::setRowFromBsrRowPtr(const int* bsrRowPtr)
 	if (blocksInRow() == 0)
 		return;
 	beginConstructRowPtr();
-	cudaSafeCall(cudaMemcpy(m_bsrRowPtr, bsrRowPtr, blocksInRow()*m_bsrRowPtr.elem_size,
+	cudaSafeCall(cudaMemcpy(m_bsrRowPtr, bsrRowPtr, (1+blocksInRow())*m_bsrRowPtr.elem_size,
 		cudaMemcpyDeviceToDevice));
 	endConstructRowPtr();
 }

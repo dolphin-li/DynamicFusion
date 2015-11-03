@@ -282,6 +282,8 @@ void CudaBsrMatrix::setValue(const float* val_d)
 
 void CudaBsrMatrix::Mv(const float* x, float* y, float alpha, float beta)const
 {
+	if (rows() == 0 || cols() == 0)
+		return;
 	switch (colsPerBlock())
 	{
 	case 0:

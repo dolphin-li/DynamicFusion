@@ -130,22 +130,10 @@ namespace dfusion
 		CudaBsrMatrix* m_Bt;
 
 		// CSR sparse matrix of Jr
-		DeviceArray<float> m_Jr_val;
 		DeviceArray<int> m_Jr_RowCounter;
 		DeviceArray<JrRow2NodeMapper> m_Jr_RowMap2NodeId;
-		DeviceArray<int> m_Jr_RowPtr;
-		DeviceArray<int> m_Jr_RowPtr_coo;
-		DeviceArray<int> m_Jr_ColIdx;
-
-		DeviceArray<float> m_Jrt_val;
-		DeviceArray<int> m_Jrt_RowPtr;
-		DeviceArray<int> m_Jrt_RowPtr_coo;
-		DeviceArray<int> m_Jrt_ColIdx;
-		int m_Jrrows;
-		int m_Jrcols;
-		int m_Jrnnzs;
-
-		cusparseMatDescr_t m_Jrt_desc;
+		CudaBsrMatrix* m_Jr;
+		CudaBsrMatrix* m_Jrt;
 
 		// let Jr = [Jr0, Jr1]
 		//			[0,   Jr3]

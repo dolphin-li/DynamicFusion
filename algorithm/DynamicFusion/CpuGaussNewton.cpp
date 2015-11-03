@@ -305,6 +305,10 @@ namespace dfusion
 						std::string name = ("D:/tmp/cpu_h_" + std::to_string(a) + ".txt").c_str();
 						dumpVec(x, name.c_str());
 					}
+					{
+						std::string name = ("D:/tmp/cpu_B_" + std::to_string(a) + ".txt").c_str();
+						dumpSparseMatrix(Bt.transpose(), name.c_str());
+					}
 
 					a++;
 				}
@@ -1159,6 +1163,7 @@ namespace dfusion
 
 							// partial_psi_partial_alpha
 							real ww = sqrt(lambda * alpha_ij);
+
 							Tbx::Vec3 p_psi_p_alphai_j = p_h_p_alphai_j * ww;
 							Tbx::Vec3 p_psi_p_alphaj_j = p_h_p_alphaj_j * ww;
 							Tbx::Vec3 p_psi_p_alphai_i = p_h_p_alphai_i * ww;
@@ -1611,7 +1616,6 @@ namespace dfusion
 #endif
 		m_egc->Optimize(m_egc->x_, m_egc->param_.fusion_GaussNewton_maxIter);
 
-		printf("#5\n");
 		if (factor_rigid_out)
 		{
 			Tbx::Dual_quat_cu dq_blend(Tbx::Quat_cu(0,0,0,0), Tbx::Quat_cu(0,0,0,0));
