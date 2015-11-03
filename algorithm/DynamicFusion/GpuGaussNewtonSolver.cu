@@ -1083,11 +1083,11 @@ namespace dfusion
 
 		// 3.3 sort to compute Bt
 		m_B->transposeStructureTo(*m_Bt);
-		m_Bt_Ltinv = m_Bt;
 
 		m_Hd.resize(m_numLv0Nodes, VarPerNode);
 		m_Hd_Linv.resize(m_numLv0Nodes, VarPerNode);
 		m_Hd_LLtinv.resize(m_numLv0Nodes, VarPerNode);
+		m_Bt->rightMultDiag_structure(m_Hd_Linv, *m_Bt_Ltinv);
 	}
 
 #pragma endregion
@@ -1864,7 +1864,6 @@ namespace dfusion
 
 		// 3. compute Bt
 		m_B->transposeValueTo(*m_Bt);
-		m_Bt->rightMultDiag_structure(m_Hd_Linv, *m_Bt_Ltinv);
 
 		// 4. compute Hr
 		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Hr.size());
