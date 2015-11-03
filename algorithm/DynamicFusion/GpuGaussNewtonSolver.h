@@ -126,17 +126,8 @@ namespace dfusion
 
 
 		// CSR sparse matrix of B
-		DeviceArray<float> m_B_val;
-		DeviceArray<int> m_B_RowPtr;
-		DeviceArray<int> m_B_RowPtr_coo;
-		DeviceArray<int> m_B_ColIdx;
-		DeviceArray<float> m_Bt_val;
-		DeviceArray<int> m_Bt_RowPtr;
-		DeviceArray<int> m_Bt_RowPtr_coo;
-		DeviceArray<int> m_Bt_ColIdx;
-		int m_Brows;
-		int m_Bcols;
-		int m_Bnnzs;
+		CudaBsrMatrix* m_B;
+		CudaBsrMatrix* m_Bt;
 
 		// CSR sparse matrix of Jr
 		DeviceArray<float> m_Jr_val;
@@ -155,8 +146,6 @@ namespace dfusion
 		int m_Jrnnzs;
 
 		cusparseMatDescr_t m_Jrt_desc;
-		cusparseMatDescr_t m_Bt_desc;
-		cusparseMatDescr_t m_B_desc;
 
 		// let Jr = [Jr0, Jr1]
 		//			[0,   Jr3]
@@ -198,10 +187,9 @@ namespace dfusion
 		CudaDiagBlockMatrix m_Hd_Linv;
 		CudaDiagBlockMatrix m_Hd_LLtinv;
 
-		// inv(Lt) * Bt; 
+		// Bt * inv(Lt); 
 		// its sparse pattern is the same with Bt
-		// we use the same sparse structure with Bt for it
-		DeviceArray<float> m_Bt_Ltinv_val;
+		CudaBsrMatrix* m_Bt_Ltinv;
 
 		//// cusparse handle
 		cublasHandle_t m_cublasHandle;

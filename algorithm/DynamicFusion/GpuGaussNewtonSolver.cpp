@@ -18,12 +18,13 @@ namespace dfusion
 			throw std::exception("cusolverDnCreatefailed!");
 
 		cusparseCreateMatDescr(&m_Jrt_desc);
-		cusparseCreateMatDescr(&m_Bt_desc);
-		cusparseCreateMatDescr(&m_B_desc);
 
 		m_nodes_for_buffer = 0;
 		m_not_lv0_nodes_for_buffer = 0;
 		m_pWarpField = nullptr;
+		m_B = new CudaBsrMatrix(m_cuSparseHandle);
+		m_Bt = new CudaBsrMatrix(m_cuSparseHandle);
+		m_Bt_Ltinv = new CudaBsrMatrix(m_cuSparseHandle);
 
 		reset();
 	}
@@ -34,9 +35,10 @@ namespace dfusion
 		cusolverDnDestroy(m_cuSolverHandle);
 		cublasDestroy(m_cublasHandle);
 		cusparseDestroyMatDescr(m_Jrt_desc);
-		cusparseDestroyMatDescr(m_Bt_desc);
-		cusparseDestroyMatDescr(m_B_desc);
 		cusparseDestroy(m_cuSparseHandle);
+		delete m_B;
+		delete m_Bt;
+		delete m_Bt_Ltinv;
 	}
 
 	template<class T>
@@ -112,10 +114,10 @@ namespace dfusion
 			m_Jrrows = 0; // unknown now, decided later
 			m_Jrcols = m_numNodes * VarPerNode;
 			m_Jrnnzs = 0; // unknown now, decided later
-			m_Brows = m_numLv0Nodes * VarPerNode;
-			m_Bcols = notLv0Nodes * VarPerNode;
-			m_Bnnzs = 0; // unknown now, decieded later
-			m_HrRowsCols = m_Bcols;
+			m_B->resize(m_numLv0Nodes, notLv0Nodes, VarPerNode, VarPerNode);
+			m_Bt->resize(notLv0Nodes, m_numLv0Nodes, VarPerNode, VarPerNode);
+			m_Bt_Ltinv->resize(notLv0Nodes, m_numLv0Nodes, VarPerNode, VarPerNode);
+			m_HrRowsCols = m_B->cols();
 		}
 
 		// make larger buffer to prevent malloc/free each frame
@@ -162,27 +164,6 @@ namespace dfusion
 			setzero(m_Jrt_val);
 			m_Jrt_RowPtr_coo.create(m_Jr_ColIdx.size());
 			setzero(m_Jrt_RowPtr_coo);
-
-			// B = Jr0'Jr1
-			m_B_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
-			setzero(m_B_RowPtr);
-			m_B_ColIdx.create(WarpField::KnnK * VarPerNode * m_B_RowPtr.size());
-			setzero(m_B_ColIdx);
-			m_B_RowPtr_coo.create(m_B_ColIdx.size());
-			setzero(m_B_RowPtr_coo);
-			m_B_val.create(m_B_ColIdx.size());
-			setzero(m_B_val);
-
-			m_Bt_RowPtr.create(m_nodes_for_buffer*VarPerNode + 1);
-			setzero(m_Bt_RowPtr);
-			m_Bt_ColIdx.create(m_B_ColIdx.size());
-			setzero(m_Bt_ColIdx);
-			m_Bt_RowPtr_coo.create(m_B_ColIdx.size());
-			setzero(m_Bt_RowPtr_coo);
-			m_Bt_val.create(m_B_ColIdx.size());
-			setzero(m_Bt_val);
-			m_Bt_Ltinv_val.create(m_B_ColIdx.size());
-			setzero(m_Bt_Ltinv_val);
 
 			// the energy function of reg term
 			m_f_r.create(m_Jr_RowPtr.size());
@@ -245,9 +226,6 @@ namespace dfusion
 		m_Jrrows = 0;
 		m_Jrcols = 0;
 		m_Jrnnzs = 0;
-		m_Brows = 0;
-		m_Bcols = 0;
-		m_Bnnzs = 0;
 		m_HrRowsCols = 0;
 
 		cudaMemset2D(m_vmapKnn.ptr(), m_vmapKnn.step(), 0, 
@@ -276,16 +254,9 @@ namespace dfusion
 		setzero(m_Jrt_RowPtr_coo);
 
 		// B = Jr0'Jr1
-		setzero(m_B_RowPtr);
-		setzero(m_B_ColIdx);
-		setzero(m_B_RowPtr_coo);
-		setzero(m_B_val);
-
-		setzero(m_Bt_RowPtr);
-		setzero(m_Bt_ColIdx);
-		setzero(m_Bt_RowPtr_coo);
-		setzero(m_Bt_val);
-		setzero(m_Bt_Ltinv_val);
+		*m_B = 0.f;
+		*m_Bt = 0.f;
+		*m_Bt_Ltinv = 0.f;
 
 		// the energy function of reg term
 		setzero(m_f_r);
@@ -433,9 +404,9 @@ namespace dfusion
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_numNodes*VarPerNode);
 		dumpSparseMatrix("D:/tmp/gpu_Jr.txt", m_Jr_RowPtr, m_Jr_ColIdx, m_Jr_val, m_Jrrows);
 		dumpSparseMatrix("D:/tmp/gpu_Jrt.txt", m_Jrt_RowPtr, m_Jrt_ColIdx, m_Jrt_val, m_Jrcols);
-		dumpSparseMatrix("D:/tmp/gpu_B.txt", m_B_RowPtr, m_B_ColIdx, m_B_val, m_Brows);
-		dumpSparseMatrix("D:/tmp/gpu_Bt.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_val, m_Bcols);
-		dumpSparseMatrix("D:/tmp/gpu_BtLtinv.txt", m_Bt_RowPtr, m_Bt_ColIdx, m_Bt_Ltinv_val, m_Bcols);
+		m_B->dump("D:/tmp/gpu_B.txt");
+		m_Bt->dump("D:/tmp/gpu_Bt.txt");
+		m_Bt_Ltinv->dump("D:/tmp/gpu_BtLtinv.txt");
 		dumpMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
 		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_HrRowsCols);
 		if (m_Q_kept.size() == m_Q.size())
