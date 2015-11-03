@@ -1696,7 +1696,8 @@ namespace dfusion
 		{
 			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
 			VarPerNode2 = VarPerNode*VarPerNode,
-			LowerPartNum = GpuGaussNewtonSolver::LowerPartNum
+			LowerPartNum = GpuGaussNewtonSolver::LowerPartNum,
+			BlockSize = VarPerNode * RowPerNode_RegTerm,
 		};
 
 		int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -1708,17 +1709,22 @@ namespace dfusion
 		int colShift = g_lower_2_colShift_6x6[eleLowerShift];
 		int row0 = Jrt_rptr[iNode];
 
-		const int row0_begin = (row0*VarPerNode + rowShift) * RowPerNode_RegTerm;
-		const int row_len = (Jrt_rptr[iNode + 1] - row0) * RowPerNode_RegTerm;
-		const int row1_begin = (row0*VarPerNode + colShift) * RowPerNode_RegTerm;
+		int row0_begin = (row0*VarPerNode + rowShift) * RowPerNode_RegTerm;
+		const int row_blocks = Jrt_rptr[iNode + 1] - row0;
+		int row1_begin = (row0*VarPerNode + colShift) * RowPerNode_RegTerm;
 
-		float sum = Hd[iNode * VarPerNode2 + rowShift*VarPerNode + colShift]; 
-		for (int i = 0; i < row_len; i++)
+		float sum = Hd[iNode * VarPerNode2 + rowShift*VarPerNode + colShift];
+		for (int iBlocks = 0; iBlocks < row_blocks; iBlocks++)
 		{
-			float v1 = 0.f, v2 = 0.f;
-			tex1Dfetch(&v1, Jrt_val, row0_begin + i);
-			tex1Dfetch(&v2, Jrt_val, row1_begin + i);
-			sum += v1 * v2;
+			for (int i = 0; i < RowPerNode_RegTerm; i++)
+			{
+				float v1 = 0.f, v2 = 0.f;
+				tex1Dfetch(&v1, Jrt_val, row0_begin + i);
+				tex1Dfetch(&v2, Jrt_val, row1_begin + i);
+				sum += v1 * v2;
+			}
+			row0_begin += BlockSize;
+			row1_begin += BlockSize;
 		}
 		sum *= (1 + diag_eps * (rowShift == colShift));
 
