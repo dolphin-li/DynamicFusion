@@ -1537,7 +1537,8 @@ namespace dfusion
 #endif
 
 			// jacobi=============================================
-			int cooPos = rptr[iBlockRow] * RowPerNode_RegTerm * VarPerNode;
+			int cooPos0 = rptr[iBlockRow] * RowPerNode_RegTerm * VarPerNode;
+			int cooPos1 = cooPos0 + RowPerNode_RegTerm * VarPerNode;
 			for (int ialpha = 0; ialpha < 3; ialpha++)
 			{
 				float inci = get_numeric_inc(ri[ialpha]);
@@ -1558,16 +1559,16 @@ namespace dfusion
 
 				for (int ixyz = 0; ixyz < 3; ixyz++)
 				{
-					int pos = cooPos + ixyz*ColPerRow + ialpha;
-					vptr[pos] = ww * (val_j_inci[ixyz] - val_j[ixyz]) / inci;
-					vptr[pos + VarPerNode] = ww * (val_j_incj[ixyz] - val_j[ixyz]) / incj;
+					vptr[cooPos0 + ixyz*VarPerNode + ialpha] = ww * (val_j_inci[ixyz] - val_j[ixyz]) / inci;
+					vptr[cooPos1 + ixyz*VarPerNode + ialpha] = ww * (val_j_incj[ixyz] - val_j[ixyz]) / incj;
 #ifndef DEFINE_USE_HALF_GRAPH_EDGE
-					pos += 3 * ColPerRow;
-					vptr[pos] = ww * (val_i_inci[ixyz] - val_i[ixyz]) / inci;
-					vptr[pos + VarPerNode] = ww * (val_i_incj[ixyz] - val_i[ixyz]) / incj;
+					vptr[cooPos0 + (3 + ixyz)*VarPerNode + ialpha] = ww * (val_i_inci[ixyz] - val_i[ixyz]) / inci;
+					vptr[cooPos1 + (3 + ixyz)*VarPerNode + ialpha] = ww * (val_i_incj[ixyz] - val_i[ixyz]) / incj;
 #endif
 				}
 			}// end for ialpha
+			cooPos0 += 3;
+			cooPos1 += 3;
 			for (int ialpha = 0; ialpha < 3; ialpha++)
 			{
 				float inci = get_numeric_inc(ti[ialpha]);
@@ -1588,13 +1589,11 @@ namespace dfusion
 
 				for (int ixyz = 0; ixyz < 3; ixyz++)
 				{
-					int pos = cooPos + ixyz*ColPerRow + ialpha + 3;
-					vptr[pos] = ww * (val_j_inci[ixyz] - val_j[ixyz]) / inci;
-					vptr[pos + VarPerNode] = ww * (val_j_incj[ixyz] - val_j[ixyz]) / incj;
+					vptr[cooPos0 + ixyz*VarPerNode + ialpha] = ww * (val_j_inci[ixyz] - val_j[ixyz]) / inci;
+					vptr[cooPos1 + ixyz*VarPerNode + ialpha] = ww * (val_j_incj[ixyz] - val_j[ixyz]) / incj;
 #ifndef DEFINE_USE_HALF_GRAPH_EDGE
-					pos += 3 * ColPerRow;
-					vptr[pos] = ww * (val_i_inci[ixyz] - val_i[ixyz]) / inci;
-					vptr[pos + VarPerNode] = ww * (val_i_incj[ixyz] - val_i[ixyz]) / incj;
+					vptr[cooPos0 + (3 + ixyz)*VarPerNode + ialpha] = ww * (val_i_inci[ixyz] - val_i[ixyz]) / inci;
+					vptr[cooPos1 + (3 + ixyz)*VarPerNode + ialpha] = ww * (val_i_incj[ixyz] - val_i[ixyz]) / incj;
 #endif
 				}
 			}// end for ialpha
