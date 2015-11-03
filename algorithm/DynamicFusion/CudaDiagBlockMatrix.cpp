@@ -23,6 +23,29 @@ void CudaDiagBlockMatrix::clear()
 	m_values.release();
 }
 
+template<class T>
+static void bindLinearTex(T* ptr, int sizeBytes, cudaTextureObject_t& old)
+{
+	if (old)
+		cudaSafeCall(cudaDestroyTextureObject(old), "CudaBsrMatrix::bindTexture::Destory");
+	cudaResourceDesc texRes;
+	memset(&texRes, 0, sizeof(cudaResourceDesc));
+	texRes.resType = cudaResourceTypeLinear;
+	texRes.res.linear.devPtr = ptr;
+	texRes.res.linear.sizeInBytes = sizeBytes;
+	texRes.res.linear.desc = cudaCreateChannelDesc<T>();
+	cudaTextureDesc texDescr;
+	memset(&texDescr, 0, sizeof(cudaTextureDesc));
+	texDescr.normalizedCoords = 0;
+	texDescr.filterMode = cudaFilterModePoint;
+	texDescr.addressMode[0] = cudaAddressModeClamp;
+	texDescr.addressMode[1] = cudaAddressModeClamp;
+	texDescr.addressMode[2] = cudaAddressModeClamp;
+	texDescr.readMode = cudaReadModeElementType;
+	cudaSafeCall(cudaCreateTextureObject(&old, &texRes, &texDescr, NULL),
+		"CudaBsrMatrix::bindTexture");
+}
+
 void CudaDiagBlockMatrix::resize(int numBlocks, int blockSize)
 {
 	m_numBlocks = numBlocks;
@@ -32,22 +55,7 @@ void CudaDiagBlockMatrix::resize(int numBlocks, int blockSize)
 		m_values.create(nnz() * 1.2);
 
 		// bind to texture
-		cudaResourceDesc texRes;
-		memset(&texRes, 0, sizeof(cudaResourceDesc));
-		texRes.resType = cudaResourceTypeLinear;
-		texRes.res.linear.devPtr = value();
-		texRes.res.linear.sizeInBytes = m_values.sizeBytes();
-		texRes.res.linear.desc = cudaCreateChannelDesc<float>();
-		cudaTextureDesc texDescr;
-		memset(&texDescr, 0, sizeof(cudaTextureDesc));
-		texDescr.normalizedCoords = 0;
-		texDescr.filterMode = cudaFilterModePoint;
-		texDescr.addressMode[0] = cudaAddressModeClamp;
-		texDescr.addressMode[1] = cudaAddressModeClamp;
-		texDescr.addressMode[2] = cudaAddressModeClamp;
-		texDescr.readMode = cudaReadModeElementType;
-		cudaSafeCall(cudaCreateTextureObject(&m_tex, &texRes, &texDescr, NULL),
-			"CudaDiagBlockMatrix::bindTexture");
+		bindLinearTex(value(), m_values.sizeBytes(), m_tex);
 	}
 }
 

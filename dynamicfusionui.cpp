@@ -963,7 +963,14 @@ void DynamicFusionUI::on_dbGSStep_valueChanged(double v)
 
 void DynamicFusionUI::on_pbDebug_clicked()
 {
-	g_dataholder.m_processor.getSolver()->debug_print();
+	try
+	{
+		g_dataholder.m_processor.getSolver()->debug_print();
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }
 
 void DynamicFusionUI::on_sbFrmIdxPlus_valueChanged(int v)

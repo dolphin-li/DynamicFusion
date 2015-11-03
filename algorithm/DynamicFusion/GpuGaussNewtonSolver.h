@@ -7,6 +7,7 @@
 #include <cusparse.h>
 #include <cusolverDn.h>
 #include "CudaDiagBlockMatrix.h"
+#include "CudaBsrMatrix.h"
 namespace dfusion
 {
 	class GpuGaussNewtonSolver
