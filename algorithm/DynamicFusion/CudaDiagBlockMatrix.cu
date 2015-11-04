@@ -19,7 +19,9 @@ __global__ void CudaDiagBlockMatrix_scale_add_diag(int nRow, int bSz, float* ptr
 	int iDiag = threadIdx.x + blockIdx.x * blockDim.x;
 	if (iDiag < nRow)
 	{
-		int pos = iDiag*bSz*bSz + bSz;
+		int iBlock = iDiag / bSz;
+		int shift = iDiag - iBlock * bSz;
+		int pos = (iBlock*bSz + shift)*bSz + shift;
 		ptr[pos] = alpha * ptr[pos] + beta;
 	}
 }
