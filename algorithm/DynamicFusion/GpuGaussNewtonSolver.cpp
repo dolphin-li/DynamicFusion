@@ -22,8 +22,8 @@ namespace dfusion
 		m_pWarpField = nullptr;
 		m_Jr = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Jrt = new CudaBsrMatrix(m_cuSparseHandle);
-		m_Jrt13_structure = new CudaBsrMatrix(m_cuSparseHandle);
-		m_Jr13_structure = new CudaBsrMatrix(m_cuSparseHandle);
+		m_Jrt13_structure = new CudaBsrMatrix(m_cuSparseHandle, true);
+		m_Jr13_structure = new CudaBsrMatrix(m_cuSparseHandle, true);
 		m_B = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Bt = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Bt_Ltinv = new CudaBsrMatrix(m_cuSparseHandle);

@@ -1064,9 +1064,13 @@ namespace dfusion
 		// 2. compute Jrt structure ==============================================
 		// 2.1. fill (row, col) as (col, row) from Jr and sort.
 		m_Jr->transposeStructureTo(*m_Jrt);
+		cudaSafeCall(cudaThreadSynchronize(), "1");
 		m_Jrt->subRows_structure(*m_Jrt13_structure, m_numLv0Nodes, m_numNodes);
+		cudaSafeCall(cudaThreadSynchronize(), "2");
 		m_Jrt13_structure->transposeStructureTo(*m_Jr13_structure);
+		cudaSafeCall(cudaThreadSynchronize(), "3");
 		m_Jrt13_structure->multBsr_structure(*m_Jr13_structure, *m_Hr);
+		cudaSafeCall(cudaThreadSynchronize(), "4");
 
 		// 3. compute B structure ==============================================
 		// 3.1 the row ptr of B is the same CSR info with the first L0 rows of Jrt.

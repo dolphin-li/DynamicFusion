@@ -55,7 +55,7 @@ public:
 			float alpha = 1.f, float beta = 0.f)const;
 	};
 public:
-	CudaBsrMatrix(cusparseHandle_t handle);
+	CudaBsrMatrix(cusparseHandle_t handle, bool symbolic=false);
 	~CudaBsrMatrix();
 
 	void clear();
@@ -94,6 +94,7 @@ public:
 	void resize_nnzBlocks(int nnzBlocks);
 
 	//
+	bool isSymbolic()const{ return m_symbolic; }
 	int blocksInRow()const{ return m_blocksInRow; }
 	int blocksInCol()const{ return m_blocksInCol; }
 	int rowsPerBlock() const{ return m_rowsPerBlock; }
@@ -163,6 +164,7 @@ public:
 protected:
 	static void fill_increment_1_n(int* data, int n);
 	void transpose_fill_values_by_blockId(const int* blockIds, const CudaBsrMatrix& t);
+	char* get_helper_buffer(int nBytes)const;
 private:
 	cusparseHandle_t m_cusparseHandle;
 	cusparseMatDescr_t m_desc;
@@ -171,6 +173,7 @@ private:
 	int m_rowsPerBlock;
 	int m_colsPerBlock;
 	int m_nnzBlocks;
+	bool m_symbolic;
 	cudaTextureObject_t m_tex_values;
 	cudaTextureObject_t m_tex_bsrRowPtr;
 	cudaTextureObject_t m_tex_bsrRowPtr_coo;

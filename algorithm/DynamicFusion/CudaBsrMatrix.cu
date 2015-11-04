@@ -385,6 +385,8 @@ void CudaBsrMatrix::fill_increment_1_n(int* data, int n)
 
 void CudaBsrMatrix::transpose_fill_values_by_blockId(const int* blockIds, const CudaBsrMatrix& t)
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::transpose_fill_values_by_blockId(): symbolic matrix cannot touch values");
 	CudaBsrMatrix_transpose_fill_value_by_bid << <divUp(nnz(), CTA_SIZE), CTA_SIZE >> >(
 		blockIds, t.value(), value(), rowsPerBlock() * colsPerBlock(), rowsPerBlock(), 
 		colsPerBlock(), nnz());
@@ -393,6 +395,8 @@ void CudaBsrMatrix::transpose_fill_values_by_blockId(const int* blockIds, const 
 
 CudaBsrMatrix& CudaBsrMatrix::operator = (float constVal)
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::operator =: symbolic matrix cannot touch values");
 	if (nnz() == 0)
 		return *this;
 	if (constVal == 0.f)
@@ -411,6 +415,7 @@ CudaBsrMatrix& CudaBsrMatrix::operator = (float constVal)
 CudaBsrMatrix& CudaBsrMatrix::operator = (const CudaBsrMatrix& rhs)
 {
 	m_cusparseHandle = rhs.m_cusparseHandle;
+	m_symbolic = rhs.m_symbolic;
 	resize(rhs.blocksInRow(), rhs.blocksInCol(), rhs.rowsPerBlock(), rhs.colsPerBlock());
 	resize_nnzBlocks(rhs.nnzBlocks());
 
@@ -423,14 +428,17 @@ CudaBsrMatrix& CudaBsrMatrix::operator = (const CudaBsrMatrix& rhs)
 	cudaSafeCall(cudaMemcpy(bsrColIdx(), rhs.bsrColIdx(),
 		rhs.nnzBlocks()*sizeof(int), cudaMemcpyDeviceToDevice),
 		"CudaBsrMatrix::operator =, cpy bsrColIdx");
-	cudaSafeCall(cudaMemcpy(value(), rhs.value(),
-		rhs.nnz()*sizeof(float), cudaMemcpyDeviceToDevice),
-		"CudaBsrMatrix::operator =, cpy value");
+	if (!isSymbolic())
+		cudaSafeCall(cudaMemcpy(value(), rhs.value(),
+			rhs.nnz()*sizeof(float), cudaMemcpyDeviceToDevice),
+			"CudaBsrMatrix::operator =, cpy value");
 	return *this;
 }
 
 CudaBsrMatrix& CudaBsrMatrix::axpy(float alpha, float beta)
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::axpy(): symbolic matrix cannot touch values");
 	if (nnz() == 0)
 		return *this;
 	CudaBsrMatrix_scale_add << <divUp(nnz(), CTA_SIZE), CTA_SIZE >> >(
@@ -441,6 +449,8 @@ CudaBsrMatrix& CudaBsrMatrix::axpy(float alpha, float beta)
 
 CudaBsrMatrix& CudaBsrMatrix::axpy_diag(float alpha, float beta)
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::axpy_diag(): symbolic matrix cannot touch values");
 	if (rowsPerBlock() != colsPerBlock() || blocksInRow() != blocksInCol())
 		throw std::exception("CudaBsrMatrix::axpy_diag(): only square matrix supported");
 	if (nnz() == 0)
@@ -453,6 +463,8 @@ CudaBsrMatrix& CudaBsrMatrix::axpy_diag(float alpha, float beta)
 
 void CudaBsrMatrix::setValue(const float* val_d)
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::setValue(): symbolic matrix cannot touch values");
 	cudaSafeCall(cudaMemcpy(value(), val_d, nnz()*sizeof(float),
 		cudaMemcpyDeviceToDevice), "CudaBsrMatrix::setValue");
 }
@@ -461,6 +473,8 @@ void CudaBsrMatrix::Mv(const float* x, float* y, float alpha, float beta)const
 {
 	if (rows() == 0 || cols() == 0)
 		return;
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::Mv(): symbolic matrix cannot touch values");
 	switch (colsPerBlock())
 	{
 	case 0:
@@ -514,6 +528,8 @@ void CudaBsrMatrix::rightMultDiag_structure(const CudaDiagBlockMatrix& x, CudaBs
 void CudaBsrMatrix::rightMultDiag_value(const CudaDiagBlockMatrix& x, CudaBsrMatrix& y,
 	bool useLowerInsteadOfFull_x, bool trans_x, float alpha, float beta)const
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::rightMultDiag_value(): symbolic matrix cannot touch values");
 	if (cols() != x.rows())
 		throw std::exception("CudaBsrMatrix::rightMultDiag_value: block size not matched");
 	if (x.blockSize() != colsPerBlock() || x.blockSize() != rowsPerBlock())
@@ -561,6 +577,8 @@ void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, floa
 {
 	if (A == nullptr || B.A == nullptr)
 		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): null pointer exception");
+	if (A->isSymbolic() || B.A->isSymbolic())
+		throw std::exception("CudaBsrMatrix::multBsrT_value(): symbolic matrix cannot touch values");
 	if (blocksInCol() != B.blocksInCol())
 		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): matrix size not matched");
 	if (colsPerBlock() != B.colsPerBlock())
@@ -586,6 +604,8 @@ void CudaBsrMatrix::Range::AAt_blockDiags(CudaDiagBlockMatrix& C,
 {
 	if (A == nullptr)
 		throw std::exception("CudaBsrMatrix::Range::AAt_blockDiags(): null pointer exception");
+	if (A->isSymbolic())
+		throw std::exception("CudaBsrMatrix::AAt_blockDiags(): symbolic matrix cannot touch values");
 	if (blocksInRow() != C.numBlocks())
 		throw std::exception("CudaBsrMatrix::Range::AAt_blockDiags(): matrix size not matched");
 	if (rowsPerBlock() != C.blockSize())
@@ -628,6 +648,8 @@ void CudaBsrMatrix::subRows_structure(CudaBsrMatrix& S, int blockRowBegin, int b
 
 void CudaBsrMatrix::subRows_value(CudaBsrMatrix& S, int blockRowBegin, int blockRowEnd)const
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::AAt_blockDiags(): symbolic matrix cannot touch values");
 	blockRowBegin = std::max(0, blockRowBegin);
 	blockRowEnd = std::min(blocksInRow(), blockRowEnd);
 	if (S.blocksInRow() != blockRowEnd - blockRowBegin ||

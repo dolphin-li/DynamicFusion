@@ -10,9 +10,10 @@ static void cusparseCheck(cusparseStatus_t st, const char* msg = nullptr)
 	}
 }
 
-CudaBsrMatrix::CudaBsrMatrix(cusparseHandle_t handle)
+CudaBsrMatrix::CudaBsrMatrix(cusparseHandle_t handle, bool symbolic)
 {
 	m_cusparseHandle = handle;
+	m_symbolic = symbolic;
 	m_blocksInRow = 0;
 	m_blocksInCol = 0;
 	m_rowsPerBlock = 0;
@@ -103,10 +104,12 @@ void CudaBsrMatrix::resize_nnzBlocks(int nnzBlocks)
 	m_nnzBlocks = nnzBlocks;
 	if (m_nnzBlocks > m_bsrColIdx.size())
 	{
-		m_values.create(nnz()*1.2);
+		if (!m_symbolic)
+			m_values.create(nnz()*1.2);
 		m_bsrColIdx.create(m_nnzBlocks*1.2);
 		m_bsrRowPtr_coo.create(m_nnzBlocks*1.2);
-		bindLinearTex(m_values.ptr(), m_values.sizeBytes(), m_tex_values);
+		if (!m_symbolic)
+			bindLinearTex(m_values.ptr(), m_values.sizeBytes(), m_tex_values);
 		bindLinearTex(m_bsrColIdx.ptr(), m_bsrColIdx.sizeBytes(), m_tex_bsrColIdx);
 		bindLinearTex(m_bsrRowPtr_coo.ptr(), m_bsrRowPtr_coo.sizeBytes(), m_tex_bsrRowPtr_coo);
 	}
@@ -161,19 +164,20 @@ void CudaBsrMatrix::transposeStructureTo(CudaBsrMatrix& rhs)const
 
 void CudaBsrMatrix::transposeValueTo(CudaBsrMatrix& rhs)const
 {
+	if (isSymbolic() || rhs.isSymbolic())
+		throw std::exception("CudaBsrMatrix::transposeValueTo(): symbolic matrix cannot touch values!");
 	rhs.m_cusparseHandle = m_cusparseHandle;
 	rhs.resize(m_blocksInCol, m_blocksInRow, m_colsPerBlock, m_rowsPerBlock);
 	rhs.resize_nnzBlocks(m_nnzBlocks);
 	cudaSafeCall(cudaMemcpy(rhs.bsrRowPtr_coo(), bsrColIdx(), nnzBlocks()*sizeof(int),
 		cudaMemcpyDeviceToDevice), "CudaBsrMatrix::transposeValueTo, 1");
 
-	if (m_helperBuffer.size() < m_bsrColIdx.size())
-		m_helperBuffer.create(m_bsrColIdx.size());
-	fill_increment_1_n(m_helperBuffer.ptr(), m_nnzBlocks);
-	modergpu_wrapper::mergesort_by_key(rhs.bsrRowPtr_coo(), m_helperBuffer.ptr(), rhs.nnzBlocks());
+	int *hptr = (int*)get_helper_buffer(m_bsrColIdx.sizeBytes());
+	fill_increment_1_n(hptr, m_nnzBlocks);
+	modergpu_wrapper::mergesort_by_key(rhs.bsrRowPtr_coo(), hptr, rhs.nnzBlocks());
 	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix::transposeValueTo 2");
 
-	rhs.transpose_fill_values_by_blockId(m_helperBuffer.ptr(), *this);
+	rhs.transpose_fill_values_by_blockId(hptr, *this);
 }
 
 void CudaBsrMatrix::setRowFromBsrRowPtr(const int* bsrRowPtr)
@@ -188,31 +192,34 @@ void CudaBsrMatrix::setRowFromBsrRowPtr(const int* bsrRowPtr)
 
 void CudaBsrMatrix::fromCsr(const int* csrRowPtr, const int* csrColIdx, const float* csrValue)
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::fromCsr(): symbolic matrix cannot touch values!");
 	if (blocksInRow() == 0)
 		return;
 
 	int bufferSizeInBytes = 0;
 	cusparseCheck(cusparseScsr2gebsr_bufferSize(m_cusparseHandle, CUSPARSE_DIRECTION_ROW, rows(), cols(),
 		m_desc, csrValue, csrRowPtr, csrColIdx, rowsPerBlock(), colsPerBlock(), &bufferSizeInBytes));
-	if (bufferSizeInBytes > m_helperBuffer.sizeBytes())
-		m_helperBuffer.create(bufferSizeInBytes / m_helperBuffer.elem_size);
+	char* hptr = get_helper_buffer(bufferSizeInBytes);
 
 	// 1. rows
 	beginConstructRowPtr();
 	cusparseCheck(cusparseXcsr2gebsrNnz(m_cusparseHandle, CUSPARSE_DIRECTION_ROW, rows(), cols(), m_desc,
 		csrRowPtr, csrColIdx, m_desc, bsrRowPtr(), rowsPerBlock(), colsPerBlock(), 
-		&m_nnzBlocks, m_helperBuffer.ptr()));
+		&m_nnzBlocks, hptr));
 	endConstructRowPtr(m_nnzBlocks);
 
 	// 2. cols & values
 	cusparseCheck(cusparseScsr2gebsr(m_cusparseHandle, CUSPARSE_DIRECTION_ROW, rows(), cols(), m_desc,
 		csrValue, csrRowPtr, csrColIdx, m_desc, value(), bsrRowPtr(), bsrColIdx(),
-		rowsPerBlock(), colsPerBlock(), m_helperBuffer.ptr()));
+		rowsPerBlock(), colsPerBlock(), hptr));
 }
 
 void CudaBsrMatrix::toCsr(DeviceArray<int>& csrRowPtr, DeviceArray<int>& csrColIdx, 
 	DeviceArray<float>& csrValue)const
 {
+	if (isSymbolic())
+		throw std::exception("CudaBsrMatrix::toCsr(): symbolic cannot touch values");
 	if (csrRowPtr.size() < rows() + 1)
 		csrRowPtr.create(rows() + 1);
 	if (csrColIdx.size() < nnz())
@@ -252,7 +259,8 @@ void CudaBsrMatrix::dump(std::string name)const
 
 	m_bsrRowPtr.download(bhr);
 	m_bsrColIdx.download(bhc);
-	m_values.download(hv);
+	if (!isSymbolic())
+		m_values.download(hv);
 
 	FILE* pFile = fopen(name.c_str(), "w");
 	if (pFile)
@@ -267,7 +275,12 @@ void CudaBsrMatrix::dump(std::string name)const
 				int valbegin = bic * m_colsPerBlock * m_rowsPerBlock;
 				for (int r = 0; r < m_rowsPerBlock; r++)
 				for (int c = 0; c < m_colsPerBlock; c++)
-					fprintf(pFile, "%d %d %ef\n", rowbegin + r, colbegin + c, hv[valbegin++]);
+				{
+					if (!isSymbolic())
+						fprintf(pFile, "%d %d %ef\n", rowbegin + r, colbegin + c, hv[valbegin++]);
+					else
+						fprintf(pFile, "%d %d %ef\n", rowbegin + r, colbegin + c, 1.f);
+				}
 			}
 			// if an empty row, fill diag with zero
 			// this is for the convinience when exporting to matlab
@@ -309,12 +322,22 @@ void CudaBsrMatrix::Range::multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatr
 	// 2. construct cols
 	// NOTE: cusparse calculates values together with colIdx
 	// here we only want colIdx, the values calculated here is invalid since we use bsr format
+	const float* avptr = A->isSymbolic() ? (const float*)A->get_helper_buffer(A->nnzBlocks()) : A->value();
+	const float* bvptr = B.isSymbolic() ? (const float*)B.get_helper_buffer(B.nnzBlocks()) : B.value();
+	float* cvptr = C.isSymbolic() ? (float*)C.get_helper_buffer(C.nnzBlocks()) : C.value();
 	cusparseCheck(cusparseScsrgemm(A->m_cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
 		CUSPARSE_OPERATION_NON_TRANSPOSE,
 		blocksInRow(), B.blocksInCol(), blocksInCol(),
-		A->m_desc, A->nnzBlocks(), A->value(), A->bsrRowPtr(), A->bsrColIdx(),
-		B.m_desc, B.nnzBlocks(), B.value(), B.bsrRowPtr(), B.bsrColIdx(),
-		C.m_desc, C.value(), C.bsrRowPtr(), C.bsrColIdx()));
+		A->m_desc, A->nnzBlocks(), avptr, A->bsrRowPtr(), A->bsrColIdx(),
+		B.m_desc, B.nnzBlocks(), bvptr, B.bsrRowPtr(), B.bsrColIdx(),
+		C.m_desc, cvptr, C.bsrRowPtr(), C.bsrColIdx()));
+}
+
+char* CudaBsrMatrix::get_helper_buffer(int nBytes)const
+{
+	if (m_helperBuffer.sizeBytes() < nBytes)
+		m_helperBuffer.create(nBytes*1.2);
+	return (char*)m_helperBuffer.ptr();
 }
 
 
