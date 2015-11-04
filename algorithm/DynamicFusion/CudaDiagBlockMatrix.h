@@ -48,6 +48,9 @@ public:
 	// return alpha * this + beta
 	CudaDiagBlockMatrix& axpy(float alpha, float beta = 0.f);
 
+	// this(i,i) = alpha * this(i,i) + beta
+	CudaDiagBlockMatrix& axpy_diag(float alpha, float beta = 0.f);
+
 	// cholesky decomposition, results overwrite 
 	// the lower part of the row majored matrix.
 	// assume positive definate

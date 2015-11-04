@@ -45,6 +45,11 @@ public:
 
 		// C = alpha * this * B'; Assume structure is given
 		void multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f);
+
+		// compute C = alpha * blockDiag(this*this') + beta*C;
+		// if lowerInsteadOfFull, then only the lower triangular part is touched
+		void AAt_blockDiags(CudaDiagBlockMatrix& C, bool lowerInsteadOfFull,
+			float alpha = 1.f, float beta=0.f);
 	};
 public:
 	CudaBsrMatrix(cusparseHandle_t handle);
@@ -127,6 +132,11 @@ public:
 
 	// C = alpha*this*B'
 	void multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f);
+
+	// compute C = alpha * blockDiag(this*this') + beta*C;
+	// if lowerInsteadOfFull, then only the lower triangular part is touched
+	void AAt_blockDiags(CudaDiagBlockMatrix& C, bool lowerInsteadOfFull,
+		float alpha = 1.f, float beta = 0.f);
 
 	// mult-matrix: y = alpha * this * x + beta * y
 	// if useLowerInsteadOfFull, then only the lower triangular part will be considered

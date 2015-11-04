@@ -212,10 +212,12 @@ __global__ void CudaBsrMatrix_rightMultDiag(
 }
 
 __global__ void CudaBsrMatrix_Range_multBsrT_value(
-	const int* bsrRowPtrA, cudaTextureObject_t bsrColIdxA, cudaTextureObject_t valueA, int rangeColBeginA,
-	const int* bsrRowPtrB, cudaTextureObject_t bsrColIdxB, cudaTextureObject_t valueB, int rangeColBeginB,
+	const int* bsrRowPtrA, cudaTextureObject_t bsrColIdxA, cudaTextureObject_t valueA, 
+	int rangeColBeginA, int rangeColEndA,
+	const int* bsrRowPtrB, cudaTextureObject_t bsrColIdxB, cudaTextureObject_t valueB, 
+	int rangeColBeginB, int rangeColEndB,
 	const int* bsrRowPtrC_coo, const int* bsrColIdxC, float* valueC, 
-	int rowsPerBlockA, int colsPerBlockA, int rowsPerBlockB, int nnzC
+	int rowsPerBlockA, int colsPerBlockA, int rowsPerBlockB, int nnzC, float alpha
 	)
 {
 	int innzC = threadIdx.x + blockIdx.x * blockDim.x;
@@ -240,9 +242,11 @@ __global__ void CudaBsrMatrix_Range_multBsrT_value(
 		int colBlockA = 0, colBlockB = 0;
 		tex1Dfetch(&colBlockA, bsrColIdxA, i0);
 		tex1Dfetch(&colBlockB, bsrColIdxB, i1);
+		if (colBlockA >= rangeColEndA || colBlockB >= rangeColEndB)
+			break;
 		colBlockA -= rangeColBeginA;
 		colBlockB -= rangeColBeginB;
-		if (colBlockA == colBlockB)
+		if (colBlockA == colBlockB && colBlockA >= 0)
 		{
 			int pos0 = (i0*colsPerBlockA + rowShiftC)*rowsPerBlockA;
 			int pos1 = (i1*rowsPerBlockB + colShiftC)*colsPerBlockA;
@@ -257,10 +261,55 @@ __global__ void CudaBsrMatrix_Range_multBsrT_value(
 			i1++;
 		}
 
-		i0 += (colBlockA < colBlockB);
-		i1 += (colBlockA > colBlockB);
+		i0 += (colBlockA < colBlockB) || (colBlockA < 0);
+		i1 += (colBlockA > colBlockB) || (colBlockB < 0);
 	}// i
-	valueC[innzC] = sum;
+	valueC[innzC] = alpha * sum;
+}
+
+__global__ void CudaBsrMatrix_Range_AAt_blockDiags(
+	const int* bsrRowPtrA, cudaTextureObject_t bsrColIdxA, cudaTextureObject_t valueA, 
+	int rangeColBeginA, int rangeColEndA,
+	float* diag, int rowsPerBlockA, int colsPerBlockA, int nnzDiag, 
+	bool useLowerInsteadOfFull, float alpha, float beta
+	)
+{
+	int innzDiag = threadIdx.x + blockIdx.x * blockDim.x;
+	if (innzDiag >= nnzDiag)
+		return;
+	int blockDiagSz = rowsPerBlockA*rowsPerBlockA;
+	int iBlockDiag = innzDiag / blockDiagSz;
+	int shift = innzDiag - iBlockDiag*blockDiagSz;
+	int rowShift = shift / colsPerBlockA;
+	int colShift = shift - rowShift * colsPerBlockA;
+	if (useLowerInsteadOfFull && rowShift < colShift)
+		return;
+
+	int row0 = bsrRowPtrA[iBlockDiag];
+
+	int row0_begin = (row0*rowsPerBlockA + rowShift) * colsPerBlockA;
+	const int row_blocks = bsrRowPtrA[iBlockDiag + 1] - row0;
+	int row1_begin = (row0*rowsPerBlockA + colShift) * colsPerBlockA;
+
+	int blockSzA = rowsPerBlockA * colsPerBlockA;
+	float sum = 0;
+	int colBlock = 0;
+	for (int iBlocks = 0; iBlocks < row_blocks && colBlock < rangeColEndA; 
+		iBlocks++, row0_begin += blockSzA, row1_begin += blockSzA)
+	{
+		tex1Dfetch(&colBlock, bsrColIdxA, row0 + iBlocks);
+		if (colBlock < rangeColBeginA)
+			continue;
+		for (int i = 0; i < colsPerBlockA; i++)
+		{
+			float v1 = 0.f, v2 = 0.f;
+			tex1Dfetch(&v1, valueA, row0_begin + i);
+			tex1Dfetch(&v2, valueA, row1_begin + i);
+			sum += v1 * v2;
+		}
+	}
+
+	diag[innzDiag] = alpha*sum + beta*diag[innzDiag];
 }
 
 void CudaBsrMatrix::fill_increment_1_n(int* data, int n)
@@ -449,9 +498,32 @@ void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, floa
 		return;
 
 	CudaBsrMatrix_Range_multBsrT_value << <divUp(C.nnz(), CTA_SIZE), CTA_SIZE >> >(
-		A->bsrRowPtr()+blockRowBegin, A->bsrColIdxTexture(), A->valueTexture(), blockColBegin,
-		B.A->bsrRowPtr()+B.blockRowBegin, B.A->bsrColIdxTexture(), B.A->valueTexture(), B.blockColBegin,
+		A->bsrRowPtr()+blockRowBegin, A->bsrColIdxTexture(), A->valueTexture(), 
+		blockColBegin, blockColEnd,
+		B.A->bsrRowPtr()+B.blockRowBegin, B.A->bsrColIdxTexture(), B.A->valueTexture(), 
+		B.blockColBegin, B.blockColEnd,
 		C.bsrRowPtr_coo(), C.bsrColIdx(), C.value(),
-		rowsPerBlock(), colsPerBlock(), B.rowsPerBlock(), C.nnz()
+		rowsPerBlock(), colsPerBlock(), B.rowsPerBlock(), C.nnz(), alpha
+		);
+}
+
+void CudaBsrMatrix::Range::AAt_blockDiags(CudaDiagBlockMatrix& C,
+	bool lowerInsteadOfFull, float alpha, float beta)
+{
+	if (A == nullptr)
+		throw std::exception("CudaBsrMatrix::Range::AAt_blockDiags(): null pointer exception");
+	if (blocksInRow() != C.numBlocks())
+		throw std::exception("CudaBsrMatrix::Range::AAt_blockDiags(): matrix size not matched");
+	if (rowsPerBlock() != C.blockSize())
+		throw std::exception("CudaBsrMatrix::Range::AAt_blockDiags(): block size not matched");
+	if (A->nnzBlocks() == 0)
+		return;
+
+
+	CudaBsrMatrix_Range_AAt_blockDiags << <divUp(C.nnz(), CTA_SIZE), CTA_SIZE >> >(
+		A->bsrRowPtr() + blockRowBegin, A->bsrColIdxTexture(), A->valueTexture(), 
+		blockColBegin, blockColEnd,
+		C.value(), rowsPerBlock(), colsPerBlock(), C.nnz(), 
+		lowerInsteadOfFull, alpha, beta
 		);
 }

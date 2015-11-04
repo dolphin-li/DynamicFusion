@@ -14,6 +14,17 @@ __global__ void CudaDiagBlockMatrix_scale_add(int n, float* ptr, float alpha, fl
 		ptr[i] = alpha * ptr[i] + beta;
 }
 
+__global__ void CudaDiagBlockMatrix_scale_add_diag(int nRow, int bSz, float* ptr, float alpha, float beta)
+{
+	int iDiag = threadIdx.x + blockIdx.x * blockDim.x;
+	if (iDiag < nRow)
+	{
+		int pos = iDiag*bSz*bSz + bSz;
+		ptr[pos] = alpha * ptr[pos] + beta;
+	}
+}
+
+
 // vec_out = alpha * Linv * vec_in + beta * vec_out
 __global__ void CudaDiagBlockMatrix_Lv_kernel(
 	cudaTextureObject_t tex,
@@ -101,6 +112,16 @@ CudaDiagBlockMatrix& CudaDiagBlockMatrix::axpy(float alpha, float beta)
 		return *this;
 	CudaDiagBlockMatrix_scale_add << <divUp(nnz(), CTA_SIZE), CTA_SIZE >> >(nnz(), m_values.ptr(), alpha, beta);
 	cudaSafeCall(cudaGetLastError(), "CudaDiagBlockMatrix::axpy");
+	return *this;
+}
+
+CudaDiagBlockMatrix& CudaDiagBlockMatrix::axpy_diag(float alpha, float beta)
+{
+	if (rows() == 0)
+		return *this;
+	CudaDiagBlockMatrix_scale_add_diag << <divUp(rows(), CTA_SIZE), CTA_SIZE >> >(
+		rows(), blockSize(), m_values.ptr(), alpha, beta);
+	cudaSafeCall(cudaGetLastError(), "CudaDiagBlockMatrix::axpy_diag");
 	return *this;
 }
 

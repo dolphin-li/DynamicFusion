@@ -1688,101 +1688,6 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --calc Hessian
-	__global__ void calcJr0tJr0_add_to_Hd_kernel(float* Hd, int nLv0Nodes, 
-		const int* Jrt_rptr, cudaTextureObject_t Jrt_val, float diag_eps)
-	{
-		enum
-		{
-			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
-			VarPerNode2 = VarPerNode*VarPerNode,
-			LowerPartNum = GpuGaussNewtonSolver::LowerPartNum,
-			BlockSize = VarPerNode * RowPerNode_RegTerm,
-		};
-
-		int tid = threadIdx.x + blockIdx.x * blockDim.x;
-		int iNode = tid / LowerPartNum;
-		if (iNode >= nLv0Nodes)
-			return;
-		int eleLowerShift = tid - iNode*LowerPartNum;
-		int rowShift = g_lower_2_rowShift_6x6[eleLowerShift];
-		int colShift = g_lower_2_colShift_6x6[eleLowerShift];
-		int row0 = Jrt_rptr[iNode];
-
-		int row0_begin = (row0*VarPerNode + rowShift) * RowPerNode_RegTerm;
-		const int row_blocks = Jrt_rptr[iNode + 1] - row0;
-		int row1_begin = (row0*VarPerNode + colShift) * RowPerNode_RegTerm;
-
-		float sum = Hd[iNode * VarPerNode2 + rowShift*VarPerNode + colShift];
-		for (int iBlocks = 0; iBlocks < row_blocks; iBlocks++)
-		{
-			for (int i = 0; i < RowPerNode_RegTerm; i++)
-			{
-				float v1 = 0.f, v2 = 0.f;
-				tex1Dfetch(&v1, Jrt_val, row0_begin + i);
-				tex1Dfetch(&v2, Jrt_val, row1_begin + i);
-				sum += v1 * v2;
-			}
-			row0_begin += BlockSize;
-			row1_begin += BlockSize;
-		}
-		sum *= (1 + diag_eps * (rowShift == colShift));
-
-		Hd[iNode * VarPerNode2 + rowShift*VarPerNode+colShift] = sum;
-	}
-
-	__global__ void calcB_kernel(
-		float* B_val, const int* B_rptr_coo, const int* B_cidx, 
-		int nBlockBrows, int Bnnz, const int* Jrt_rptr, 
-		cudaTextureObject_t Jrt_cidx, cudaTextureObject_t Jrt_val)
-	{
-		enum{VarPerNode = GpuGaussNewtonSolver::VarPerNode};
-
-		int tid = threadIdx.x + blockIdx.x * blockDim.x;
-		if (tid >= Bnnz)
-			return;
-
-		int blockB = tid / (VarPerNode*VarPerNode);
-		int shift = tid - blockB * VarPerNode*VarPerNode;
-		int rowShift = shift / VarPerNode;
-		int colShift = shift - rowShift * VarPerNode;
-
-		int iBlockBrow = B_rptr_coo[blockB];
-		int iBlockBcol = B_cidx[blockB];
-
-		int Jr0t_cb = Jrt_rptr[iBlockBrow];
-		int Jr0t_ce = Jrt_rptr[iBlockBrow + 1];
-
-		int Jr1_rb = Jrt_rptr[iBlockBcol + nBlockBrows];
-		int Jr1_re = Jrt_rptr[iBlockBcol + nBlockBrows + 1];
-
-		float sum = 0.f;
-		for (int i0 = Jr0t_cb, i1 = Jr1_rb; i0 < Jr0t_ce && i1 < Jr1_re; )
-		{
-			int Jr0t_c = 0, Jr1_r = 0;
-			tex1Dfetch(&Jr0t_c, Jrt_cidx, i0);
-			tex1Dfetch(&Jr1_r, Jrt_cidx, i1);
-			if (Jr0t_c == Jr1_r)
-			{
-				int pos0 = (i0*VarPerNode + rowShift)*RowPerNode_RegTerm;
-				int pos1 = (i1*VarPerNode + colShift)*RowPerNode_RegTerm;
-				for (int k = 0; k < VarPerNode; k++)
-				{
-					float v1 = 0.f, v2 = 0.f;
-					tex1Dfetch(&v1, Jrt_val, pos0+k);
-					tex1Dfetch(&v2, Jrt_val, pos1+k);
-					sum += v1 * v2;
-				}
-				i0 ++;
-				i1 ++;
-			}
-
-			i0 += (Jr0t_c < Jr1_r);
-			i1 += (Jr0t_c > Jr1_r);
-		}// i
-
-		B_val[tid] = sum;
-	}
-
 	__global__ void calcHr_kernel(float* Hr, const int* Jrt_rptr,
 		cudaTextureObject_t Jrt_cidx, cudaTextureObject_t Jrt_val,
 		int HrRowsCols, int nBlockBrows, float diag_eps)
@@ -1842,14 +1747,9 @@ namespace dfusion
 	void GpuGaussNewtonSolver::calcHessian()
 	{
 		// 1. compute Jr0'Jr0 and accumulate into Hd
-		if (m_Jr->rows() > 0)
-		{
-			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_numLv0Nodes*LowerPartNum, block.x));
-			calcJr0tJr0_add_to_Hd_kernel << <grid, block >> >(m_Hd.value(), m_numLv0Nodes, 
-				m_Jrt->bsrRowPtr(), m_Jrt->valueTexture(), m_param->fusion_GaussNewton_diag_regTerm);
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcJr0tJr0_add_to_Hd_kernel");
-		}
+		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).AAt_blockDiags(
+			m_Hd, true, 1, 1);
+		m_Hd.axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
 
 		// 1.1 fill the upper tri part of Hd
 		// previously, we only calculate the lower triangular pert of Hd;

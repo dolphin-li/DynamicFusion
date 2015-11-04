@@ -266,6 +266,12 @@ void CudaBsrMatrix::multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, flo
 	range().multBsrT_value(B.range(), C, alpha);
 }
 
+void CudaBsrMatrix::AAt_blockDiags(CudaDiagBlockMatrix& C, bool lowerInsteadOfFull,
+	float alpha, float beta)
+{
+	range().AAt_blockDiags(C, lowerInsteadOfFull, alpha, beta);
+}
+
 void CudaBsrMatrix::dump(std::string name)const
 {
 	std::vector<int> bhr, bhc;
