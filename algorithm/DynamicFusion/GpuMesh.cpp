@@ -749,7 +749,7 @@ namespace dfusion
 				"GpuMesh::renderToImg::mapWarpFieldRes");
 			cudaSafeCall(cudaGraphicsResourceGetMappedPointer((void**)&gldata, &num_bytes, m_cuda_res_warp),
 				"GpuMesh::renderToImg::cudaGraphicsResourceGetMappedPointer");
-			copy_warp_node_to_gl_buffer(gldata, warpField, warp_nodes);
+			copy_warp_node_to_gl_buffer(gldata, warpField, warp_nodes, param.graph_single_level);
 			cudaSafeCall(cudaGraphicsUnmapResources(1, &m_cuda_res_warp, 0), 
 				"GpuMesh::renderToImg::unMapWarpFieldRes");
 

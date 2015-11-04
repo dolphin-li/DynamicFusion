@@ -152,6 +152,8 @@ void CudaBsrMatrix::transposeStructureTo(CudaBsrMatrix& rhs)const
 	rhs.m_cusparseHandle = m_cusparseHandle;
 	rhs.resize(blocksInCol(), blocksInRow(), colsPerBlock(), rowsPerBlock());
 	rhs.resize_nnzBlocks(nnzBlocks());
+	if (nnzBlocks() == 0)
+		return;
 	cudaSafeCall(cudaMemcpy(rhs.bsrRowPtr_coo(), bsrColIdx(), nnzBlocks()*sizeof(int), 
 		cudaMemcpyDeviceToDevice), "CudaBsrMatrix::transposeStructureTo, 1");
 	cudaSafeCall(cudaMemcpy(rhs.bsrColIdx(), bsrRowPtr_coo(), nnzBlocks()*sizeof(int),
@@ -171,6 +173,8 @@ void CudaBsrMatrix::transposeValueTo(CudaBsrMatrix& rhs)const
 	rhs.m_cusparseHandle = m_cusparseHandle;
 	rhs.resize(m_blocksInCol, m_blocksInRow, m_colsPerBlock, m_rowsPerBlock);
 	rhs.resize_nnzBlocks(m_nnzBlocks);
+	if (nnzBlocks() == 0)
+		return;
 	cudaSafeCall(cudaMemcpy(rhs.bsrRowPtr_coo(), bsrColIdx(), nnzBlocks()*sizeof(int),
 		cudaMemcpyDeviceToDevice), "CudaBsrMatrix::transposeValueTo, 1");
 

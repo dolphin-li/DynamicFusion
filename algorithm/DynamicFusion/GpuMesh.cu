@@ -136,7 +136,8 @@ namespace dfusion
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, 
 		float3 origion, float invVoxelSize,
 		const WarpField::KnnIdx* nodesKnn, 
-		int n, int node_start_id, bool warp_nodes)
+		int n, int node_start_id, bool warp_nodes,
+		bool single_level_graph)
 	{
 		int i = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -146,20 +147,11 @@ namespace dfusion
 
 			if (warp_nodes)
 			{
-#if 1
 				Tbx::Dual_quat_cu dq = pack_dual_quat(nodes[i * 3], nodes[i * 3 + 1]);
 				Tbx::Vec3 t = trans * dq.transform(Tbx::Point3(node.x, node.y, node.z));
 				node.x = t.x;
 				node.y = t.y;
 				node.z = t.z;
-#else
-				Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
-					nodesDqVwTex, make_float3(node.x, node.y, node.z), origion, invVoxelSize);
-				Tbx::Vec3 t = trans * dq_blend.transform(Tbx::Point3(node.x, node.y, node.z));
-				node.x = t.x;
-				node.y = t.y;
-				node.z = t.z;
-#endif
 			}
 
 			gldata[i] = node;
@@ -174,13 +166,15 @@ namespace dfusion
 					if (nn >= WarpField::MaxNodeNum || nn < 0)
 						nn = i-WarpField::MaxNodeNum;
 					glindex[start + k*2 + 0] = i + node_start_id;
-					glindex[start + k*2 + 1] = nn + node_start_id + WarpField::MaxNodeNum;
+					glindex[start + k*2 + 1] = nn + node_start_id + 
+						WarpField::MaxNodeNum * (!single_level_graph);
 				}
 			}
 		}
 	}
 
-	void GpuMesh::copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField, bool warp_nodes)
+	void GpuMesh::copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField, 
+		bool warp_nodes, bool single_level_graph)
 	{
 		int* glindex = (int*)(gldata + WarpField::MaxNodeNum * WarpField::GraphLevelNum);
 		int node_start_id = 0;
@@ -208,7 +202,7 @@ namespace dfusion
 			copy_warp_node_to_gl_buffer_kernel << <grid, block >> >(
 				gldata, glindex, tr, nodes, 
 				knnTex, nodesDqVwTex, origion, invVsz,
-				indices, n, node_start_id, warp_nodes);
+				indices, n, node_start_id, warp_nodes, single_level_graph);
 			cudaSafeCall(cudaGetLastError(), "GpuMesh::copy_warp_node_to_gl_buffer");
 		}
 	}

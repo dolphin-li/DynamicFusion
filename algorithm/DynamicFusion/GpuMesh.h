@@ -80,7 +80,8 @@ namespace dfusion
 		void copy_gldepth_to_depthmap(const float4* gldata, DepthMap& depth, 
 			float s1, float s2, float camNear);
 		void copy_canoview(const float4* gldata, DeviceArray2D<float4>& map);
-		void copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField, bool warp);
+		void copy_warp_node_to_gl_buffer(float4* gldata, const WarpField* warpField, 
+			bool warp, bool single_level_graph);
 		void copy_maps_to_gl_buffer(const MapArr& vmap_live, const MapArr& vmap_warp,
 			const MapArr& nmap_live, const MapArr& nmap_warp,
 			float4* gldata, const Param& param, Intr intr);

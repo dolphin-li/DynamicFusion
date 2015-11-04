@@ -183,6 +183,7 @@ namespace dfusion
 		void insertNewNodes(GpuMesh& src);
 		void updateAnnField();
 		void updateGraph(int level);
+		void updateGraph_singleLevel();
 
 		void bindKnnFieldSurface();
 		void unBindKnnFieldSurface();

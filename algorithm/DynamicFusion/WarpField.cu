@@ -1000,6 +1000,43 @@ namespace dfusion
 			cudaSafeCall(cudaGetLastError(), "update_nodes_dq_assume_compact_nodes_kernel");
 		}// end else (m_lastNumNodes[0] == m_numNodes[0])
 	}
+
+	void WarpField::updateGraph_singleLevel()
+	{
+		// build graph
+		if (m_lastNumNodes[0] != m_numNodes[0])
+		{
+			m_nodeTree[0]->buildTree(getNodesDqVwPtr(0) + 2, m_numNodes[0], 3);
+
+			dim3 block1(256);
+			dim3 grid1(divUp(getNumNodesInLevel(0)*KnnK, block1.x));
+			initKnnFieldKernel1 << <grid1, block1 >> >(getNodesEdgesPtr(0),
+				getNumNodesInLevel(0)*KnnK);
+			cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel1-1");
+
+			m_nodeTree[0]->knnSearchGpu(getNodesDqVwPtr(0) + 2, 3,
+				(IdxType*)getNodesEdgesPtr(0), nullptr, m_param.warp_knn_k_eachlevel[0],
+				getNumNodesInLevel(0), KnnK);
+		}
+		else if (m_numNodes[0])// else we only update the graph quaternions
+		{
+			dim3 block(32);
+			dim3 grid(1, 1, 1);
+			grid.x = divUp(m_numNodes[0], block.x);
+
+			NodesWriter nw;
+			nw.nodesDqVw = getNodesDqVwPtr(0);
+			nw.num = m_numNodes[0];
+			nw.inv_weight_radius = 1.f / m_param.warp_param_dw;
+			nw.origion = m_volume->getOrigion();
+			nw.invVoxelSize = 1.f / m_volume->getVoxelSize();
+			nw.knnTex = getKnnFieldTexture();
+			nw.nodesDqVwTex = getNodesDqVwTexture();
+
+			update_nodes_dq_assume_compact_nodes_kernel << <grid, block >> >(nw);
+			cudaSafeCall(cudaGetLastError(), "update_nodes_dq_assume_compact_nodes_kernel");
+		}// end else (m_lastNumNodes[0] == m_numNodes[0])
+	}
 #pragma endregion
 
 #pragma region --extract_for_vmap

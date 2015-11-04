@@ -121,6 +121,7 @@ namespace dfusion
 		bool mirror_input;
 		int load_frameIndx_plus_num;
 		bool solver_enable_nan_check;
+		bool graph_single_level;
 
 		/** *****************************************************
 		* visualization related

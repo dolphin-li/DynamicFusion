@@ -123,13 +123,15 @@ namespace dfusion
 		if (m_lastNumNodes[0] != m_numNodes[0])
 			updateAnnField();
 
-		// use this to turn on/off high-level nodes dq re-initialization each frame.
-		//if (m_lastNumNodes[0] != m_numNodes[0])
-
-		//// ldp debug
-		for (int lv = 1; lv < GraphLevelNum; lv++)
-		//for (int lv = 1; lv < 2; lv++)
-			updateGraph(lv);
+		if (m_param.graph_single_level)
+		{
+			updateGraph_singleLevel();
+		}
+		else
+		{
+			for (int lv = 1; lv < GraphLevelNum; lv++)
+				updateGraph(lv);
+		}
 	}
 
 	void WarpField::bindKnnFieldSurface()

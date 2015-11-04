@@ -71,6 +71,7 @@ namespace dfusion
 		mirror_input = false; 
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
+		graph_single_level = false;
 
 		/** *****************************************************
 		* visualization related
@@ -178,6 +179,7 @@ namespace dfusion
 		WRITE_ONE(mirror_input);
 		WRITE_ONE(load_frameIndx_plus_num);
 		WRITE_ONE(solver_enable_nan_check);
+		WRITE_ONE(graph_single_level);
 
 		/** *****************************************************
 		* visualization related
@@ -297,6 +299,7 @@ namespace dfusion
 				READ_ONE_ELSE_IF(mirror_input)
 				READ_ONE_ELSE_IF(load_frameIndx_plus_num)
 				READ_ONE_ELSE_IF(solver_enable_nan_check)
+				READ_ONE_ELSE_IF(graph_single_level)
 
 				/** *****************************************************
 				* visualization related

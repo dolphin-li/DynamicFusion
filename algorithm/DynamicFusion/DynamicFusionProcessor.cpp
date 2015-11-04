@@ -411,7 +411,7 @@ namespace dfusion
 			energy = m_gsSolver->solve(m_vmap_curr_pyd[0], m_nmap_curr_pyd[0], 
 				m_vmap_warp, m_nmap_warp, &data_energy, &reg_energy);
 
-			printf("icp, energy(data,reg): %d %f = %f + %f\n", icp_iter, energy, data_energy, reg_energy);
+			//printf("icp, energy(data,reg): %d %f = %f + %f\n", icp_iter, energy, data_energy, reg_energy);
 			if (energy > oldEnergy)
 				break;
 
