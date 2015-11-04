@@ -1,6 +1,8 @@
 #include "CudaBsrMatrix.h"
 #include "CudaDiagBlockMatrix.h"
 
+typedef CudaBsrMatrix::Range Range;
+
 __global__ void CudaBsrMatrix_set(int n, float* ptr, float val)
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -209,6 +211,58 @@ __global__ void CudaBsrMatrix_rightMultDiag(
 	y[posResult] = alpha * sum + beta * y[posResult];
 }
 
+__global__ void CudaBsrMatrix_Range_multBsrT_value(
+	const int* bsrRowPtrA, cudaTextureObject_t bsrColIdxA, cudaTextureObject_t valueA, int rangeColBeginA,
+	const int* bsrRowPtrB, cudaTextureObject_t bsrColIdxB, cudaTextureObject_t valueB, int rangeColBeginB,
+	const int* bsrRowPtrC_coo, const int* bsrColIdxC, float* valueC, 
+	int rowsPerBlockA, int colsPerBlockA, int rowsPerBlockB, int nnzC
+	)
+{
+	int innzC = threadIdx.x + blockIdx.x * blockDim.x;
+	if (innzC >= nnzC)
+		return;
+	const int elePerBlockC = rowsPerBlockA * rowsPerBlockB;
+	int innzBlockC = innzC / elePerBlockC;
+	int innzShiftC = innzC - innzBlockC * elePerBlockC;
+	int rowShiftC = innzShiftC / rowsPerBlockB;
+	int colShiftC = innzShiftC - rowShiftC * rowsPerBlockB;
+	int rowBlockC = bsrRowPtrC_coo[innzBlockC];
+	int colBlockC = bsrColIdxC[innzBlockC];
+
+	int blockBeginA = bsrRowPtrA[rowBlockC];
+	int blockEndA = bsrRowPtrA[rowBlockC + 1];
+	int blockBeginB = bsrRowPtrB[colBlockC];
+	int blockEndB = bsrRowPtrB[colBlockC + 1];
+
+	float sum = 0.f;
+	for (int i0 = blockBeginA, i1 = blockBeginB; i0 < blockEndA && i1 < blockEndB;)
+	{
+		int colBlockA = 0, colBlockB = 0;
+		tex1Dfetch(&colBlockA, bsrColIdxA, i0);
+		tex1Dfetch(&colBlockB, bsrColIdxB, i1);
+		colBlockA -= rangeColBeginA;
+		colBlockB -= rangeColBeginB;
+		if (colBlockA == colBlockB)
+		{
+			int pos0 = (i0*colsPerBlockA + rowShiftC)*rowsPerBlockA;
+			int pos1 = (i1*rowsPerBlockB + colShiftC)*colsPerBlockA;
+			for (int k = 0; k < colsPerBlockA; k++)
+			{
+				float v1 = 0.f, v2 = 0.f;
+				tex1Dfetch(&v1, valueA, pos0 + k);
+				tex1Dfetch(&v2, valueB, pos1 + k);
+				sum += v1 * v2;
+			}
+			i0++;
+			i1++;
+		}
+
+		i0 += (colBlockA < colBlockB);
+		i1 += (colBlockA > colBlockB);
+	}// i
+	valueC[innzC] = sum;
+}
+
 void CudaBsrMatrix::fill_increment_1_n(int* data, int n)
 {
 	if (n == 0)
@@ -373,4 +427,31 @@ void CudaBsrMatrix::setRowFromBlockedCsrRowPtr(const int* csrRowPtr)
 		csrRowPtr, bsrRowPtr(), blocksInRow(), rowsPerBlock(), rowsPerBlock()*colsPerBlock());
 	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix::setRowFromBlockedCsrRowPtr");
 	endConstructRowPtr();
+}
+
+void CudaBsrMatrix::Range::multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha)
+{
+	throw std::exception("CudaBsrMatrix::Range::multBsr_value(): not implemented");
+}
+
+void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha)
+{
+	if (A == nullptr || B.A == nullptr)
+		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): null pointer exception");
+	if (blocksInCol() != B.blocksInCol())
+		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): matrix size not matched");
+	if (colsPerBlock() != B.colsPerBlock())
+		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): block size not matched");
+	if (blocksInRow() != C.blocksInRow() || B.blocksInRow() != C.blocksInCol()
+		|| rowsPerBlock() != C.rowsPerBlock() || B.rowsPerBlock() != C.colsPerBlock())
+		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): result size not matched");
+	if (C.nnzBlocks() == 0)
+		return;
+
+	CudaBsrMatrix_Range_multBsrT_value << <divUp(C.nnz(), CTA_SIZE), CTA_SIZE >> >(
+		A->bsrRowPtr()+blockRowBegin, A->bsrColIdxTexture(), A->valueTexture(), blockColBegin,
+		B.A->bsrRowPtr()+B.blockRowBegin, B.A->bsrColIdxTexture(), B.A->valueTexture(), B.blockColBegin,
+		C.bsrRowPtr_coo(), C.bsrColIdx(), C.value(),
+		rowsPerBlock(), colsPerBlock(), B.rowsPerBlock(), C.nnz()
+		);
 }

@@ -11,6 +11,19 @@ class CudaDiagBlockMatrix
 	enum{
 		CTA_SIZE = 512
 	};
+	struct Range
+	{
+		CudaDiagBlockMatrix* A;
+		int blockBegin;
+		int blockEnd;
+		Range(CudaDiagBlockMatrix* A_, int blockBegin_ = 0,
+			int blockEnd_ = INT_MAX)
+		{
+			A = A_;
+			blockBegin = blockBegin_;
+			blockEnd = blockEnd_;
+		}
+	};
 public:
 	CudaDiagBlockMatrix();
 	~CudaDiagBlockMatrix();
@@ -54,6 +67,10 @@ public:
 
 	// vec_out = alpha * Lower(this)^t * vec_in + beta;
 	void Ltv(const float* vec_in, float* vec_out, float alpha = 1.f, float beta = 0.f);
+
+	Range range(int blockBegin_ = 0, int blockEnd_ = INT_MAX){
+		return Range(this, blockBegin_, blockEnd_);
+	}
 private:
 	int m_blockSize;
 	int m_numBlocks;

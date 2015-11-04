@@ -223,6 +223,49 @@ void CudaBsrMatrix::toCsr(DeviceArray<int>& csrRowPtr, DeviceArray<int>& csrColI
 		m_desc, csrValue, csrRowPtr, csrColIdx));
 }
 
+void CudaBsrMatrix::multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C)
+{
+	if (cols() != B.rows())
+		throw std::exception("CudaBsrMatrix::multBsr_structure(): matrix size not matched");
+	if (colsPerBlock() != B.rowsPerBlock())
+		throw std::exception("CudaBsrMatrix::multBsr_structure(): block size not matched");
+
+	C.resize(blocksInRow(), B.blocksInCol(), rowsPerBlock(), B.colsPerBlock());
+
+	// 1. construct rows
+	C.beginConstructRowPtr();
+
+	int cnnz = 0;
+	cusparseCheck( cusparseXcsrgemmNnz(m_cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+		CUSPARSE_OPERATION_NON_TRANSPOSE,
+		blocksInRow(), B.blocksInCol(), blocksInCol(),
+		m_desc, nnzBlocks(), bsrRowPtr(), bsrColIdx(),
+		B.m_desc, B.nnzBlocks(), B.bsrRowPtr(), B.bsrColIdx(),
+		C.m_desc, C.bsrRowPtr(), &cnnz) );
+
+	C.endConstructRowPtr(cnnz);
+
+	// 2. construct cols
+	// NOTE: cusparse calculates values together with colIdx
+	// here we only want colIdx, the values calculated here is invalid since we use bsr format
+	cusparseCheck(cusparseScsrgemm(m_cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, 
+		CUSPARSE_OPERATION_NON_TRANSPOSE,
+		blocksInRow(), B.blocksInCol(), blocksInCol(),
+		m_desc, nnzBlocks(), value(), bsrRowPtr(), bsrColIdx(),
+		B.m_desc, B.nnzBlocks(), B.value(), B.bsrRowPtr(), B.bsrColIdx(),
+		C.m_desc, C.value(), C.bsrRowPtr(), C.bsrColIdx()));
+}
+
+void CudaBsrMatrix::multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha)
+{
+	range().multBsr_value(B.range(), C, alpha);
+}
+
+void CudaBsrMatrix::multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha)
+{
+	range().multBsrT_value(B.range(), C, alpha);
+}
+
 void CudaBsrMatrix::dump(std::string name)const
 {
 	std::vector<int> bhr, bhc;

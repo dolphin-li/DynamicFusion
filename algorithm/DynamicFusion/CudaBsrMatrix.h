@@ -6,11 +6,45 @@
 #include <texture_types.h>
 #include <texture_fetch_functions.h>
 #include "cuda_utils.h"
+#include <algorithm>
 class CudaDiagBlockMatrix;
 class CudaBsrMatrix
 {
+public:
 	enum{
 		CTA_SIZE = 512
+	};
+	struct Range
+	{
+		CudaBsrMatrix* A;
+		int blockRowBegin;
+		int blockRowEnd;
+		int blockColBegin;
+		int blockColEnd;
+		Range(const CudaBsrMatrix* A_, int blockRowBegin_ = 0, int blockColBegin_ = 0,
+			int blockRowEnd_=INT_MAX, int blockColEnd_=INT_MAX)
+		{
+			if (A_ == nullptr)
+				throw std::exception("CudaBsrMatrix::Range(): nullptr error!");
+			A = (CudaBsrMatrix*)A_;
+			blockRowBegin = std::max(0, blockRowBegin_);
+			blockRowEnd = std::min(A->blocksInRow(), blockRowEnd_);
+			blockColBegin = std::max(0, blockColBegin_);
+			blockColEnd = std::min(A->blocksInCol(), blockColEnd_);
+		}
+
+		int blocksInRow()const{ return blockRowEnd - blockRowBegin; }
+		int blocksInCol()const{ return blockColEnd - blockColBegin; }
+		int rowsPerBlock() const{ return A->rowsPerBlock(); }
+		int colsPerBlock() const{ return A->colsPerBlock(); }
+		int rows()const{ return blocksInRow() * rowsPerBlock(); }
+		int cols()const{ return blocksInCol() * colsPerBlock(); }
+		
+		// C = alpha * this * B; Assume structure is given
+		void multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f);
+
+		// C = alpha * this * B'; Assume structure is given
+		void multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f);
 	};
 public:
 	CudaBsrMatrix(cusparseHandle_t handle);
@@ -70,6 +104,10 @@ public:
 	int* bsrColIdx(){ return m_bsrColIdx.ptr(); }
 	cudaTextureObject_t bsrColIdxTexture()const{ return m_tex_bsrColIdx; }
 	cusparseMatDescr_t getCuSparseMatDesc()const{ return m_desc; }
+	Range range(int blockRowBegin_ = 0, int blockColBegin_ = 0,
+		int blockRowEnd_ = INT_MAX, int blockColEnd_ = INT_MAX)const{
+		return Range(this, blockRowBegin_, blockColBegin_, blockRowEnd_, blockColEnd_);
+	}
 
 	CudaBsrMatrix& operator = (float constVal);
 	CudaBsrMatrix& operator = (const CudaBsrMatrix& rhs);
@@ -80,6 +118,15 @@ public:
 
 	// mult-vector: y = alpha * this * x + beta * y
 	void Mv(const float* x, float* y, float alpha = 1.f, float beta = 0.f)const;
+
+	// C = alpha*this*B
+	void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C);
+
+	// C = alpha*this*B
+	void multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f);
+
+	// C = alpha*this*B'
+	void multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f);
 
 	// mult-matrix: y = alpha * this * x + beta * y
 	// if useLowerInsteadOfFull, then only the lower triangular part will be considered

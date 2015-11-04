@@ -1857,15 +1857,8 @@ namespace dfusion
 		m_Hd.transpose_L_to_U();
 
 		// 2. compute B = Jr0'Jr1
-		if (m_B->nnz() > 0)
-		{
-			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_B->nnz(), block.x));
-			calcB_kernel << <grid, block >> >(m_B->value(), m_B->bsrRowPtr_coo(), 
-				m_B->bsrColIdx(), m_B->blocksInRow(), m_B->nnz(), m_Jrt->bsrRowPtr(),
-				m_Jrt->bsrColIdxTexture(), m_Jrt->valueTexture());
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcB_kernel");
-		}
+		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
+			m_Jrt->range(m_B->blocksInRow(), 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_B);
 
 		// 3. compute Bt
 		m_B->transposeValueTo(*m_Bt);
