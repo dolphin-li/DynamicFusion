@@ -17,6 +17,31 @@ __global__ void CudaBsrMatrix_scale_add(int n, float* ptr, float alpha, float be
 		ptr[i] = alpha * ptr[i] + beta;
 }
 
+__global__ void CudaBsrMatrix_scale_add_diag(int nRows, float* ptr, 
+	const int* bsrRowPtr, cudaTextureObject_t bsrColIdx, 
+	int blockSize, float alpha, float beta)
+{
+	int iRow = threadIdx.x + blockIdx.x * blockDim.x;
+	if (iRow >= nRows)
+		return;
+
+	int iBlockRow = iRow / blockSize;
+	int rowBlockBegin = bsrRowPtr[iBlockRow];
+	int rowBlockEnd = bsrRowPtr[iBlockRow + 1];
+
+	for (int c = rowBlockBegin; c < rowBlockEnd; c++)
+	{
+		int iBlockCol = 0;
+		tex1Dfetch(&iBlockCol, bsrColIdx, c);
+		if (iBlockCol == iBlockRow)
+		{
+			int rowShift = iRow - iBlockRow * blockSize;
+			int pos = (c * blockSize + rowShift) * blockSize + rowShift;
+			ptr[pos] = alpha * ptr[pos] + beta;
+		}
+	}
+}
+
 __global__ void CudaBsrMatrix_fill_increment_1_n(int* data, int n)
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -312,6 +337,43 @@ __global__ void CudaBsrMatrix_Range_AAt_blockDiags(
 	diag[innzDiag] = alpha*sum + beta*diag[innzDiag];
 }
 
+__global__ void CudaBsrMatrix_subRows_structure_rptr(const int* bsrRowPtrFull, int* bsrRowPtrSub,
+	int rowBegin, int num)
+{
+	int i = threadIdx.x + blockIdx.x * blockDim.x;
+	if (i <= num)// <= because size=num+1 in bsr row
+	{
+		bsrRowPtrSub[i] = bsrRowPtrFull[i + rowBegin] - bsrRowPtrFull[rowBegin];
+	}
+}
+
+__global__ void CudaBsrMatrix_subRows_structure_cidx(cudaTextureObject_t bsrRowPtrFull, 
+	const int* bsrColIdxFull, int* bsrColIdxSub, int rowBegin, int nnzBlocks)
+{
+	int i = threadIdx.x + blockIdx.x * blockDim.x;
+	if (i < nnzBlocks)
+	{
+		int colBegin = 0;
+		tex1Dfetch(&colBegin, bsrRowPtrFull, rowBegin);
+
+		bsrColIdxSub[i] = bsrColIdxFull[i + colBegin];
+	}
+}
+
+__global__ void CudaBsrMatrix_subRows_value(cudaTextureObject_t bsrRowPtrFull,
+	const float* valueFull, float* valueSub, int rowBegin, int nnz, int blockSize2)
+{
+	int i = threadIdx.x + blockIdx.x * blockDim.x;
+	if (i < nnz)
+	{
+		int nnzBegin = 0;
+		tex1Dfetch(&nnzBegin, bsrRowPtrFull, rowBegin);
+		nnzBegin *= blockSize2;
+
+		valueSub[i] = valueFull[i + nnzBegin];
+	}
+}
+
 void CudaBsrMatrix::fill_increment_1_n(int* data, int n)
 {
 	if (n == 0)
@@ -374,6 +436,18 @@ CudaBsrMatrix& CudaBsrMatrix::axpy(float alpha, float beta)
 	CudaBsrMatrix_scale_add << <divUp(nnz(), CTA_SIZE), CTA_SIZE >> >(
 		nnz(), value(), alpha, beta);
 	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix::axpy");
+	return *this;
+}
+
+CudaBsrMatrix& CudaBsrMatrix::axpy_diag(float alpha, float beta)
+{
+	if (rowsPerBlock() != colsPerBlock() || blocksInRow() != blocksInCol())
+		throw std::exception("CudaBsrMatrix::axpy_diag(): only square matrix supported");
+	if (nnz() == 0)
+		return *this;
+	CudaBsrMatrix_scale_add_diag << <divUp(rows(), CTA_SIZE), CTA_SIZE >> >(
+		nnz(), value(), bsrRowPtr(), bsrColIdxTexture(), rowsPerBlock(), alpha, beta);
+	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix::axpy_diag");
 	return *this;
 }
 
@@ -478,12 +552,12 @@ void CudaBsrMatrix::setRowFromBlockedCsrRowPtr(const int* csrRowPtr)
 	endConstructRowPtr();
 }
 
-void CudaBsrMatrix::Range::multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha)
+void CudaBsrMatrix::Range::multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha)const
 {
 	throw std::exception("CudaBsrMatrix::Range::multBsr_value(): not implemented");
 }
 
-void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha)
+void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha)const
 {
 	if (A == nullptr || B.A == nullptr)
 		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): null pointer exception");
@@ -508,7 +582,7 @@ void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, floa
 }
 
 void CudaBsrMatrix::Range::AAt_blockDiags(CudaDiagBlockMatrix& C,
-	bool lowerInsteadOfFull, float alpha, float beta)
+	bool lowerInsteadOfFull, float alpha, float beta)const
 {
 	if (A == nullptr)
 		throw std::exception("CudaBsrMatrix::Range::AAt_blockDiags(): null pointer exception");
@@ -526,4 +600,45 @@ void CudaBsrMatrix::Range::AAt_blockDiags(CudaDiagBlockMatrix& C,
 		C.value(), rowsPerBlock(), colsPerBlock(), C.nnz(), 
 		lowerInsteadOfFull, alpha, beta
 		);
+}
+
+void CudaBsrMatrix::subRows_structure(CudaBsrMatrix& S, int blockRowBegin, int blockRowEnd)const
+{
+	blockRowBegin = std::max(0, blockRowBegin);
+	blockRowEnd = std::min(blocksInRow(), blockRowEnd);
+	if (blockRowBegin >= blockRowEnd)
+	{
+		S.resize(0, 0, rowsPerBlock(), colsPerBlock());
+		return;
+	}
+
+	// rows
+	S.resize(blockRowEnd - blockRowBegin, blocksInCol(), rowsPerBlock(), colsPerBlock());
+	S.beginConstructRowPtr();
+	CudaBsrMatrix_subRows_structure_rptr << <divUp(S.blocksInRow(), CTA_SIZE), CTA_SIZE >> >(
+		bsrRowPtr(), S.bsrRowPtr(), blockRowBegin, S.blocksInRow());
+	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix_subRows_structure_rptr");
+	S.endConstructRowPtr();
+
+	// cols
+	CudaBsrMatrix_subRows_structure_cidx << <divUp(S.nnzBlocks(), CTA_SIZE), CTA_SIZE >> >(
+		bsrRowPtrTexture(), bsrColIdx(), S.bsrColIdx(), blockRowBegin, S.nnzBlocks());
+	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix_subRows_structure_cidx");
+}
+
+void CudaBsrMatrix::subRows_value(CudaBsrMatrix& S, int blockRowBegin, int blockRowEnd)const
+{
+	blockRowBegin = std::max(0, blockRowBegin);
+	blockRowEnd = std::min(blocksInRow(), blockRowEnd);
+	if (S.blocksInRow() != blockRowEnd - blockRowBegin ||
+		S.blocksInCol() != blocksInCol() ||
+		S.rowsPerBlock() != rowsPerBlock() ||
+		S.colsPerBlock() != colsPerBlock())
+		throw std::exception("CudaBsrMatrix::subRows_value: size not matched");
+
+	CudaBsrMatrix_subRows_value << <divUp(S.nnz(), CTA_SIZE), CTA_SIZE >> >(
+		bsrRowPtrTexture(), value(), S.value(), blockRowBegin, S.nnz(),
+		S.rowsPerBlock() * S.colsPerBlock());
+	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix_subRows_value");
+
 }

@@ -1064,11 +1064,13 @@ namespace dfusion
 		// 2. compute Jrt structure ==============================================
 		// 2.1. fill (row, col) as (col, row) from Jr and sort.
 		m_Jr->transposeStructureTo(*m_Jrt);
+		m_Jrt->subRows_structure(*m_Jrt13_structure, m_numLv0Nodes, m_numNodes);
+		m_Jrt13_structure->transposeStructureTo(*m_Jr13_structure);
+		m_Jrt13_structure->multBsr_structure(*m_Jr13_structure, *m_Hr);
 
 		// 3. compute B structure ==============================================
 		// 3.1 the row ptr of B is the same CSR info with the first L0 rows of Jrt.
 		m_B->resize(m_numLv0Nodes, m_Jr->blocksInCol() - m_numLv0Nodes, VarPerNode, VarPerNode);
-		m_HrRowsCols = m_B->cols();
 		m_B->setRowFromBsrRowPtr(m_Jrt->bsrRowPtr());
 		
 		// 3.2 the col-idx of B
@@ -1687,103 +1689,13 @@ namespace dfusion
 	}
 #pragma endregion
 
-#pragma region --calc Hessian
-	__global__ void calcHr_kernel(float* Hr, const int* Jrt_rptr,
-		cudaTextureObject_t Jrt_cidx, cudaTextureObject_t Jrt_val,
-		int HrRowsCols, int nBlockBrows, float diag_eps)
-	{
-		enum{ VarPerNode = GpuGaussNewtonSolver::VarPerNode };
-		int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-		if (tid >= (HrRowsCols + 1)*HrRowsCols / 2)
-			return;
-
-		// y is the triangular number
-		int y = floor(-0.5 + sqrt(0.25 + 2 * tid));
-		int triangularNumber = y * (y + 1) / 2;
-		// x should <= y
-		int x = tid - triangularNumber;
-
-		int yBlock = y / VarPerNode;
-		int xBlock = x / VarPerNode;
-		int yShift = y - yBlock * VarPerNode;
-		int xShift = x - xBlock * VarPerNode;
-
-		int Jrt13_ib = Jrt_rptr[yBlock + nBlockBrows];
-		int Jrt13_ie = Jrt_rptr[yBlock + nBlockBrows + 1];
-		int Jrt13_jb = Jrt_rptr[xBlock + nBlockBrows];
-		int Jrt13_je = Jrt_rptr[xBlock + nBlockBrows + 1];
-
-		float sum = 0.f;
-		for (int i = Jrt13_ib, j = Jrt13_jb; i < Jrt13_ie && j < Jrt13_je;)
-		{
-			int ci = 0, cj = 0;
-			tex1Dfetch(&ci, Jrt_cidx, i);
-			tex1Dfetch(&cj, Jrt_cidx, j);
-			if (ci == cj)
-			{
-				int pos0 = (i*VarPerNode + yShift)*RowPerNode_RegTerm;
-				int pos1 = (j*VarPerNode + xShift)*RowPerNode_RegTerm;
-				for (int k = 0; k < VarPerNode; k++)
-				{
-					float v1 = 0.f, v2 = 0.f;
-					tex1Dfetch(&v1, Jrt_val, pos0 + k);
-					tex1Dfetch(&v2, Jrt_val, pos1 + k);
-					sum += v1 * v2;
-				}
-				i ++;
-				j ++;
-			}
-
-			i += (ci < cj);
-			j += (ci > cj);
-		}// i
-
-		sum *= (1+diag_eps * (x == y));
-
-		Hr[y*HrRowsCols + x] = Hr[x*HrRowsCols + y] = sum;
-	}
-
-	void GpuGaussNewtonSolver::calcHessian()
-	{
-		// 1. compute Jr0'Jr0 and accumulate into Hd
-		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).AAt_blockDiags(
-			m_Hd, true, 1, 1);
-		m_Hd.axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
-
-		// 1.1 fill the upper tri part of Hd
-		// previously, we only calculate the lower triangular pert of Hd;
-		// now that the computation of Hd is ready, we fill the mission upper part
-		m_Hd.transpose_L_to_U();
-
-		// 2. compute B = Jr0'Jr1
-		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
-			m_Jrt->range(m_B->blocksInRow(), 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_B);
-
-		// 3. compute Bt
-		m_B->transposeValueTo(*m_Bt);
-
-		// 4. compute Hr
-		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Hr.size());
-		if (m_HrRowsCols > 0)
-		{
-			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_HrRowsCols*(m_HrRowsCols+1)/2, block.x));
-			calcHr_kernel << <grid, block >> >(m_Hr.ptr(), m_Jrt->bsrRowPtr(),
-				m_Jrt->bsrColIdxTexture(), m_Jrt->valueTexture(),
-				m_HrRowsCols, m_B->blocksInRow(), m_param->fusion_GaussNewton_diag_regTerm);
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcHr_kernel");
-		}
-
-		// 5. compute g = -(g + Jr'*fr)
-		m_Jrt->Mv(m_f_r, m_g, -1.f, -1.f);
-	}
-#pragma endregion
-
 #pragma region --block solve
-	__global__ void calcQ_kernel(float* Q, const float* Hr,
-		const int* BtLtinv_rptr,  cudaTextureObject_t BtLtinv_cidx, 
-		cudaTextureObject_t BtLtinv_value, int HrRowsCols, int nBrows)
+	__global__ void calcQ_kernel1(float* Q, 
+		const int* BtLtinv_rptr, cudaTextureObject_t BtLtinv_cidx,
+		cudaTextureObject_t BtLtinv_value, 
+		const int* Hr_rptr, cudaTextureObject_t Hr_cidx,
+		const float* Hr_value,
+		int HrRowsCols, int nBrows)
 	{
 		enum
 		{
@@ -1803,8 +1715,8 @@ namespace dfusion
 
 		int yBlock = y / VarPerNode;
 		int xBlock = x / VarPerNode;
-		int yShift = (y - yBlock*VarPerNode)*VarPerNode;
-		int xShift = (x - xBlock*VarPerNode)*VarPerNode;
+		int yShift = (y - yBlock*VarPerNode);
+		int xShift = (x - xBlock*VarPerNode);
 
 		int BtBlock_ib = BtLtinv_rptr[yBlock];
 		int BtBlock_ie = BtLtinv_rptr[yBlock + 1];
@@ -1820,8 +1732,8 @@ namespace dfusion
 			if (cBlocki == cBlockj)
 			{
 				float s = 0.f;
-				int posi = iBlock * VarPerNode2 + yShift;
-				int posj = jBlock * VarPerNode2 + xShift;
+				int posi = iBlock * VarPerNode2 + yShift*VarPerNode;
+				int posj = jBlock * VarPerNode2 + xShift*VarPerNode;
 				for (int k = 0; k < VarPerNode; k++)
 				{
 					float vi = 0.f, vj = 0.f;
@@ -1830,15 +1742,29 @@ namespace dfusion
 					s += vi * vj;
 				}
 				sum += s;
-				iBlock ++;
-				jBlock ++;
+				iBlock++;
+				jBlock++;
 			}
 
 			iBlock += (cBlocki < cBlockj);
 			jBlock += (cBlocki > cBlockj);
 		}// i
 
-		Q[y*HrRowsCols + x] = Q[x*HrRowsCols + y] = Hr[y*HrRowsCols + x] - sum;
+		float Hr_val = 0.f;
+		int Hr_blockBegin = Hr_rptr[yBlock];
+		int Hr_blockEnd = Hr_rptr[yBlock+1];
+		for (int c = Hr_blockBegin; c < Hr_blockEnd; c++)
+		{
+			int Hr_colBlock = 0;
+			tex1Dfetch(&Hr_colBlock, Hr_cidx, c);
+			if (Hr_colBlock == xBlock)
+			{
+				Hr_val = Hr_value[c*VarPerNode2 + yShift*VarPerNode + xShift];
+				break;
+			}
+		}
+
+		Q[y*HrRowsCols + x] = Q[x*HrRowsCols + y] = Hr_val - sum;
 	}
 
 	void GpuGaussNewtonSolver::blockSolve()
@@ -1849,35 +1775,38 @@ namespace dfusion
 		m_Hd_Linv.LtL(m_Hd_LLtinv);
 
 		// 2. compute Q = Hr - Bt * inv(Hd) * B ======================================
-		CHECK_LE(m_HrRowsCols*m_HrRowsCols, m_Q.size());
+		CHECK_LE(m_Hr->rows()*m_Hr->cols(), m_Q.size());
 
 		// 2.1 compute Bt*Ltinv
 		m_Bt->rightMultDiag_value(m_Hd_Linv, *m_Bt_Ltinv, true, true);
 
 		// 2.2 compute Q
-		if (m_HrRowsCols > 0)
+		if (m_Hr->rows() > 0)
 		{
 			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_HrRowsCols*(m_HrRowsCols+1)/2, block.x));
-			calcQ_kernel << <grid, block >> >(m_Q.ptr(), m_Hr.ptr(), m_Bt_Ltinv->bsrRowPtr(),
-				m_Bt_Ltinv->bsrColIdxTexture(),  m_Bt_Ltinv->valueTexture(), m_HrRowsCols, m_B->rows());
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcQ_kernel");
+			dim3 grid(divUp(m_Hr->rows()*(m_Hr->rows() + 1) / 2, block.x));
+
+			calcQ_kernel1 << <grid, block >> >(m_Q.ptr(), m_Bt_Ltinv->bsrRowPtr(),
+				m_Bt_Ltinv->bsrColIdxTexture(), m_Bt_Ltinv->valueTexture(), m_Hr->bsrRowPtr(),
+				m_Hr->bsrColIdxTexture(), m_Hr->value(),
+				m_Hr->rows(), m_B->rows());
+			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcQ_kernel1");
 
 			// kept Q before factorize, for debug
 			if (m_Q_kept.size() == m_Q.size())
 				cudaMemcpy(m_Q_kept.ptr(), m_Q.ptr(),
-					m_HrRowsCols*m_HrRowsCols*m_Q.elem_size,
+				m_Hr->rows()*m_Hr->rows()*m_Q.elem_size,
 					cudaMemcpyDeviceToDevice);
-			checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q");
+			checkNan(m_Q, m_Hr->rows()*m_Hr->rows(), "Q");
 		}
 
 		// 3. llt decompostion of Q ==================================================
 		// 3.1 decide the working space of the solver
-		if (m_HrRowsCols > 0)
+		if (m_Hr->rows() > 0)
 		{
 			int lwork = 0;
 			cusolverDnSpotrf_bufferSize(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER,
-				m_HrRowsCols, m_Q.ptr(), m_HrRowsCols, &lwork);
+				m_Hr->rows(), m_Q.ptr(), m_Hr->rows(), &lwork);
 			if (lwork > m_cuSolverWorkSpace.size())
 			{
 				// we store dev info in the last element
@@ -1889,15 +1818,15 @@ namespace dfusion
 			// before this step, m_Q is calculated as filled as symmetric matrix
 			// note that cublas uses column majored storage, thus after this step
 			// the matrix m_Q should be viewed as column-majored matrix
-			cusolverStatus_t fst = cusolverDnSpotrf(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER, m_HrRowsCols,
-				m_Q.ptr(), m_HrRowsCols, m_cuSolverWorkSpace.ptr(), lwork,
+			cusolverStatus_t fst = cusolverDnSpotrf(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER, m_Hr->rows(),
+				m_Q.ptr(), m_Hr->rows(), m_cuSolverWorkSpace.ptr(), lwork,
 				(int*)m_cuSolverWorkSpace.ptr() + m_cuSolverWorkSpace.size() - 1);
 			if (CUSOLVER_STATUS_SUCCESS != fst)
 			{
 				printf("cusolverDnSpotrf failed: status: %d\n", fst);
 				throw std::exception();
 			}
-			checkNan(m_Q, m_HrRowsCols*m_HrRowsCols, "Q1");
+			checkNan(m_Q, m_Hr->rows()*m_Hr->rows(), "Q1");
 		}
 		// 4. solve H*h = g =============================================================
 		const int sz = m_Jr->cols();

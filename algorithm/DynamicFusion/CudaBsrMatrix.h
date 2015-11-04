@@ -39,17 +39,20 @@ public:
 		int colsPerBlock() const{ return A->colsPerBlock(); }
 		int rows()const{ return blocksInRow() * rowsPerBlock(); }
 		int cols()const{ return blocksInCol() * colsPerBlock(); }
-		
+
 		// C = alpha * this * B; Assume structure is given
-		void multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f);
+		void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C)const;
+
+		// C = alpha * this * B; Assume structure is given
+		void multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f)const;
 
 		// C = alpha * this * B'; Assume structure is given
-		void multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f);
+		void multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f)const;
 
 		// compute C = alpha * blockDiag(this*this') + beta*C;
 		// if lowerInsteadOfFull, then only the lower triangular part is touched
 		void AAt_blockDiags(CudaDiagBlockMatrix& C, bool lowerInsteadOfFull,
-			float alpha = 1.f, float beta=0.f);
+			float alpha = 1.f, float beta = 0.f)const;
 	};
 public:
 	CudaBsrMatrix(cusparseHandle_t handle);
@@ -73,7 +76,11 @@ public:
 
 	// after calling resize, you may also call this function to convert a csr matrix to this
 	void fromCsr(const int* csrRowPtr, const int* csrColIdx, const float* csrValue);
-	void toCsr(DeviceArray<int>& csrRowPtr, DeviceArray<int>& csrColIdx, DeviceArray<float>& csrValue);
+	void toCsr(DeviceArray<int>& csrRowPtr, DeviceArray<int>& csrColIdx, DeviceArray<float>& csrValue)const;
+
+	// sub matrix by rows
+	void subRows_structure(CudaBsrMatrix& S, int blockRowBegin, int blockRowEnd)const;
+	void subRows_value(CudaBsrMatrix& S, int blockRowBegin, int blockRowEnd)const;
 
 	// copy the row ptr to this, begin/endConstructRowPtr called inside
 	void setRowFromBsrRowPtr(const int* bsrRowPtr);
@@ -121,22 +128,25 @@ public:
 	// return alpha * this + beta
 	CudaBsrMatrix& axpy(float alpha, float beta = 0.f);
 
+	// this(i,i) = alpha * this(i,i) + beta
+	CudaBsrMatrix& axpy_diag(float alpha, float beta = 0.f);
+
 	// mult-vector: y = alpha * this * x + beta * y
 	void Mv(const float* x, float* y, float alpha = 1.f, float beta = 0.f)const;
 
 	// C = alpha*this*B
-	void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C);
+	void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C)const;
 
 	// C = alpha*this*B
-	void multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f);
+	void multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f)const;
 
 	// C = alpha*this*B'
-	void multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f);
+	void multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f)const;
 
 	// compute C = alpha * blockDiag(this*this') + beta*C;
 	// if lowerInsteadOfFull, then only the lower triangular part is touched
 	void AAt_blockDiags(CudaDiagBlockMatrix& C, bool lowerInsteadOfFull,
-		float alpha = 1.f, float beta = 0.f);
+		float alpha = 1.f, float beta = 0.f)const;
 
 	// mult-matrix: y = alpha * this * x + beta * y
 	// if useLowerInsteadOfFull, then only the lower triangular part will be considered

@@ -22,9 +22,12 @@ namespace dfusion
 		m_pWarpField = nullptr;
 		m_Jr = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Jrt = new CudaBsrMatrix(m_cuSparseHandle);
+		m_Jrt13_structure = new CudaBsrMatrix(m_cuSparseHandle);
+		m_Jr13_structure = new CudaBsrMatrix(m_cuSparseHandle);
 		m_B = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Bt = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Bt_Ltinv = new CudaBsrMatrix(m_cuSparseHandle);
+		m_Hr = new CudaBsrMatrix(m_cuSparseHandle);;
 
 		reset();
 	}
@@ -37,9 +40,12 @@ namespace dfusion
 		cusparseDestroy(m_cuSparseHandle);
 		delete m_Jr;
 		delete m_Jrt;
+		delete m_Jrt13_structure;
+		delete m_Jr13_structure;
 		delete m_B;
 		delete m_Bt;
 		delete m_Bt_Ltinv;
+		delete m_Hr;
 	}
 
 	template<class T>
@@ -151,10 +157,8 @@ namespace dfusion
 			// the not-level0 nodes are not likely to increase dramatically
 			// thus it is enough to allocate just a bit larger buffer
 			m_not_lv0_nodes_for_buffer = notLv0Nodes * 1.2;
-			m_Hr.create(m_not_lv0_nodes_for_buffer*m_not_lv0_nodes_for_buffer*
+			m_Q.create(m_not_lv0_nodes_for_buffer*m_not_lv0_nodes_for_buffer*
 				VarPerNode * VarPerNode);
-			setzero(m_Hr);
-			m_Q.create(m_Hr.size());
 			setzero(m_Q);
 			if (m_param->solver_enable_nan_check)
 			{
@@ -189,8 +193,6 @@ namespace dfusion
 		m_numNodes = 0;
 		m_numLv0Nodes = 0;
 
-		m_HrRowsCols = 0;
-
 		cudaMemset2D(m_vmapKnn.ptr(), m_vmapKnn.step(), 0, 
 			m_vmapKnn.cols(), m_vmapKnn.rows());
 
@@ -221,7 +223,7 @@ namespace dfusion
 		m_Hd_Linv = 0.f;
 		m_Hd_LLtinv = 0.f;
 
-		setzero(m_Hr);
+		*m_Hr = 0.f;
 		setzero(m_Q);
 	}
 
@@ -362,10 +364,10 @@ namespace dfusion
 		m_B->dump("D:/tmp/gpu_B.txt");
 		m_Bt->dump("D:/tmp/gpu_Bt.txt");
 		m_Bt_Ltinv->dump("D:/tmp/gpu_BtLtinv.txt");
-		dumpMat("D:/tmp/gpu_Hr.txt", m_Hr, m_HrRowsCols);
-		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_HrRowsCols);
+		m_Hr->dump("D:/tmp/gpu_Hr.txt");
+		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_Hr->rows());
 		if (m_Q_kept.size() == m_Q.size())
-			dumpMat("D:/tmp/gpu_Qkept.txt", m_Q_kept, m_HrRowsCols);
+			dumpMat("D:/tmp/gpu_Qkept.txt", m_Q_kept, m_Hr->rows());
 		dumpVec("D:/tmp/gpu_fr.txt", m_f_r, m_Jr->rows());
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jr->cols());
 		dumpVec("D:/tmp/gpu_u.txt", m_u, m_Jr->cols());
@@ -504,5 +506,33 @@ namespace dfusion
 			}
 			fclose(pFile);
 		}
+	}
+
+	void GpuGaussNewtonSolver::calcHessian()
+	{
+		// 1. compute Jr0'Jr0 and accumulate into Hd
+		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).AAt_blockDiags(
+			m_Hd, true, 1, 1);
+		m_Hd.axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
+
+		// 1.1 fill the upper tri part of Hd
+		// previously, we only calculate the lower triangular pert of Hd;
+		// now that the computation of Hd is ready, we fill the mission upper part
+		m_Hd.transpose_L_to_U();
+
+		// 2. compute B = Jr0'Jr1
+		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
+			m_Jrt->range(m_B->blocksInRow(), 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_B);
+
+		// 3. compute Bt
+		m_B->transposeValueTo(*m_Bt);
+
+		// 4. compute Hr
+		m_Jrt->range(m_numLv0Nodes, 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
+			m_Jrt->range(m_numLv0Nodes, 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_Hr);
+		m_Hr->axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
+
+		// 5. compute g = -(g + Jr'*fr)
+		m_Jrt->Mv(m_f_r, m_g, -1.f, -1.f);
 	}
 }

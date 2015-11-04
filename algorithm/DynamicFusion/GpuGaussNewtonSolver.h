@@ -121,8 +121,7 @@ namespace dfusion
 		// It is symmetric, during calculation, 
 		// we thus only touch the lower part of each block
 		// after calculation finished, we filled the upper part then.
-		DeviceArray<float> m_Hr;
-		int m_HrRowsCols;
+		CudaBsrMatrix* m_Hr;
 
 
 		// CSR sparse matrix of B
@@ -134,6 +133,8 @@ namespace dfusion
 		DeviceArray<JrRow2NodeMapper> m_Jr_RowMap2NodeId;
 		CudaBsrMatrix* m_Jr;
 		CudaBsrMatrix* m_Jrt;
+		CudaBsrMatrix* m_Jrt13_structure;
+		CudaBsrMatrix* m_Jr13_structure;
 
 		// let Jr = [Jr0, Jr1]
 		//			[0,   Jr3]
