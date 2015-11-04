@@ -133,7 +133,7 @@ __device__ __forceinline__ float CudaBsrMatrix_rightMultDiag_1<false, false>(int
 	return sum;
 }
 
-template<>
+template<> 
 __device__ __forceinline__ float CudaBsrMatrix_rightMultDiag_1<true, false>(int blockBeginLeft, int blockColResult,
 	int rowPerBlock, int colsPerBlock, int elePerBlock, int rowShiftResult, int colShiftResult,
 	cudaTextureObject_t leftValue, cudaTextureObject_t rightValue)
@@ -241,8 +241,10 @@ __global__ void CudaBsrMatrix_Range_multBsrT_value(
 	int rangeColBeginA, int rangeColEndA,
 	const int* bsrRowPtrB, cudaTextureObject_t bsrColIdxB, cudaTextureObject_t valueB, 
 	int rangeColBeginB, int rangeColEndB,
+	const int* bsrRowPtrD, cudaTextureObject_t bsrColIdxD, cudaTextureObject_t valueD,
+	int rangeColBeginD, int rangeColEndD,
 	const int* bsrRowPtrC_coo, const int* bsrColIdxC, float* valueC, 
-	int rowsPerBlockA, int colsPerBlockA, int rowsPerBlockB, int nnzC, float alpha
+	int rowsPerBlockA, int colsPerBlockA, int rowsPerBlockB, int nnzC, float alpha, float beta
 	)
 {
 	int innzC = threadIdx.x + blockIdx.x * blockDim.x;
@@ -261,6 +263,7 @@ __global__ void CudaBsrMatrix_Range_multBsrT_value(
 	int blockBeginB = bsrRowPtrB[colBlockC];
 	int blockEndB = bsrRowPtrB[colBlockC + 1];
 
+	// A*B
 	float sum = 0.f;
 	for (int i0 = blockBeginA, i1 = blockBeginB; i0 < blockEndA && i1 < blockEndB;)
 	{
@@ -289,7 +292,27 @@ __global__ void CudaBsrMatrix_Range_multBsrT_value(
 		i0 += (colBlockA < colBlockB) || (colBlockA < 0);
 		i1 += (colBlockA > colBlockB) || (colBlockB < 0);
 	}// i
-	valueC[innzC] = alpha * sum;
+
+
+	// D
+	float D_val = 0.f;
+	if (bsrRowPtrD)
+	{
+		int blockBeginD = bsrRowPtrD[rowBlockC];
+		int blockEndD = bsrRowPtrD[rowBlockC + 1];
+		int colBlockD = 0;
+		for (int c = blockBeginD; c < blockEndD && colBlockD < rangeColEndD; c++)
+		{
+			tex1Dfetch(&colBlockD, bsrColIdxD, c);
+			if (colBlockD - rangeColBeginD == colBlockC)
+			{
+				tex1Dfetch(&D_val, valueD, (c * rowsPerBlockA + rowShiftC) * rowsPerBlockB + colShiftC);
+				break;
+			}
+		}
+	}// end if bsrRowPtrD
+
+	valueC[innzC] = alpha * sum + beta * D_val;
 }
 
 __global__ void CudaBsrMatrix_Range_AAt_blockDiags(
@@ -568,17 +591,25 @@ void CudaBsrMatrix::setRowFromBlockedCsrRowPtr(const int* csrRowPtr)
 	endConstructRowPtr();
 }
 
-void CudaBsrMatrix::Range::multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha)const
+void CudaBsrMatrix::Range::multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha, 
+	const Range* D, float beta)const
 {
 	throw std::exception("CudaBsrMatrix::Range::multBsr_value(): not implemented");
 }
 
-void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha)const
+void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha,
+	const Range* D, float beta)const
 {
 	if (A == nullptr || B.A == nullptr)
 		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): null pointer exception");
+	if (D)
+	if (D->A == nullptr)
+		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): null pointer exception");
 	if (A->isSymbolic() || B.A->isSymbolic())
 		throw std::exception("CudaBsrMatrix::multBsrT_value(): symbolic matrix cannot touch values");
+	if (D)
+	if (D->A->isSymbolic())
+		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): symbolic matrix cannot touch values");
 	if (blocksInCol() != B.blocksInCol())
 		throw std::exception("CudaBsrMatrix::Range::multBsrT_value(): matrix size not matched");
 	if (colsPerBlock() != B.colsPerBlock())
@@ -589,13 +620,26 @@ void CudaBsrMatrix::Range::multBsrT_value(const Range& B, CudaBsrMatrix& C, floa
 	if (C.nnzBlocks() == 0)
 		return;
 
+	const int* D_rptr = nullptr;
+	cudaTextureObject_t D_cidx = 0, D_val = 0;
+	int D_cbegin = 0, D_cend = 0;
+	if (D)
+	{
+		D_rptr = D->A->bsrRowPtr() +D->blockRowBegin;
+		D_cidx = D->A->bsrColIdxTexture();
+		D_val = D->A->valueTexture();
+		D_cbegin = D->blockColBegin;
+		D_cend = D->blockColEnd;
+	}
+
 	CudaBsrMatrix_Range_multBsrT_value << <divUp(C.nnz(), CTA_SIZE), CTA_SIZE >> >(
 		A->bsrRowPtr()+blockRowBegin, A->bsrColIdxTexture(), A->valueTexture(), 
 		blockColBegin, blockColEnd,
 		B.A->bsrRowPtr()+B.blockRowBegin, B.A->bsrColIdxTexture(), B.A->valueTexture(), 
 		B.blockColBegin, B.blockColEnd,
+		D_rptr, D_cidx, D_val, D_cbegin, D_cend,
 		C.bsrRowPtr_coo(), C.bsrColIdx(), C.value(),
-		rowsPerBlock(), colsPerBlock(), B.rowsPerBlock(), C.nnz(), alpha
+		rowsPerBlock(), colsPerBlock(), B.rowsPerBlock(), C.nnz(), alpha, beta
 		);
 }
 

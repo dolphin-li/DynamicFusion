@@ -25,12 +25,14 @@ CudaBsrMatrix::CudaBsrMatrix(cusparseHandle_t handle, bool symbolic)
 	m_tex_bsrRowPtr_coo = 0;
 	m_tex_bsrColIdx = 0;
 	cusparseCheck(cusparseCreateMatDescr(&m_desc));
+	cusparseCheck(cusparseCreateCsrgemm2Info(&m_csrgemm2info));
 }
 
 CudaBsrMatrix::~CudaBsrMatrix()
 {
 	clear();
 	cusparseCheck(cusparseDestroyMatDescr(m_desc));
+	cusparseCheck(cusparseDestroyCsrgemm2Info(m_csrgemm2info));
 }
 
 void CudaBsrMatrix::clear()
@@ -231,19 +233,21 @@ void CudaBsrMatrix::toCsr(DeviceArray<int>& csrRowPtr, DeviceArray<int>& csrColI
 		m_desc, csrValue, csrRowPtr, csrColIdx));
 }
 
-void CudaBsrMatrix::multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C)const
+void CudaBsrMatrix::multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C, const CudaBsrMatrix* D)const
 {
-	range().multBsr_structure(B, C);
+	range().multBsr_structure(B, C, D);
 }
 
-void CudaBsrMatrix::multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha)const
+void CudaBsrMatrix::multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha,
+	const CudaBsrMatrix* D, float beta)const
 {
-	range().multBsr_value(B.range(), C, alpha);
+	range().multBsr_value(B.range(), C, alpha, D == nullptr ? nullptr : &D->range(), beta);
 }
 
-void CudaBsrMatrix::multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha)const
+void CudaBsrMatrix::multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha,
+	const CudaBsrMatrix* D, float beta)const
 {
-	range().multBsrT_value(B.range(), C, alpha);
+	range().multBsrT_value(B.range(), C, alpha, D==nullptr ? nullptr : &D->range(), beta);
 }
 
 void CudaBsrMatrix::AAt_blockDiags(CudaDiagBlockMatrix& C, bool lowerInsteadOfFull,
@@ -292,7 +296,8 @@ void CudaBsrMatrix::dump(std::string name)const
 	}
 }
 
-void CudaBsrMatrix::Range::multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C)const
+void CudaBsrMatrix::Range::multBsr_structure(const CudaBsrMatrix& B, 
+	CudaBsrMatrix& C, const CudaBsrMatrix* D)const
 {
 	if (A == nullptr)
 		throw std::exception("CudaBsrMatrix::Range::multBsr_structure(): nullpointer exception");
@@ -303,34 +308,60 @@ void CudaBsrMatrix::Range::multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatr
 		throw std::exception("CudaBsrMatrix::Range::multBsr_structure(): matrix size not matched");
 	if (colsPerBlock() != B.rowsPerBlock())
 		throw std::exception("CudaBsrMatrix::Range::multBsr_structure(): block size not matched");
+	if (D)
+	{
+		if (A->rowsPerBlock() != D->rowsPerBlock() || B.colsPerBlock() != D->colsPerBlock()
+			|| A->blocksInRow() != D->blocksInRow() || B.blocksInCol() != D->blocksInCol())
+			throw std::exception("CudaBsrMatrix::Range::multBsr_structure(): D size not matched!");
+	}
 
 	C.resize(blocksInRow(), B.blocksInCol(), rowsPerBlock(), B.colsPerBlock());
+
+	// 0. working buffer
+	float alpha = 1.f, beta = 1.f;
+	float* pAlpha = &alpha, *pBeta = nullptr;
+	int nnzD = 0;
+	const int* D_rptr = nullptr, *D_cidx = nullptr;
+	const float* D_val = nullptr;
+	if (D)
+	{
+		pBeta = &beta;
+		nnzD = D->nnzBlocks();
+		D_rptr = D->bsrRowPtr();
+		D_cidx = D->bsrColIdx();
+	}
+
+	size_t nBufferBytes = 0;
+	cusparseCheck( cusparseScsrgemm2_bufferSizeExt(A->m_cusparseHandle,
+		blocksInRow(), B.blocksInCol(), blocksInCol(), pAlpha,
+		A->m_desc, A->nnzBlocks(), A->bsrRowPtr(), A->bsrColIdx(),
+		B.m_desc, B.nnzBlocks(), B.bsrRowPtr(), B.bsrColIdx(),
+		pBeta, B.m_desc, nnzD, D_rptr, D_cidx, A->m_csrgemm2info, &nBufferBytes));
+
+	char* workBufer = A->get_helper_buffer(nBufferBytes);
 
 	// 1. construct rows
 	C.beginConstructRowPtr();
 
 	int cnnz = 0;
-	cusparseCheck(cusparseXcsrgemmNnz(A->m_cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-		CUSPARSE_OPERATION_NON_TRANSPOSE,
+	cusparseCheck(cusparseXcsrgemm2Nnz(A->m_cusparseHandle, 
 		blocksInRow(), B.blocksInCol(), blocksInCol(),
 		A->m_desc, A->nnzBlocks(), A->bsrRowPtr(), A->bsrColIdx(),
 		B.m_desc, B.nnzBlocks(), B.bsrRowPtr(), B.bsrColIdx(),
-		C.m_desc, C.bsrRowPtr(), &cnnz));
+		B.m_desc, nnzD, D_rptr, D_cidx,
+		C.m_desc, C.bsrRowPtr(), &cnnz, A->m_csrgemm2info, workBufer));
 
 	C.endConstructRowPtr(cnnz);
 
 	// 2. construct cols
 	// NOTE: cusparse calculates values together with colIdx
 	// here we only want colIdx, the values calculated here is invalid since we use bsr format
-	const float* avptr = A->isSymbolic() ? (const float*)A->get_helper_buffer(A->nnzBlocks()) : A->value();
-	const float* bvptr = B.isSymbolic() ? (const float*)B.get_helper_buffer(B.nnzBlocks()) : B.value();
-	float* cvptr = C.isSymbolic() ? (float*)C.get_helper_buffer(C.nnzBlocks()) : C.value();
-	cusparseCheck(cusparseScsrgemm(A->m_cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-		CUSPARSE_OPERATION_NON_TRANSPOSE,
-		blocksInRow(), B.blocksInCol(), blocksInCol(),
-		A->m_desc, A->nnzBlocks(), avptr, A->bsrRowPtr(), A->bsrColIdx(),
-		B.m_desc, B.nnzBlocks(), bvptr, B.bsrRowPtr(), B.bsrColIdx(),
-		C.m_desc, cvptr, C.bsrRowPtr(), C.bsrColIdx()));
+	cusparseCheck(cusparseScsrgemm2(A->m_cusparseHandle, 
+		blocksInRow(), B.blocksInCol(), blocksInCol(), pAlpha,
+		A->m_desc, A->nnzBlocks(), nullptr, A->bsrRowPtr(), A->bsrColIdx(),
+		B.m_desc, B.nnzBlocks(), nullptr, B.bsrRowPtr(), B.bsrColIdx(), pBeta,
+		B.m_desc, nnzD, nullptr, D_rptr, D_cidx,
+		C.m_desc, nullptr, C.bsrRowPtr(), C.bsrColIdx(), A->m_csrgemm2info, workBufer));
 }
 
 char* CudaBsrMatrix::get_helper_buffer(int nBytes)const

@@ -10,6 +10,7 @@ namespace dfusion
 	{
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
 			throw std::exception("cuSparse creating failed!");
+		cusparseSetPointerMode(m_cuSparseHandle, CUSPARSE_POINTER_MODE_HOST);
 
 		if (CUBLAS_STATUS_SUCCESS != cublasCreate(&m_cublasHandle))
 			throw std::exception("cuSparse creating failed!");
@@ -27,7 +28,7 @@ namespace dfusion
 		m_B = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Bt = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Bt_Ltinv = new CudaBsrMatrix(m_cuSparseHandle);
-		m_Hr = new CudaBsrMatrix(m_cuSparseHandle);;
+		m_Hr = new CudaBsrMatrix(m_cuSparseHandle);
 
 		reset();
 	}

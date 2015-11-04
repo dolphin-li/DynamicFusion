@@ -6,6 +6,8 @@
 #include <cublas_v2.h>
 #include <cusparse.h>
 #include <cusolverDn.h>
+#include <cusolverSp.h>
+#include <cusolverSp_LOWLEVEL_PREVIEW.h>
 #include "CudaDiagBlockMatrix.h"
 #include "CudaBsrMatrix.h"
 namespace dfusion
@@ -122,7 +124,6 @@ namespace dfusion
 		// we thus only touch the lower part of each block
 		// after calculation finished, we filled the upper part then.
 		CudaBsrMatrix* m_Hr;
-
 
 		// CSR sparse matrix of B
 		CudaBsrMatrix* m_B;

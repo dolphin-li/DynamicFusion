@@ -41,13 +41,15 @@ public:
 		int cols()const{ return blocksInCol() * colsPerBlock(); }
 
 		// C = alpha * this * B; Assume structure is given
-		void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C)const;
+		void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C, const CudaBsrMatrix* D = nullptr)const;
 
-		// C = alpha * this * B; Assume structure is given
-		void multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f)const;
+		// C = alpha * this * B + beta * D; Assume structure is given
+		void multBsr_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f,
+			const Range* D = nullptr, float beta = 0.f)const;
 
-		// C = alpha * this * B'; Assume structure is given
-		void multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f)const;
+		// C = alpha * this * B' + beta * D; Assume structure is given
+		void multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f,
+			const Range* D = nullptr, float beta = 0.f)const;
 
 		// compute C = alpha * blockDiag(this*this') + beta*C;
 		// if lowerInsteadOfFull, then only the lower triangular part is touched
@@ -135,14 +137,16 @@ public:
 	// mult-vector: y = alpha * this * x + beta * y
 	void Mv(const float* x, float* y, float alpha = 1.f, float beta = 0.f)const;
 
-	// C = alpha*this*B
-	void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C)const;
+	// C = alpha*this*B + beta*D (if D is not null)
+	void multBsr_structure(const CudaBsrMatrix& B, CudaBsrMatrix& C, const CudaBsrMatrix* D=nullptr)const;
 
-	// C = alpha*this*B
-	void multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f)const;
+	// C = alpha*this*B + beta*D
+	void multBsr_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f,
+		const CudaBsrMatrix* D = nullptr, float beta = 0.f)const;
 
-	// C = alpha*this*B'
-	void multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f)const;
+	// C = alpha*this*B' + beta*D
+	void multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f,
+		const CudaBsrMatrix* D = nullptr, float beta = 0.f)const;
 
 	// compute C = alpha * blockDiag(this*this') + beta*C;
 	// if lowerInsteadOfFull, then only the lower triangular part is touched
@@ -168,6 +172,7 @@ protected:
 private:
 	cusparseHandle_t m_cusparseHandle;
 	cusparseMatDescr_t m_desc;
+	csrgemm2Info_t m_csrgemm2info;
 	int m_blocksInRow;
 	int m_blocksInCol;
 	int m_rowsPerBlock;

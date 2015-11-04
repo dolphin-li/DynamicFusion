@@ -1753,13 +1753,14 @@ namespace dfusion
 		float Hr_val = 0.f;
 		int Hr_blockBegin = Hr_rptr[yBlock];
 		int Hr_blockEnd = Hr_rptr[yBlock+1];
+
 		for (int c = Hr_blockBegin; c < Hr_blockEnd; c++)
 		{
 			int Hr_colBlock = 0;
 			tex1Dfetch(&Hr_colBlock, Hr_cidx, c);
 			if (Hr_colBlock == xBlock)
 			{
-				Hr_val = Hr_value[c*VarPerNode2 + yShift*VarPerNode + xShift];
+				Hr_val = Hr_value[c*VarPerNode2 + yShift*VarPerNode + xShift];				
 				break;
 			}
 		}
