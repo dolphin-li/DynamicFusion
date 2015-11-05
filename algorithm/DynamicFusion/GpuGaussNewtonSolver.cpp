@@ -31,6 +31,8 @@ namespace dfusion
 		m_Hr = new CudaBsrMatrix(m_cuSparseHandle);
 		m_H_singleLevel = new CudaBsrMatrix(m_cuSparseHandle);
 		m_H_singleLevel_csr = new CudaBsrMatrix(m_cuSparseHandle);
+		m_singleLevel_solver = new CudaCholeskeySolver();
+		m_singleLevel_solver->init();
 
 		reset();
 	}
@@ -51,6 +53,7 @@ namespace dfusion
 		delete m_Hr;
 		delete m_H_singleLevel;
 		delete m_H_singleLevel_csr;
+		delete m_singleLevel_solver;
 	}
 
 	template<class T>
@@ -567,6 +570,28 @@ namespace dfusion
 
 	void GpuGaussNewtonSolver::singleLevelSolve()
 	{
+		m_singleLevel_solver->factor();
+		m_singleLevel_solver->solve(m_h, m_g);
 
+		//checkLinearSolver(m_H_singleLevel, m_h, m_g);
+	}
+
+	void GpuGaussNewtonSolver::checkLinearSolver(const CudaBsrMatrix* A, const float* x, const float* b)
+	{
+		if (m_tmpvec.size() < A->rows())
+			m_tmpvec.create(A->rows());
+
+		cudaSafeCall(cudaMemcpy(m_tmpvec, b, A->rows()*sizeof(float), 
+			cudaMemcpyDeviceToDevice), "GpuGaussNewtonSolver::checkLinearSolver, 1");
+
+		// tmp = A*x-b
+		A->Mv(x, m_tmpvec, 1.f, -1.f);
+
+		float dif = 0.f, nb;
+		cublasSnrm2(m_cublasHandle, A->rows(), m_tmpvec, 1, &dif);
+		cublasSnrm2(m_cublasHandle, A->rows(), b, 1, &nb);
+
+		dif /= nb;
+		printf("linear solver, dif: %ef\n", dif);
 	}
 }

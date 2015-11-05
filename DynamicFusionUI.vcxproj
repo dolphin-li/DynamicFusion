@@ -154,6 +154,7 @@
     <ClCompile Include="algorithm\camera\Camera.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\CpuGaussNewton.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\CudaBsrMatrix.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\CudaCholeSkeySolver.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mgpuutil.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mmio.cpp" />
@@ -273,6 +274,7 @@
     <ClInclude Include="algorithm\camera\fmath.h" />
     <ClInclude Include="algorithm\DynamicFusion\CpuGaussNewton.h" />
     <ClInclude Include="algorithm\DynamicFusion\CudaBsrMatrix.h" />
+    <ClInclude Include="algorithm\DynamicFusion\CudaCholeskeySolver.h" />
     <ClInclude Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.h" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctaloadbalance.cuh" />
     <ClInclude Include="algorithm\DynamicFusion\cudpp\moderngpu\include\device\ctamerge.cuh" />
@@ -435,6 +437,7 @@
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\CudaBsrMatrix.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\CudaCholeskeySolver.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mgpucontext.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\cudpp\ModerGpuWrapper.cu" />

@@ -112,6 +112,7 @@ public:
 	int nnz()const{ return m_nnzBlocks * m_rowsPerBlock * m_colsPerBlock; }
 	int nnzBlocks()const{ return m_nnzBlocks; }
 	bool isSquareBlock()const{ return m_rowsPerBlock == m_colsPerBlock; }
+	bool isCsr()const{ return m_rowsPerBlock == 1 && m_colsPerBlock == 1; }
 	const float* value()const{ return m_values.ptr(); }
 	float* value(){ return m_values.ptr(); }
 	cudaTextureObject_t valueTexture()const{ return m_tex_values; }

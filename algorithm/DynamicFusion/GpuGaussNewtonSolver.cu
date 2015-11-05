@@ -1096,6 +1096,7 @@ namespace dfusion
 		{
 			m_Jrt->multBsr_structure(*m_Jr, *m_H_singleLevel);
 			m_H_singleLevel->toCsr_structure(*m_H_singleLevel_csr);
+			m_singleLevel_solver->analysis(m_H_singleLevel_csr, false);
 		}
 	}
 
@@ -2128,10 +2129,4 @@ namespace dfusion
 	}
 #pragma endregion
 
-#pragma region --check linear solver
-	void GpuGaussNewtonSolver::checkLinearSolver()
-	{
-
-	}
-#pragma endregion
 }

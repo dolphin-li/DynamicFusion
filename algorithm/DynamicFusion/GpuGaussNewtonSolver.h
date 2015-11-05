@@ -6,10 +6,9 @@
 #include <cublas_v2.h>
 #include <cusparse.h>
 #include <cusolverDn.h>
-#include <cusolverSp.h>
-#include <cusolverSp_LOWLEVEL_PREVIEW.h>
 #include "CudaDiagBlockMatrix.h"
 #include "CudaBsrMatrix.h"
+#include "CudaCholeskeySolver.h"
 namespace dfusion
 {
 	class GpuGaussNewtonSolver
@@ -63,7 +62,7 @@ namespace dfusion
 		float calcTotalEnergy(float& data_energy, float& reg_energy);
 
 		void checkNan(const DeviceArray<float>& x, int n, const char* msg);
-		void checkLinearSolver();
+		void checkLinearSolver(const CudaBsrMatrix* A, const float* x, const float* b);
 
 		void bindTextures();
 		void unBindTextures();
@@ -124,6 +123,7 @@ namespace dfusion
 		CudaBsrMatrix* m_H_singleLevel;
 		// csr conversion to use the solver of cusparse
 		CudaBsrMatrix* m_H_singleLevel_csr;
+		CudaCholeskeySolver* m_singleLevel_solver;
 
 		// Hessian of the bottom-right of the data+reg term, 
 		// it is a dense matrix and symmetric

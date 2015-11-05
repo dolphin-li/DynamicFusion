@@ -223,6 +223,9 @@
     <ClCompile Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\CudaCholeSkeySolver.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -572,6 +575,9 @@
     <ClInclude Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\CudaCholeskeySolver.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
@@ -617,6 +623,9 @@
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
     <CudaCompile Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\CudaCholeskeySolver.cu">
       <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
   </ItemGroup>
