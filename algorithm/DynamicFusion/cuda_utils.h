@@ -18,7 +18,7 @@
 #define cudaSafeCall ___cudaSafeCall
 
 
-void ___cudaSafeCall(cudaError_t err, char* msg = NULL);
+void ___cudaSafeCall(cudaError_t err, const char* msg = NULL);
 
 static inline int divUp(int total, int grain) { return (total + grain - 1) / grain; }
 
