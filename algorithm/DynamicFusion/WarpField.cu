@@ -1016,7 +1016,7 @@ namespace dfusion
 
 			m_nodeTree[0]->knnSearchGpu(getNodesDqVwPtr(0) + 2, 3,
 				(IdxType*)getNodesEdgesPtr(0), nullptr, m_param.warp_knn_k_eachlevel[0],
-				getNumNodesInLevel(0), KnnK);
+				getNumNodesInLevel(0), KnnK, m_param.graph_single_level);
 		}
 		else if (m_numNodes[0])// else we only update the graph quaternions
 		{
@@ -1097,7 +1097,8 @@ namespace dfusion
 	}
 
 	__global__ void extract_nodes_info_kernel(const float4* nodesDqVw, float* twist, float4* vw,
-		const WarpField::KnnIdx* nodesKnnIn, WarpField::KnnIdx* nodesKnnOut, IdxContainter ic)
+		const WarpField::KnnIdx* nodesKnnIn, WarpField::KnnIdx* nodesKnnOut, 
+		IdxContainter ic, bool single_graph_level)
 	{
 		int iout = blockIdx.x * blockDim.x + threadIdx.x;
 		if (iout >= ic[WarpField::GraphLevelNum])
@@ -1129,8 +1130,12 @@ namespace dfusion
 		WarpField::KnnIdx kid = nodesKnnIn[iin];
 		for (int k = 0; k < WarpField::KnnK; k++)
 		{
-			knn_k(kid, k) = (knn_k(kid, k) < ic[level + 1] - ic[level] ? 
-				knn_k(kid, k) + ic[level + 1] : ic[WarpField::GraphLevelNum]);
+			if (!single_graph_level)
+				knn_k(kid, k) = (knn_k(kid, k) < ic[level + 1] - ic[level] ? 
+					knn_k(kid, k) + ic[level + 1] : ic[WarpField::GraphLevelNum]);
+			else
+				knn_k(kid, k) = (knn_k(kid, k) < WarpField::MaxNodeNum ?
+					knn_k(kid, k) : ic[WarpField::GraphLevelNum]);
 		}
 		nodesKnnOut[iout] = kid;
 	}
@@ -1168,9 +1173,10 @@ namespace dfusion
 
 		dim3 block(256);
 		dim3 grid(divUp(ic[GraphLevelNum], block.x));
-
+		
 		extract_nodes_info_kernel << <grid, block >> >(getNodesDqVwPtr(0),
-			twist.ptr(), vw.ptr(), getNodesEdgesPtr(0), nodesKnn.ptr(), ic);
+			twist.ptr(), vw.ptr(), getNodesEdgesPtr(0), nodesKnn.ptr(), ic,
+			m_param.graph_single_level);
 		cudaSafeCall(cudaGetLastError(), "extract_nodes_info_kernel");
 	}
 

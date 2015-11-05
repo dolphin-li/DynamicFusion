@@ -53,11 +53,15 @@ namespace dfusion
 		* \param[out] dists Distances to the nearest neighbors found, size knnStride*n
 		* \param[in] knn Number of nearest neighbors to return
 		* \param[in] knnStride stride of input indices
+		* \param[in] excludeSelf if the query is the same with the tree points, we may want
+		*			 to avoid self-search, set this param to true then
 		*/
 		void knnSearchGpu(const float4* queries, int query_stride_in_float4, 
-			int* indices, float* dists, size_t knn, size_t n, size_t knnStride) const;
+			int* indices, float* dists, size_t knn, size_t n, size_t knnStride, 
+			bool excludeSelf = false) const;
 		void knnSearchGpu(const float4* queries, int query_stride_in_float4,
-			ushort* indices, float* dists, size_t knn, size_t n, size_t knnStride) const;
+			ushort* indices, float* dists, size_t knn, size_t n, size_t knnStride,
+			bool excludeSelf = false) const;
 
 		/**
 		* \brief Perform k-nearest neighbor search on a grid: (x,y,z) = origion + (ix,iy,iz)*voxelSize

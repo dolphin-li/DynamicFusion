@@ -254,6 +254,12 @@ void CudaBsrMatrix::multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, flo
 	range().multBsrT_value(B.range(), C, alpha, D==nullptr ? nullptr : &D->range(), beta);
 }
 
+void CudaBsrMatrix::multBsrT_addDiag_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha,
+	const CudaDiagBlockMatrix* D, float beta)const
+{
+	range().multBsrT_addDiag_value(B.range(), C, alpha, D, beta);
+}
+
 void CudaBsrMatrix::AAt_blockDiags(CudaDiagBlockMatrix& C, bool lowerInsteadOfFull,
 	float alpha, float beta)const
 {

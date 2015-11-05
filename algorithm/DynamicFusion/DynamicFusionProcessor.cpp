@@ -224,10 +224,19 @@ namespace dfusion
 	void DynamicFusionProcessor::processFrame(const DepthMap& depth)
 	{
 		depth.copyTo(m_depth_input);
+
+
+		Tbx::Transfo rigid = rigid_align();
+		m_warpField->set_rigidTransform(rigid);
+
 		estimateWarpField();
+
 		nonRigidTsdfFusion();
+
 		surfaceExtractionMC();
+
 		insertNewDeformNodes();
+
 		updateRegularizationGraph();
 		updateKNNField();
 		m_frame_id++;
@@ -378,10 +387,6 @@ namespace dfusion
 
 	void DynamicFusionProcessor::estimateWarpField()
 	{
-		Tbx::Transfo rigid = rigid_align();
-		
-		m_warpField->set_rigidTransform(rigid);
-
 		if (m_frame_id == 0)
 			return;
 

@@ -71,7 +71,7 @@ namespace dfusion
 		mirror_input = false; 
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
-		graph_single_level = false;
+		graph_single_level = true;
 
 		/** *****************************************************
 		* visualization related

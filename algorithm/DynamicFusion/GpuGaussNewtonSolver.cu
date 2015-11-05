@@ -1090,6 +1090,13 @@ namespace dfusion
 		m_Hd_Linv.resize(m_numLv0Nodes, VarPerNode);
 		m_Hd_LLtinv.resize(m_numLv0Nodes, VarPerNode);
 		m_Bt->rightMultDiag_structure(m_Hd_Linv, *m_Bt_Ltinv);
+
+		// 4. single level Hessian
+		if (m_param->graph_single_level)
+		{
+			m_Jrt->multBsr_structure(*m_Jr, *m_H_singleLevel);
+			m_H_singleLevel->toCsr_structure(*m_H_singleLevel_csr);
+		}
 	}
 
 #pragma endregion

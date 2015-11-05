@@ -29,6 +29,8 @@ namespace dfusion
 		m_Bt = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Bt_Ltinv = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Hr = new CudaBsrMatrix(m_cuSparseHandle);
+		m_H_singleLevel = new CudaBsrMatrix(m_cuSparseHandle);
+		m_H_singleLevel_csr = new CudaBsrMatrix(m_cuSparseHandle);
 
 		reset();
 	}
@@ -47,6 +49,8 @@ namespace dfusion
 		delete m_Bt;
 		delete m_Bt_Ltinv;
 		delete m_Hr;
+		delete m_H_singleLevel;
+		delete m_H_singleLevel_csr;
 	}
 
 	template<class T>
@@ -226,6 +230,9 @@ namespace dfusion
 
 		*m_Hr = 0.f;
 		setzero(m_Q);
+
+		*m_H_singleLevel = 0.f;
+		*m_H_singleLevel_csr = 0.f;
 	}
 
 	float GpuGaussNewtonSolver::solve(const MapArr& vmap_live, const MapArr& nmap_live,
@@ -251,7 +258,8 @@ namespace dfusion
 		for (int iter = 0; iter < m_param->fusion_GaussNewton_maxIter; iter++)
 		{
 			m_Hd = 0.f;
-			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()), "GpuGaussNewtonSolver::solve, setg=0");
+			cudaSafeCall(cudaMemset(m_g.ptr(), 0, sizeof(float)*m_g.size()), 
+				"GpuGaussNewtonSolver::solve, setg=0");
 
 			checkNan(m_twist, m_numNodes, ("twist_" + std::to_string(iter)).c_str());
 
@@ -272,7 +280,10 @@ namespace dfusion
 			checkNan(m_g, m_Jr->cols(), ("g_" + std::to_string(iter)).c_str());
 
 			// 4. solve H*h = g
-			blockSolve();
+			if (m_param->graph_single_level)
+				singleLevelSolve();
+			else
+				blockSolve();
 			checkNan(m_h, m_Jr->cols(), ("h_" + std::to_string(iter)).c_str());
 
 			//debug_print();
@@ -366,6 +377,8 @@ namespace dfusion
 		m_Bt->dump("D:/tmp/gpu_Bt.txt");
 		m_Bt_Ltinv->dump("D:/tmp/gpu_BtLtinv.txt");
 		m_Hr->dump("D:/tmp/gpu_Hr.txt");
+		m_H_singleLevel->dump("D:/tmp/gpu_H_singleLevl.txt");
+		m_H_singleLevel_csr->dump("D:/tmp/gpu_H_singleLevl_csr.txt");
 		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_Hr->rows());
 		if (m_Q_kept.size() == m_Q.size())
 			dumpMat("D:/tmp/gpu_Qkept.txt", m_Q_kept, m_Hr->rows());
@@ -511,29 +524,49 @@ namespace dfusion
 
 	void GpuGaussNewtonSolver::calcHessian()
 	{
-		// 1. compute Jr0'Jr0 and accumulate into Hd
-		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).AAt_blockDiags(
-			m_Hd, true, 1, 1);
-		m_Hd.axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
+		if (m_param->graph_single_level)
+		{
+			// 1. compute H = Jr'*Jr + Hd
+			// 1.1 Previously, the lower part of Hd is calculated, now we complete it
+			m_Hd.transpose_L_to_U();
+			m_Jrt->multBsrT_addDiag_value(*m_Jrt, *m_H_singleLevel,
+				1.f, &m_Hd, 1.f + m_param->fusion_GaussNewton_diag_regTerm);
+			m_H_singleLevel->toCsr_value(*m_H_singleLevel_csr);
 
-		// 1.1 fill the upper tri part of Hd
-		// previously, we only calculate the lower triangular pert of Hd;
-		// now that the computation of Hd is ready, we fill the mission upper part
-		m_Hd.transpose_L_to_U();
+			// 2. compute g = -(g + Jr'*fr)
+			m_Jrt->Mv(m_f_r, m_g, -1.f, -1.f);
+		}
+		else
+		{
+			// 1. compute Jr0'Jr0 and accumulate into Hd
+			m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).AAt_blockDiags(
+				m_Hd, true, 1, 1);
+			m_Hd.axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
 
-		// 2. compute B = Jr0'Jr1
-		m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
-			m_Jrt->range(m_B->blocksInRow(), 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_B);
+			// 1.1 fill the upper tri part of Hd
+			// previously, we only calculate the lower triangular pert of Hd;
+			// now that the computation of Hd is ready, we fill the mission upper part
+			m_Hd.transpose_L_to_U();
 
-		// 3. compute Bt
-		m_B->transposeValueTo(*m_Bt);
+			// 2. compute B = Jr0'Jr1
+			m_Jrt->range(0, 0, m_B->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
+				m_Jrt->range(m_B->blocksInRow(), 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_B);
 
-		// 4. compute Hr
-		m_Jrt->range(m_numLv0Nodes, 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
-			m_Jrt->range(m_numLv0Nodes, 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_Hr);
-		m_Hr->axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
+			// 3. compute Bt
+			m_B->transposeValueTo(*m_Bt);
 
-		// 5. compute g = -(g + Jr'*fr)
-		m_Jrt->Mv(m_f_r, m_g, -1.f, -1.f);
+			// 4. compute Hr
+			m_Jrt->range(m_numLv0Nodes, 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()).multBsrT_value(
+				m_Jrt->range(m_numLv0Nodes, 0, m_Jrt->blocksInRow(), m_Jrt->blocksInCol()), *m_Hr);
+			m_Hr->axpy_diag(1 + m_param->fusion_GaussNewton_diag_regTerm);
+
+			// 5. compute g = -(g + Jr'*fr)
+			m_Jrt->Mv(m_f_r, m_g, -1.f, -1.f);
+		}
+	}
+
+	void GpuGaussNewtonSolver::singleLevelSolve()
+	{
+
 	}
 }

@@ -631,7 +631,8 @@ namespace dfusion
 
 			__device__ __host__ SingleResultSet() : 
 				bestIndex(-1), bestDist(INFINITY), 
-				resultDist(nullptr), resultIndex(nullptr){ }
+				resultDist(nullptr), resultIndex(nullptr),
+				selfIndex(-1){ }
 
 			__device__ inline float worstDist()
 			{
@@ -640,7 +641,7 @@ namespace dfusion
 
 			__device__ inline void insert(int index, DistanceType dist)
 			{
-				if (dist <= bestDist) {
+				if (dist <= bestDist && index != selfIndex) {
 					bestIndex = index;
 					bestDist = dist;
 				}
@@ -648,14 +649,17 @@ namespace dfusion
 
 			DistanceType* resultDist;
 			IndexType* resultIndex;
+			int selfIndex;
 
 			__device__ inline void setResultLocation(DistanceType* dists, 
-				IndexType* index, int thread, int knnStride)
+				IndexType* index, int thread, int knnStride, bool excludeSelf)
 			{
 				if (dists)
 					resultDist = dists + thread * knnStride;
 				if (index)
 					resultIndex = index + thread * knnStride;
+				if (excludeSelf)
+					selfIndex = thread;
 			}
 
 			__device__ inline void finish()
@@ -694,7 +698,7 @@ namespace dfusion
 
 			__device__ __host__ KnnResultSet(bool sortResults) : 
 				foundNeighbors(0), largestHeapDist(INFINITY), sorted(sortResults),
-				resultIndex_out(0), resultDist_out(0){
+				resultIndex_out(0), resultDist_out(0), selfIndex(-1){
 				for (int i = 0; i < K; i++)
 				{
 					resultDist[i] = INFINITY;
@@ -709,6 +713,8 @@ namespace dfusion
 
 			__device__ inline void insert(int index, DistanceType dist)
 			{
+				if (index == selfIndex)
+					return;
 				if (foundNeighbors < K) {
 					resultDist[foundNeighbors] = dist;
 					resultIndex[foundNeighbors] = index;
@@ -738,9 +744,10 @@ namespace dfusion
 			int resultIndex[K];
 			float* resultDist_out;
 			IndexType* resultIndex_out;
+			int selfIndex;
 
 			__device__ inline void setResultLocation(DistanceType* dists, IndexType* index, 
-				int thread, int knnStride)
+				int thread, int knnStride, bool excludeSelf)
 			{
 				if (index)
 					resultIndex_out = index + thread*knnStride;
@@ -750,6 +757,8 @@ namespace dfusion
 					resultDist[i] = INFINITY;
 					resultIndex[i] = -1;
 				}
+				if (excludeSelf)
+					selfIndex = thread;
 			}
 
 			__host__ __device__ inline void finish()
@@ -846,7 +855,8 @@ namespace dfusion
 		__global__ void nearestKernel(const float4* query,
 			int query_stride_in_float4,
 			IndexType* resultIndex, float* resultDist,
-			int querysize, GPUResultSet result, int knnStride
+			int querysize, GPUResultSet result, int knnStride,
+			bool excludeSelf = false
 			)
 		{
 			typedef float DistanceType;
@@ -858,14 +868,14 @@ namespace dfusion
 
 			float4 q = query[tid*query_stride_in_float4];
 
-			result.setResultLocation(resultDist, resultIndex, tid, knnStride);
+			result.setResultLocation(resultDist, resultIndex, tid, knnStride, excludeSelf);
 			searchNeighbors(q, result);
 			result.finish();
 		}
 
 		template< typename GPUResultSet>
 		__global__ void nearestKernel(cudaSurfaceObject_t volumeSurf, int3 begin, int3 end,
-			float3 origion, float voxelSize, GPUResultSet result, int knnStride
+			float3 origion, float voxelSize, GPUResultSet result, int knnStride, bool excludeSelf=false
 			)
 		{
 			typedef float DistanceType;
@@ -884,7 +894,7 @@ namespace dfusion
 				q.w = 0.f;
 				searchNeighbors(q, result);
 
-				result.setResultLocation(nullptr, nullptr, 0, knnStride);
+				result.setResultLocation(nullptr, nullptr, 0, knnStride, excludeSelf);
 				searchNeighbors(q, result);
 				result.finish();
 
@@ -896,7 +906,7 @@ namespace dfusion
 	}
 
 	void GpuKdTree::knnSearchGpu(const float4* queries, int query_stride_in_float4,
-		ushort* indices, float* dists, size_t knn, size_t n, size_t knnStride) const
+		ushort* indices, float* dists, size_t knn, size_t n, size_t knnStride, bool excludeSelf) const
 	{
 		if (n == 0)
 			return;
@@ -917,7 +927,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::SingleResultSet<float, ushort>(), 
-				knnStride
+				knnStride, 
+				excludeSelf
 				);
 			break;
 		case 2:
@@ -928,7 +939,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 2, ushort>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 3:
@@ -939,7 +951,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 3, ushort>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 4:
@@ -950,7 +963,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 4, ushort>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 5:
@@ -961,7 +975,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 5, ushort>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 6:
@@ -972,7 +987,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 6, ushort>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 7:
@@ -983,7 +999,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 7, ushort>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 8:
@@ -994,7 +1011,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 8, ushort>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		default:
@@ -1003,7 +1021,7 @@ namespace dfusion
 	}
 
 	void GpuKdTree::knnSearchGpu(const float4* queries, int query_stride_in_float4, 
-		int* indices, float* dists, size_t knn, size_t n, size_t knnStride) const
+		int* indices, float* dists, size_t knn, size_t n, size_t knnStride, bool excludeSelf) const
 	{
 		if (n == 0)
 			return;
@@ -1024,7 +1042,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::SingleResultSet<float>(),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 2:
@@ -1035,7 +1054,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 2>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 3:
@@ -1046,7 +1066,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 3>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 4:
@@ -1057,7 +1078,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 4>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 5:
@@ -1068,7 +1090,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 5>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 6:
@@ -1079,7 +1102,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 6>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 7:
@@ -1090,7 +1114,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 7>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		case 8:
@@ -1101,7 +1126,8 @@ namespace dfusion
 				dists,
 				n,
 				KdTreeCudaPrivate::KnnResultSet<float, 8>(sorted),
-				knnStride
+				knnStride,
+				excludeSelf
 				);
 			break;
 		default:

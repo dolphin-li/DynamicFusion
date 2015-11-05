@@ -163,8 +163,8 @@ namespace dfusion
 				for (int k = 0; k < WarpField::KnnK; k++)
 				{
 					int nn = knnIdx[k];
-					if (nn >= WarpField::MaxNodeNum || nn < 0)
-						nn = i-WarpField::MaxNodeNum;
+					if (nn >= WarpField::MaxNodeNum)
+						break;
 					glindex[start + k*2 + 0] = i + node_start_id;
 					glindex[start + k*2 + 1] = nn + node_start_id + 
 						WarpField::MaxNodeNum * (!single_level_graph);

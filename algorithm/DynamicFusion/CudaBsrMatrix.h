@@ -50,6 +50,8 @@ public:
 		// C = alpha * this * B' + beta * D; Assume structure is given
 		void multBsrT_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f,
 			const Range* D = nullptr, float beta = 0.f)const;
+		void multBsrT_addDiag_value(const Range& B, CudaBsrMatrix& C, float alpha = 1.f,
+			const CudaDiagBlockMatrix* D = nullptr, float beta = 0.f)const;
 
 		// compute C = alpha * blockDiag(this*this') + beta*C;
 		// if lowerInsteadOfFull, then only the lower triangular part is touched
@@ -79,6 +81,10 @@ public:
 	// after calling resize, you may also call this function to convert a csr matrix to this
 	void fromCsr(const int* csrRowPtr, const int* csrColIdx, const float* csrValue);
 	void toCsr(DeviceArray<int>& csrRowPtr, DeviceArray<int>& csrColIdx, DeviceArray<float>& csrValue)const;
+
+	// B will be with block size 1x1, thus csr
+	void toCsr_structure(CudaBsrMatrix& B)const;
+	void toCsr_value(CudaBsrMatrix& B)const;
 
 	// sub matrix by rows
 	void subRows_structure(CudaBsrMatrix& S, int blockRowBegin, int blockRowEnd)const;
@@ -147,6 +153,8 @@ public:
 	// C = alpha*this*B' + beta*D
 	void multBsrT_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f,
 		const CudaBsrMatrix* D = nullptr, float beta = 0.f)const;
+	void multBsrT_addDiag_value(const CudaBsrMatrix& B, CudaBsrMatrix& C, float alpha = 1.f,
+		const CudaDiagBlockMatrix* D = nullptr, float beta = 0.f)const;
 
 	// compute C = alpha * blockDiag(this*this') + beta*C;
 	// if lowerInsteadOfFull, then only the lower triangular part is touched

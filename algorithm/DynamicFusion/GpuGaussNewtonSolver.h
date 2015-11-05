@@ -58,6 +58,7 @@ namespace dfusion
 		void calcRegTerm();
 		void calcHessian();
 		void blockSolve();
+		void singleLevelSolve();
 		void updateTwist_inch(const float* h, float step);
 		float calcTotalEnergy(float& data_energy, float& reg_energy);
 
@@ -117,6 +118,12 @@ namespace dfusion
 		// we thus only touch the lower part of each block
 		// after calculation finished, we filled the upper part then.
 		CudaDiagBlockMatrix m_Hd;
+
+		// for single-level-graph test
+		// m_H_singleLevel = Hd + Jr'*Jr
+		CudaBsrMatrix* m_H_singleLevel;
+		// csr conversion to use the solver of cusparse
+		CudaBsrMatrix* m_H_singleLevel_csr;
 
 		// Hessian of the bottom-right of the data+reg term, 
 		// it is a dense matrix and symmetric
