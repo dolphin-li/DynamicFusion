@@ -614,7 +614,7 @@ CudaBsrMatrix& CudaBsrMatrix::axpy_diag(float alpha, float beta)
 	if (nnz() == 0)
 		return *this;
 	CudaBsrMatrix_scale_add_diag << <divUp(rows(), CTA_SIZE), CTA_SIZE >> >(
-		nnz(), value(), bsrRowPtr(), bsrColIdxTexture(), rowsPerBlock(), alpha, beta);
+		rows(), value(), bsrRowPtr(), bsrColIdxTexture(), rowsPerBlock(), alpha, beta);
 	cudaSafeCall(cudaGetLastError(), "CudaBsrMatrix::axpy_diag");
 	return *this;
 }

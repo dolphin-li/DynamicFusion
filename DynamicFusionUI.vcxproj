@@ -156,6 +156,7 @@
     <ClCompile Include="algorithm\DynamicFusion\CudaBsrMatrix.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\CudaCholeSkeySolver.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\CudaDiagBlockMatrix.cpp" />
+    <ClCompile Include="algorithm\DynamicFusion\CudaUtil.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mgpuutil.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\mmio.cpp" />
     <ClCompile Include="algorithm\DynamicFusion\cudpp\moderngpu\src\sparsematrix.cpp" />

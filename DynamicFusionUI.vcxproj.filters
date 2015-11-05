@@ -226,6 +226,9 @@
     <ClCompile Include="algorithm\DynamicFusion\CudaCholeSkeySolver.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\CudaUtil.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
