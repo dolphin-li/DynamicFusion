@@ -16,7 +16,7 @@ namespace dfusion
 		volume_resolution[0] = 256;
 		volume_resolution[1] = 256;
 		volume_resolution[2] = 256;
-		voxels_per_meter = 300;
+		voxels_per_meter = 387;
 
 		/** *****************************************************
 		* marching cube related
@@ -78,6 +78,7 @@ namespace dfusion
 			fusion_lambda = 300;
 			fusion_GaussNewton_fixedStep = 0.f;
 			warp_param_softness = 0;
+			fusion_GaussNewton_diag_regTerm = 1e-6;
 		}
 
 		/** *****************************************************

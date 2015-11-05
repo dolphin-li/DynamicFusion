@@ -355,6 +355,7 @@ void DynamicFusionUI::updateDynamicFusion()
 		&& m_state != Pause)
 	{
 		// warp view
+		if (1)
 		{
 			std::vector<uchar4> tmpMap(g_dataholder.m_warpedview_shading.rows()
 			*g_dataholder.m_warpedview_shading.cols());
@@ -379,10 +380,12 @@ void DynamicFusionUI::updateDynamicFusion()
 			img.save(name);
 		}
 		// raw view
+		if (0)
 		{
 			std::vector<uchar4> tmpMap;
 			ui.widgetDepth->download_currentmap(tmpMap);
-			QImage img = QImage(dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT, QImage::Format::Format_ARGB32);
+			QImage img = QImage(dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT, 
+				QImage::Format::Format_ARGB32);
 			for (int y = 0; y < dfusion::KINECT_HEIGHT; y++)
 			for (int x = 0; x < dfusion::KINECT_WIDTH; x++)
 			{
@@ -399,26 +402,32 @@ void DynamicFusionUI::updateDynamicFusion()
 				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
 			img.save(name);
 		}
-#if 0
+#if 1
 		// error map
-		img = QImage(g_dataholder.m_errorMap_shading.cols(),
-			g_dataholder.m_errorMap_shading.rows(), QImage::Format::Format_ARGB32);
-		g_dataholder.m_errorMap_shading.download(tmpMap.data(),
-			g_dataholder.m_errorMap_shading.cols()*sizeof(uchar4));
-		for (int y = 0; y < g_dataholder.m_errorMap_shading.rows(); y++)
-		for (int x = 0; x < g_dataholder.m_errorMap_shading.cols(); x++)
+		if (1)
 		{
-			uchar4 v = tmpMap[y*g_dataholder.m_errorMap_shading.cols() + x];
-			img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
-		}
+			std::vector<uchar4> tmpMap(g_dataholder.m_errorMap_shading.rows()
+				*g_dataholder.m_errorMap_shading.cols() * sizeof(uchar4));
+			QImage img = QImage(g_dataholder.m_errorMap_shading.cols(),
+				g_dataholder.m_errorMap_shading.rows(), QImage::Format::Format_ARGB32);
+			g_dataholder.m_errorMap_shading.download(tmpMap.data(),
+				g_dataholder.m_errorMap_shading.cols()*sizeof(uchar4));
+			for (int y = 0; y < g_dataholder.m_errorMap_shading.rows(); y++)
+			for (int x = 0; x < g_dataholder.m_errorMap_shading.cols(); x++)
+			{
+				uchar4 v = tmpMap[y*g_dataholder.m_errorMap_shading.cols() + x];
+				img.setPixel(x, y, qRgba(v.x, v.y, v.z, v.w));
+			}
 
-		QString name1;
-		name1.sprintf("data/screenshots/e_%06d_%d_%d_%d_%d.png", fid,
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
-			g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
-		img.save(name1);
+			int fid = g_dataholder.m_processor.getFrameId();
+			QString name1;
+			name1.sprintf("data/screenshots/e_%06d_%d_%d_%d_%d.png", fid,
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(0),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(1),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(2),
+				g_dataholder.m_processor.getWarpField()->getNumNodesInLevel(3));
+			img.save(name1);
+		}
 #endif
 	}
 }
