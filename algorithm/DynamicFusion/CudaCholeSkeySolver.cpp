@@ -38,17 +38,17 @@ struct CudaCholeskeySolver_EigenContainter
 		xtmp.resize(A.rows());
 
 		// copy structure from cpu
-		cudaSafeCall(cudaMemcpyAsync(A.outerIndexPtr(), dA.bsrRowPtr(), (dA.rows() + 1)*sizeof(int),
+		cudaSafeCall(cudaMemcpy(A.outerIndexPtr(), dA.bsrRowPtr(), (dA.rows() + 1)*sizeof(int),
 			cudaMemcpyDeviceToHost), "CudaCholeskeySolver::analysis() 1");
-		cudaSafeCall(cudaMemcpyAsync(A.innerIndexPtr(), dA.bsrColIdx(), dA.nnz()*sizeof(int),
+		cudaSafeCall(cudaMemcpy(A.innerIndexPtr(), dA.bsrColIdx(), dA.nnz()*sizeof(int),
 			cudaMemcpyDeviceToHost), "CudaCholeskeySolver::analysis() 2");
-		cudaSafeCall(cudaThreadSynchronize(), "CudaCholeskeySolver_EigenContainter::analysis()");
 
 		solver.analyzePattern(A.triangularView<Eigen::Lower>());
 	}
 
 	void factor(const CudaBsrMatrix& dA)
 	{
+		cudaSafeCall(cudaThreadSynchronize(), "CudaCholeskeySolver::factor() 0");
 		cudaSafeCall(cudaMemcpy(value_h.data(), dA.value(), dA.nnz()*sizeof(float),
 			cudaMemcpyDeviceToHost), "CudaCholeskeySolver::factor() 1");
 

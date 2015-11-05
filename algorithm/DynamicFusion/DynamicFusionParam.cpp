@@ -16,7 +16,7 @@ namespace dfusion
 		volume_resolution[0] = 256;
 		volume_resolution[1] = 256;
 		volume_resolution[2] = 256;
-		voxels_per_meter = 387;
+		voxels_per_meter = 300;
 
 		/** *****************************************************
 		* marching cube related
