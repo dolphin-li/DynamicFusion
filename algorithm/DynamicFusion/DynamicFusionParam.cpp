@@ -73,6 +73,13 @@ namespace dfusion
 		solver_enable_nan_check = false;
 		graph_single_level = true;
 
+		if (graph_single_level)
+		{
+			fusion_lambda = 300;
+			fusion_GaussNewton_fixedStep = 0.f;
+			warp_param_softness = 0;
+		}
+
 		/** *****************************************************
 		* visualization related
 		* ******************************************************/

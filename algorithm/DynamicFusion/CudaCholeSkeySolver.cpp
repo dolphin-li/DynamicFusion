@@ -14,7 +14,7 @@ if (!(exp)){ throw std::exception(msg); }
 #pragma region --cpu path
 struct CudaCholeskeySolver_EigenContainter
 {
-	typedef float real;
+	typedef double real;
 	typedef Eigen::Matrix<real, -1, -1> Mat;
 	typedef Eigen::SparseMatrix<real, Eigen::ColMajor> SpMat;
 	typedef Eigen::Matrix<real, -1, 1> Vec;

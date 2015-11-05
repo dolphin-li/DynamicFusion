@@ -529,7 +529,8 @@ namespace dfusion
 			// 1.1 Previously, the lower part of Hd is calculated, now we complete it
 			m_Hd.transpose_L_to_U();
 			m_Jrt->multBsrT_addDiag_value(*m_Jrt, *m_H_singleLevel,
-				1.f, &m_Hd, 1.f + m_param->fusion_GaussNewton_diag_regTerm);
+				1.f, &m_Hd, 1.f);
+			m_H_singleLevel->axpy_diag(1.f + m_param->fusion_GaussNewton_diag_regTerm);
 
 			// 2. compute g = -(g + Jr'*fr)
 			m_Jrt->Mv(m_f_r, m_g, -1.f, -1.f);
