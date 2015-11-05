@@ -121,8 +121,6 @@ namespace dfusion
 		// for single-level-graph test
 		// m_H_singleLevel = Hd + Jr'*Jr
 		CudaBsrMatrix* m_H_singleLevel;
-		// csr conversion to use the solver of cusparse
-		CudaBsrMatrix* m_H_singleLevel_csr;
 		CudaCholeskeySolver* m_singleLevel_solver;
 
 		// Hessian of the bottom-right of the data+reg term, 

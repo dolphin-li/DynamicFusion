@@ -30,7 +30,6 @@ namespace dfusion
 		m_Bt_Ltinv = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Hr = new CudaBsrMatrix(m_cuSparseHandle);
 		m_H_singleLevel = new CudaBsrMatrix(m_cuSparseHandle);
-		m_H_singleLevel_csr = new CudaBsrMatrix(m_cuSparseHandle);
 		m_singleLevel_solver = new CudaCholeskeySolver();
 		m_singleLevel_solver->init();
 
@@ -52,7 +51,6 @@ namespace dfusion
 		delete m_Bt_Ltinv;
 		delete m_Hr;
 		delete m_H_singleLevel;
-		delete m_H_singleLevel_csr;
 		delete m_singleLevel_solver;
 	}
 
@@ -235,7 +233,6 @@ namespace dfusion
 		setzero(m_Q);
 
 		*m_H_singleLevel = 0.f;
-		*m_H_singleLevel_csr = 0.f;
 	}
 
 	float GpuGaussNewtonSolver::solve(const MapArr& vmap_live, const MapArr& nmap_live,
@@ -381,7 +378,6 @@ namespace dfusion
 		m_Bt_Ltinv->dump("D:/tmp/gpu_BtLtinv.txt");
 		m_Hr->dump("D:/tmp/gpu_Hr.txt");
 		m_H_singleLevel->dump("D:/tmp/gpu_H_singleLevl.txt");
-		m_H_singleLevel_csr->dump("D:/tmp/gpu_H_singleLevl_csr.txt");
 		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_Hr->rows());
 		if (m_Q_kept.size() == m_Q.size())
 			dumpMat("D:/tmp/gpu_Qkept.txt", m_Q_kept, m_Hr->rows());
@@ -534,7 +530,6 @@ namespace dfusion
 			m_Hd.transpose_L_to_U();
 			m_Jrt->multBsrT_addDiag_value(*m_Jrt, *m_H_singleLevel,
 				1.f, &m_Hd, 1.f + m_param->fusion_GaussNewton_diag_regTerm);
-			m_H_singleLevel->toCsr_value(*m_H_singleLevel_csr);
 
 			// 2. compute g = -(g + Jr'*fr)
 			m_Jrt->Mv(m_f_r, m_g, -1.f, -1.f);

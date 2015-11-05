@@ -126,6 +126,7 @@ public:
 	int* bsrColIdx(){ return m_bsrColIdx.ptr(); }
 	cudaTextureObject_t bsrColIdxTexture()const{ return m_tex_bsrColIdx; }
 	cusparseMatDescr_t getCuSparseMatDesc()const{ return m_desc; }
+	cusparseHandle_t getCusparseHandle()const{ return m_cusparseHandle; }
 	Range range(int blockRowBegin_ = 0, int blockColBegin_ = 0,
 		int blockRowEnd_ = INT_MAX, int blockColEnd_ = INT_MAX)const{
 		return Range(this, blockRowBegin_, blockColBegin_, blockRowEnd_, blockColEnd_);

@@ -1095,8 +1095,7 @@ namespace dfusion
 		if (m_param->graph_single_level)
 		{
 			m_Jrt->multBsr_structure(*m_Jr, *m_H_singleLevel);
-			m_H_singleLevel->toCsr_structure(*m_H_singleLevel_csr);
-			m_singleLevel_solver->analysis(m_H_singleLevel_csr, false);
+			m_singleLevel_solver->analysis(m_H_singleLevel, true);
 		}
 	}
 
