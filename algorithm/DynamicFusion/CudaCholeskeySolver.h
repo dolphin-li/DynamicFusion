@@ -27,6 +27,13 @@ public:
 
 	// solve for A*x = b
 	void solve(float* x, const float* b);
+
+	// since A = L*L'
+	// this functions solves for L*u = b
+	void solveL(float* u, const float* b);
+
+	// this functions solves for L'*x = u
+	void solveLt(float* x, const float* u);
 private:
 	const CudaBsrMatrix* m_A;
 	CudaBsrMatrix* m_A_csr;

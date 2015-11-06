@@ -76,7 +76,7 @@ namespace dfusion
 		if (graph_single_level)
 		{
 			fusion_lambda = 300;
-			fusion_GaussNewton_fixedStep = 0.f;
+			fusion_GaussNewton_fixedStep = 0.5f;
 			warp_param_softness = 0;
 			fusion_GaussNewton_diag_regTerm = 1e-6;
 		}

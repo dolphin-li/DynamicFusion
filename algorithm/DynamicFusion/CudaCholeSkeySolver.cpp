@@ -14,11 +14,11 @@ if (!(exp)){ throw std::exception(msg); }
 #pragma region --cpu path
 struct CudaCholeskeySolver_EigenContainter
 {
-	typedef double real;
+	typedef float real;
 	typedef Eigen::Matrix<real, -1, -1> Mat;
 	typedef Eigen::SparseMatrix<real, Eigen::ColMajor> SpMat;
 	typedef Eigen::Matrix<real, -1, 1> Vec;
-	typedef Eigen::SimplicialCholesky<SpMat, Eigen::Lower> Solver;
+	typedef Eigen::SimplicialLLT<SpMat, Eigen::Lower> Solver;
 
 	SpMat A;
 	Vec b;
@@ -37,7 +37,7 @@ struct CudaCholeskeySolver_EigenContainter
 		b.resize(A.rows());
 		xtmp.resize(A.rows());
 
-		// copy structure from cpu
+		// copy structure from gpu
 		cudaSafeCall(cudaMemcpy(A.outerIndexPtr(), dA.bsrRowPtr(), (dA.rows() + 1)*sizeof(int),
 			cudaMemcpyDeviceToHost), "CudaCholeskeySolver::analysis() 1");
 		cudaSafeCall(cudaMemcpy(A.innerIndexPtr(), dA.bsrColIdx(), dA.nnz()*sizeof(int),
@@ -65,12 +65,50 @@ struct CudaCholeskeySolver_EigenContainter
 		for (int i = 0; i < A.rows(); i++)
 			b[i] = xtmp[i];
 
-		x = solver.solve(b);
+		b = solver.permutationP()*b;
+		solver.matrixL().solveInPlace(b);
+		solver.matrixU().solveInPlace(b);
+		x = solver.permutationPinv()*b;
 
 		for (int i = 0; i < A.rows(); i++)
 			xtmp[i] = x[i];
 		cudaSafeCall(cudaMemcpy(d_x, xtmp.data(), A.rows()*sizeof(float),
 			cudaMemcpyHostToDevice), "CudaCholeskeySolver::solve() 2");
+	}
+
+	// since A = L*L'
+	// this functions solves for L*u = b
+	void solveL(float* d_u, const float* d_b)
+	{
+		cudaSafeCall(cudaMemcpy(xtmp.data(), d_b, A.rows()*sizeof(float),
+			cudaMemcpyDeviceToHost), "CudaCholeskeySolver::solveL() 1");
+		for (int i = 0; i < A.rows(); i++)
+			b[i] = xtmp[i];
+
+		b = solver.permutationP()*b;
+		solver.matrixL().solveInPlace(b);
+
+		for (int i = 0; i < A.rows(); i++)
+			xtmp[i] = b[i];
+		cudaSafeCall(cudaMemcpy(d_u, xtmp.data(), A.rows()*sizeof(float),
+			cudaMemcpyHostToDevice), "CudaCholeskeySolver::solveL() 2");
+	}
+
+	// this functions solves for L'*x = u
+	void solveLt(float* d_x, const float* d_u)
+	{
+		cudaSafeCall(cudaMemcpy(xtmp.data(), d_u, A.rows()*sizeof(float),
+			cudaMemcpyDeviceToHost), "CudaCholeskeySolver::solveLt() 1");
+		for (int i = 0; i < A.rows(); i++)
+			b[i] = xtmp[i];
+
+		solver.matrixU().solveInPlace(b);
+		x = solver.permutationPinv()*b;
+
+		for (int i = 0; i < A.rows(); i++)
+			xtmp[i] = x[i];
+		cudaSafeCall(cudaMemcpy(d_x, xtmp.data(), A.rows()*sizeof(float),
+			cudaMemcpyHostToDevice), "CudaCholeskeySolver::solveLt() 2");
 	}
 
 	static void dumpSparseMatrix(const SpMat& A, const char* filename)
@@ -216,5 +254,30 @@ void CudaCholeskeySolver::solve(float* x, const float* b)
 	// csr solve
 	cusolverCheck(cusolverSpScsrcholSolve(m_handle, m_A_csr->rows(), b, x,
 		m_info, m_workSpace.ptr()), "cusolverSpScsrcholSolve");	
+#endif
+}
+
+// since A = L*L'
+// this functions solves for L*u = b
+void CudaCholeskeySolver::solveL(float* u, const float* b)
+{
+	CHECK(m_isFactored, "CudaCholeskeySolver::solveL(): call factor() firstly");
+
+#ifdef USE_CPU_PATH
+	m_container->solveL(u, b);
+#else
+	throw std::exception("CudaCholeskeySolver::solveL(): not implemented");
+#endif
+}
+
+// this functions solves for L'*x = u
+void CudaCholeskeySolver::solveLt(float* x, const float* u)
+{
+	CHECK(m_isFactored, "CudaCholeskeySolver::solveLt(): call factor() firstly");
+
+#ifdef USE_CPU_PATH
+	m_container->solveLt(x, u);
+#else
+	throw std::exception("CudaCholeskeySolver::solveLt(): not implemented");
 #endif
 }
