@@ -6,6 +6,9 @@ namespace dfusion
 #pragma comment(lib, "cusparse.lib")
 #pragma comment(lib, "cublas.lib")
 #pragma comment(lib, "cusolver.lib")
+#define CHECK(a, msg){if(!(a)) throw std::exception(msg);} 
+#define CHECK_LE(a, b){if((a) > (b)) {std::cout << "" << #a << "(" << a << ")<=" << #b << "(" << b << ")";throw std::exception(" ###error!");}} 
+
 	GpuGaussNewtonSolver::GpuGaussNewtonSolver()
 	{
 		if (CUSPARSE_STATUS_SUCCESS != cusparseCreate(&m_cuSparseHandle))
@@ -19,7 +22,6 @@ namespace dfusion
 			throw std::exception("cusolverDnCreatefailed!");
 
 		m_nodes_for_buffer = 0;
-		m_not_lv0_nodes_for_buffer = 0;
 		m_pWarpField = nullptr;
 		m_Jr = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Jrt = new CudaBsrMatrix(m_cuSparseHandle);
@@ -30,6 +32,7 @@ namespace dfusion
 		m_Bt_Ltinv = new CudaBsrMatrix(m_cuSparseHandle);
 		m_Hr = new CudaBsrMatrix(m_cuSparseHandle);
 		m_H_singleLevel = new CudaBsrMatrix(m_cuSparseHandle);
+		m_Q = new CudaBsrMatrix(m_cuSparseHandle);
 		m_singleLevel_solver = new CudaCholeskeySolver();
 		m_singleLevel_solver->init();
 
@@ -52,6 +55,7 @@ namespace dfusion
 		delete m_Hr;
 		delete m_H_singleLevel;
 		delete m_singleLevel_solver;
+		delete m_Q;
 	}
 
 	template<class T>
@@ -157,22 +161,6 @@ namespace dfusion
 			m_energy_vec.create(m_vmapKnn.rows()*m_vmapKnn.cols() + m_nodes_for_buffer*WarpField::KnnK);
 		}
 
-
-		if (m_not_lv0_nodes_for_buffer < notLv0Nodes)
-		{
-			// the not-level0 nodes are not likely to increase dramatically
-			// thus it is enough to allocate just a bit larger buffer
-			m_not_lv0_nodes_for_buffer = notLv0Nodes * 1.2;
-			m_Q.create(m_not_lv0_nodes_for_buffer*m_not_lv0_nodes_for_buffer*
-				VarPerNode * VarPerNode);
-			setzero(m_Q);
-			if (m_param->solver_enable_nan_check)
-			{
-				m_Q_kept.create(m_Q.size());
-				setzero(m_Q_kept);
-			}
-		}
-
 		bindTextures();
 
 		// extract knn map
@@ -230,7 +218,7 @@ namespace dfusion
 		m_Hd_LLtinv = 0.f;
 
 		*m_Hr = 0.f;
-		setzero(m_Q);
+		*m_Q = 0.f;
 
 		*m_H_singleLevel = 0.f;
 	}
@@ -378,9 +366,7 @@ namespace dfusion
 		m_Bt_Ltinv->dump("D:/tmp/gpu_BtLtinv.txt");
 		m_Hr->dump("D:/tmp/gpu_Hr.txt");
 		m_H_singleLevel->dump("D:/tmp/gpu_H_singleLevl.txt");
-		dumpMat("D:/tmp/gpu_Q.txt", m_Q, m_Hr->rows());
-		if (m_Q_kept.size() == m_Q.size())
-			dumpMat("D:/tmp/gpu_Qkept.txt", m_Q_kept, m_Hr->rows());
+		m_Q->dump("D:/tmp/gpu_Q.txt");
 		dumpVec("D:/tmp/gpu_fr.txt", m_f_r, m_Jr->rows());
 		dumpVec("D:/tmp/gpu_g.txt", m_g, m_Jr->cols());
 		dumpVec("D:/tmp/gpu_u.txt", m_u, m_Jr->cols());
@@ -570,6 +556,69 @@ namespace dfusion
 		m_singleLevel_solver->solve(m_h, m_g);
 
 		//checkLinearSolver(m_H_singleLevel, m_h, m_g);
+	}
+
+	void GpuGaussNewtonSolver::blockSolve()
+	{
+		// 1. batch LLt the diag blocks Hd==================================================
+		m_Hd_Linv = m_Hd;
+		m_Hd_Linv.cholesky().invL();
+		m_Hd_Linv.LtL(m_Hd_LLtinv);
+
+		// 2. compute Q = Hr - Bt * inv(Hd) * B ======================================
+		// 2.1 compute Bt*Ltinv
+		m_Bt->rightMultDiag_value(m_Hd_Linv, *m_Bt_Ltinv, true, true);
+
+		// 2.2 compute Q
+		m_Bt_Ltinv->multBsrT_value(*m_Bt_Ltinv, *m_Q, -1.f, m_Hr, 1.f);
+		m_singleLevel_solver->factor();
+
+		// 4. solve H*h = g =============================================================
+		const int sz = m_Jr->cols();
+		const int sz0 = m_B->rows();
+		const int sz1 = sz - sz0;
+		CHECK_LE(sz, m_u.size());
+		CHECK_LE(sz, m_h.size());
+		CHECK_LE(sz, m_g.size());
+		CHECK_LE(sz, m_tmpvec.size());
+
+		// 4.1 let H = LL', first we solve for L*u=g;
+		// 4.1.1 u(0:sz0-1) = HdLinv*g(0:sz0-1)
+		m_Hd_Linv.Lv(m_g.ptr(), m_u.ptr());
+
+		// 4.1.2 u(sz0:sz-1) = LQinv*(g(sz0:sz-1) - Bt*HdLtinv*HdLinv*g(0:sz0-1))
+		if (sz1 > 0)
+		{
+			// tmpvec = HdLtinv*HdLinv*g(0:sz0-1)
+			m_Hd_Linv.Ltv(m_u.ptr(), m_tmpvec.ptr());
+
+			// u(sz0:sz-1) = g(sz0:sz-1) - Bt*tmpvec
+			cudaMemcpy(m_u.ptr() + sz0, m_g.ptr() + sz0, sz1*sizeof(float), cudaMemcpyDeviceToDevice);
+			m_Bt->Mv(m_tmpvec.ptr(), m_u.ptr() + sz0, -1.f, 1.f);
+
+			// solve LQ*u(sz0:sz-1) = u(sz0:sz-1)
+			m_singleLevel_solver->solveL(m_u.ptr() + sz0, m_u.ptr() + sz0);
+		}
+		checkNan(m_u, sz, "u");
+
+		// 4.2 then we solve for L'*h=u;
+		// 4.2.1 h(sz0:sz-1) = UQinv*u(sz0:sz-1)
+		if (sz1 > 0)
+			m_singleLevel_solver->solveLt(m_h.ptr() + sz0, m_u.ptr() + sz0);
+
+		// 4.2.2 h(0:sz0-1) = HdLtinv*( u(0:sz0-1) - HdLinv*B*h(sz0:sz-1) )
+		// tmpvec = B*h(sz0:sz-1)
+		m_B->Mv(m_h.ptr() + sz0, m_tmpvec.ptr());
+
+		// u(0:sz0-1) = u(0:sz0-1) - HdLinv * tmpvec
+		// h(0:sz0-1) = HdLtinv*u(0:sz0-1)
+		if (sz1 > 0)
+		{
+			m_Hd_Linv.Lv(m_tmpvec.ptr(), m_u.ptr(), -1.f, 1.f);
+			m_Hd_Linv.Ltv(m_u.ptr(), m_h.ptr());
+		}
+		else
+			m_Hd_Linv.Ltv(m_u.ptr(), m_h.ptr(), -1.f);
 	}
 
 	void GpuGaussNewtonSolver::checkLinearSolver(const CudaBsrMatrix* A, const float* x, const float* b)

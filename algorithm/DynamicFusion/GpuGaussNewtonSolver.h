@@ -94,7 +94,6 @@ namespace dfusion
 		// for pre-allocation: allocate a lareger buffer than given nodes
 		// to prevent allocation each frame
 		int m_nodes_for_buffer;
-		int m_not_lv0_nodes_for_buffer;
 
 		DeviceArray2D<WarpField::KnnIdx> m_vmapKnn;
 		DeviceArray<WarpField::KnnIdx> m_nodesKnn;
@@ -151,7 +150,7 @@ namespace dfusion
 		// of Jr'Jr can be greatly simplified:
 		// we simply accumulate Jr0'Jr0 into Hd as the block-diagonal part
 		// and B = Jr0'Jr1, which the structure should be evaluated 
-		// finally Hd = Jr1'Jr1 + Jr3'Jr3. we accumulate it into a dense matrix
+		// finally Hd = Jr1'Jr1 + Jr3'Jr3.
 
 		// m_g = -J^t * f
 		// we will solve for H*m_h = m_g
@@ -173,10 +172,7 @@ namespace dfusion
 		//// params used in block solver
 
 		// Q = Hr - Bt * Hd^(-1) * B
-		// to save storage and a memcpy, 
-		// we factor Q = Lq*Lq' and directly store Lq in Q
-		DeviceArray<float> m_Q;
-		DeviceArray<float> m_Q_kept;
+		CudaBsrMatrix *m_Q;
 
 		// m_Hd_L: Hd = L*Lt
 		CudaDiagBlockMatrix m_Hd_Linv;

@@ -48,42 +48,6 @@ namespace dfusion
 		t.z = tex1Dfetch(g_twistTex, i6++);
 	}
 
-	// map the lower part to full 6x6 matrix
-	__constant__ int g_lower_2_full_6x6[21] = {
-		0,
-		6, 7,
-		12, 13, 14,
-		18, 19, 20, 21,
-		24, 25, 26, 27, 28,
-		30, 31, 32, 33, 34, 35
-	};
-	__constant__ int g_lower_2_rowShift_6x6[21] = {
-		0,
-		1, 1,
-		2, 2, 2,
-		3, 3, 3, 3,
-		4, 4, 4, 4, 4,
-		5, 5, 5, 5, 5, 5
-	};
-	__constant__ int g_lower_2_colShift_6x6[21] = {
-		0,
-		0, 1,
-		0, 1, 2,
-		0, 1, 2, 3,
-		0, 1, 2, 3, 4,
-		0, 1, 2, 3, 4, 5
-	};
-	__constant__ int g_lfull_2_lower_6x6[6][6] = {
-		{ 0, -1, -1, -1, -1, -1 },
-		{ 1, 2, -1, -1, -1, -1 },
-		{ 3, 4, 5, -1, -1, -1 },
-		{ 6, 7, 8, 9, -1, -1 },
-		{ 10, 11, 12, 13, 14, -1 },
-		{ 15, 16, 17, 18, 19, 20 },
-	};
-
-#define D_1_DIV_6 0.166666667
-
 	__device__ __forceinline__ float3 read_float3_4(float4 a)
 	{
 		return make_float3(a.x, a.y, a.z);
@@ -1097,6 +1061,12 @@ namespace dfusion
 			m_Jrt->multBsr_structure(*m_Jr, *m_H_singleLevel);
 			m_singleLevel_solver->analysis(m_H_singleLevel, true);
 		}
+		else
+		{
+			// sovle Q on CPU, prepare for it
+			m_Bt->multBsr_structure(*m_B, *m_Q, m_Hr);
+			m_singleLevel_solver->analysis(m_Q, true);
+		}
 	}
 
 #pragma endregion
@@ -1696,200 +1666,7 @@ namespace dfusion
 	}
 #pragma endregion
 
-#pragma region --block solve
-	__global__ void calcQ_kernel1(float* Q, 
-		const int* BtLtinv_rptr, cudaTextureObject_t BtLtinv_cidx,
-		cudaTextureObject_t BtLtinv_value, 
-		const int* Hr_rptr, cudaTextureObject_t Hr_cidx,
-		const float* Hr_value,
-		int HrRowsCols, int nBrows)
-	{
-		enum
-		{
-			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
-			VarPerNode2 = VarPerNode*VarPerNode
-		};
-		int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-		if (tid >= (HrRowsCols + 1)*HrRowsCols / 2)
-			return;
-
-		// y is the triangular number
-		int y = floor(-0.5 + sqrt(0.25 + 2 * tid));
-		int triangularNumber = y * (y + 1) / 2;
-		// x should <= y
-		int x = tid - triangularNumber;
-
-		int yBlock = y / VarPerNode;
-		int xBlock = x / VarPerNode;
-		int yShift = (y - yBlock*VarPerNode);
-		int xShift = (x - xBlock*VarPerNode);
-
-		int BtBlock_ib = BtLtinv_rptr[yBlock];
-		int BtBlock_ie = BtLtinv_rptr[yBlock + 1];
-		int BtBlock_jb = BtLtinv_rptr[xBlock];
-		int BtBlock_je = BtLtinv_rptr[xBlock + 1];
-
-		float sum = 0.f;
-		for (int iBlock = BtBlock_ib, jBlock = BtBlock_jb; iBlock < BtBlock_ie && jBlock < BtBlock_je;)
-		{
-			int cBlocki = 0, cBlockj = 0;
-			tex1Dfetch(&cBlocki, BtLtinv_cidx, iBlock);
-			tex1Dfetch(&cBlockj, BtLtinv_cidx, jBlock);
-			if (cBlocki == cBlockj)
-			{
-				float s = 0.f;
-				int posi = iBlock * VarPerNode2 + yShift*VarPerNode;
-				int posj = jBlock * VarPerNode2 + xShift*VarPerNode;
-				for (int k = 0; k < VarPerNode; k++)
-				{
-					float vi = 0.f, vj = 0.f;
-					tex1Dfetch(&vi, BtLtinv_value, posi + k);
-					tex1Dfetch(&vj, BtLtinv_value, posj + k);
-					s += vi * vj;
-				}
-				sum += s;
-				iBlock++;
-				jBlock++;
-			}
-
-			iBlock += (cBlocki < cBlockj);
-			jBlock += (cBlocki > cBlockj);
-		}// i
-
-		float Hr_val = 0.f;
-		int Hr_blockBegin = Hr_rptr[yBlock];
-		int Hr_blockEnd = Hr_rptr[yBlock+1];
-
-		for (int c = Hr_blockBegin; c < Hr_blockEnd; c++)
-		{
-			int Hr_colBlock = 0;
-			tex1Dfetch(&Hr_colBlock, Hr_cidx, c);
-			if (Hr_colBlock == xBlock)
-			{
-				Hr_val = Hr_value[c*VarPerNode2 + yShift*VarPerNode + xShift];				
-				break;
-			}
-		}
-
-		Q[y*HrRowsCols + x] = Q[x*HrRowsCols + y] = Hr_val - sum;
-	}
-
-	void GpuGaussNewtonSolver::blockSolve()
-	{
-		// 1. batch LLt the diag blocks Hd==================================================
-		m_Hd_Linv = m_Hd;
-		m_Hd_Linv.cholesky().invL();
-		m_Hd_Linv.LtL(m_Hd_LLtinv);
-
-		// 2. compute Q = Hr - Bt * inv(Hd) * B ======================================
-		CHECK_LE(m_Hr->rows()*m_Hr->cols(), m_Q.size());
-
-		// 2.1 compute Bt*Ltinv
-		m_Bt->rightMultDiag_value(m_Hd_Linv, *m_Bt_Ltinv, true, true);
-
-		// 2.2 compute Q
-		if (m_Hr->rows() > 0)
-		{
-			dim3 block(CTA_SIZE);
-			dim3 grid(divUp(m_Hr->rows()*(m_Hr->rows() + 1) / 2, block.x));
-
-			calcQ_kernel1 << <grid, block >> >(m_Q.ptr(), m_Bt_Ltinv->bsrRowPtr(),
-				m_Bt_Ltinv->bsrColIdxTexture(), m_Bt_Ltinv->valueTexture(), m_Hr->bsrRowPtr(),
-				m_Hr->bsrColIdxTexture(), m_Hr->value(),
-				m_Hr->rows(), m_B->rows());
-			cudaSafeCall(cudaGetLastError(), "GpuGaussNewtonSolver::calcHessian::calcQ_kernel1");
-
-			// kept Q before factorize, for debug
-			if (m_Q_kept.size() == m_Q.size())
-				cudaMemcpy(m_Q_kept.ptr(), m_Q.ptr(),
-				m_Hr->rows()*m_Hr->rows()*m_Q.elem_size,
-					cudaMemcpyDeviceToDevice);
-			checkNan(m_Q, m_Hr->rows()*m_Hr->rows(), "Q");
-		}
-
-		// 3. llt decompostion of Q ==================================================
-		// 3.1 decide the working space of the solver
-		if (m_Hr->rows() > 0)
-		{
-			int lwork = 0;
-			cusolverDnSpotrf_bufferSize(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER,
-				m_Hr->rows(), m_Q.ptr(), m_Hr->rows(), &lwork);
-			if (lwork > m_cuSolverWorkSpace.size())
-			{
-				// we store dev info in the last element
-				m_cuSolverWorkSpace.create(lwork * 1.5 + 1);
-				printf("cusolverDnSpotrf_bufferSize: %d\n", lwork);
-			}
-
-			// 3.2 Cholesky decomposition
-			// before this step, m_Q is calculated as filled as symmetric matrix
-			// note that cublas uses column majored storage, thus after this step
-			// the matrix m_Q should be viewed as column-majored matrix
-			cusolverStatus_t fst = cusolverDnSpotrf(m_cuSolverHandle, CUBLAS_FILL_MODE_LOWER, m_Hr->rows(),
-				m_Q.ptr(), m_Hr->rows(), m_cuSolverWorkSpace.ptr(), lwork,
-				(int*)m_cuSolverWorkSpace.ptr() + m_cuSolverWorkSpace.size() - 1);
-			if (CUSOLVER_STATUS_SUCCESS != fst)
-			{
-				printf("cusolverDnSpotrf failed: status: %d\n", fst);
-				throw std::exception();
-			}
-			checkNan(m_Q, m_Hr->rows()*m_Hr->rows(), "Q1");
-		}
-		// 4. solve H*h = g =============================================================
-		const int sz = m_Jr->cols();
-		const int sz0 = m_B->rows();
-		const int sz1 = sz - sz0;
-		CHECK_LE(sz, m_u.size());
-		CHECK_LE(sz, m_h.size());
-		CHECK_LE(sz, m_g.size());
-		CHECK_LE(sz, m_tmpvec.size());
-
-		// 4.1 let H = LL', first we solve for L*u=g;
-		// 4.1.1 u(0:sz0-1) = HdLinv*g(0:sz0-1)
-		m_Hd_Linv.Lv(m_g.ptr(), m_u.ptr());
-	
-		// 4.1.2 u(sz0:sz-1) = LQinv*(g(sz0:sz-1) - Bt*HdLtinv*HdLinv*g(0:sz0-1))
-		if (sz1 > 0)
-		{
-			// tmpvec = HdLtinv*HdLinv*g(0:sz0-1)
-			m_Hd_Linv.Ltv(m_u.ptr(), m_tmpvec.ptr());
-
-			// u(sz0:sz-1) = g(sz0:sz-1) - Bt*tmpvec
-			cudaMemcpy(m_u.ptr() + sz0, m_g.ptr() + sz0, sz1*sizeof(float), cudaMemcpyDeviceToDevice);
-			m_Bt->Mv(m_tmpvec.ptr(), m_u.ptr() + sz0, -1.f, 1.f);
-
-			// solve LQ*u(sz0:sz-1) = u(sz0:sz-1)
-			// note cublas use column majored matrix, we assume m_Q is column majored in this step
-			cublasStrsv(m_cublasHandle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT,
-				sz1, m_Q.ptr(), sz1, m_u.ptr() + sz0, 1);
-		}
-		checkNan(m_u, sz, "u");
-		
-		// 4.2 then we solve for L'*h=u;
-		// 4.2.1 h(sz0:sz-1) = UQinv*u(sz0:sz-1)
-		if (sz1 > 0)
-		{
-			cudaMemcpy(m_h.ptr() + sz0, m_u.ptr() + sz0, sz1*sizeof(float), cudaMemcpyDeviceToDevice);
-			cublasStrsv(m_cublasHandle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, CUBLAS_DIAG_NON_UNIT,
-				sz1, m_Q.ptr(), sz1, m_h.ptr() + sz0, 1);
-		}
-		
-		// 4.2.2 h(0:sz0-1) = HdLtinv*( u(0:sz0-1) - HdLinv*B*h(sz0:sz-1) )
-		// tmpvec = B*h(sz0:sz-1)
-		m_B->Mv(m_h.ptr() + sz0, m_tmpvec.ptr());
-
-		// u(0:sz0-1) = u(0:sz0-1) - HdLinv * tmpvec
-		// h(0:sz0-1) = HdLtinv*u(0:sz0-1)
-		if (sz1 > 0)
-		{
-			m_Hd_Linv.Lv(m_tmpvec.ptr(), m_u.ptr(), -1.f, 1.f);
-			m_Hd_Linv.Ltv(m_u.ptr(), m_h.ptr());
-		}
-		else
-			m_Hd_Linv.Ltv(m_u.ptr(), m_h.ptr(), -1.f);
-	}
-
+#pragma region --calcTotalEnergy
 	float GpuGaussNewtonSolver::calcTotalEnergy(float& data_energy, float& reg_energy)
 	{
 		float total_energy = 0.f;

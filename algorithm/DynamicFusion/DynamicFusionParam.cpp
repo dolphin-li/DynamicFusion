@@ -71,7 +71,7 @@ namespace dfusion
 		mirror_input = false; 
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
-		graph_single_level = true;
+		graph_single_level = false;
 
 		if (graph_single_level)
 		{
