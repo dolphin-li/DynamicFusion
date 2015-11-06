@@ -32,7 +32,7 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		// cannot be larger than warpField::knnK
-		warp_knn_k_eachlevel[0] = 4;
+		warp_knn_k_eachlevel[0] = 8;
 		warp_knn_k_eachlevel[1] = KnnK;
 		warp_knn_k_eachlevel[2] = KnnK;
 		warp_knn_k_eachlevel[3] = KnnK;
@@ -60,7 +60,7 @@ namespace dfusion
 		fusion_nonRigidICP_maxIter = 3;
 		fusion_GaussNewton_maxIter = 2;
 		fusion_GaussNewton_diag_regTerm = 1e-5;
-		fusion_GaussNewton_fixedStep = 0.5;// 5;
+		fusion_GaussNewton_fixedStep = 0.;
 
 		// debuging related
 		fusion_dumping_each_frame = false;
@@ -72,12 +72,12 @@ namespace dfusion
 		mirror_input = false; 
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
-		graph_single_level = false;
+		graph_single_level = true;
 
 		if (graph_single_level)
 		{
 			fusion_lambda = 300;
-			fusion_GaussNewton_fixedStep = 0.5f;
+			fusion_GaussNewton_fixedStep = 0.f;
 			warp_param_softness = 0;
 			fusion_GaussNewton_diag_regTerm = 1e-6;
 		}
