@@ -21,14 +21,13 @@ namespace dfusion
 
 		// 
 		float3 p = make_float3(x*voxelSize, y*voxelSize, z*voxelSize) + origion;
-		WarpField::KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
-		tex3D(&knnIdx, knnTex, x, y, z);
+		KnnIdx knnIdx = read_knn_tex(knnTex, x, y, z);
 
 		// the first quat
 		float4 q0, q1, vw;
 		int nn3;
 		//Tbx::Dual_quat_cu dq_avg;
-		nn3 = WarpField::get_by_arrayid(knnIdx, 0) * 3;
+		nn3 = knn_k(knnIdx, 0) * 3;
 		tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 		tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 		tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
@@ -51,7 +50,9 @@ namespace dfusion
 #pragma unroll
 		for (int k = 1; k < maxK; k++)
 		{
-			nn3 = WarpField::get_by_arrayid(knnIdx, k) * 3;
+			if (knn_k(knnIdx, k) >= WarpField::MaxNodeNum)
+				break;
+			nn3 = knn_k(knnIdx, k) * 3;
 			tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 			tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 			tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
@@ -189,28 +190,12 @@ namespace dfusion
 		fs.Rv2c = tr.get_mat3();
 		fs.tv2c = Tbx::Point3(tr.get_translation());
 
-		int maxK = min(WarpField::KnnK, m_warpField->getNumNodesInLevel(0));
+		int maxK = min(KnnK, m_warpField->getNumNodesInLevel(0));
 
-		switch (maxK)
-		{
-		case 0:
+		if (maxK == 0)
 			tsdf23<0> << <grid, block >> >(fs);
-			break;
-		case 1:
-			tsdf23<1> << <grid, block >> >(fs);
-			break;
-		case 2:
-			tsdf23<2> << <grid, block >> >(fs);
-			break;
-		case 3:
-			tsdf23<3> << <grid, block >> >(fs);
-			break;
-		case 4:
-			tsdf23<4> << <grid, block >> >(fs);
-			break;
-		default:
-			throw std::exception("non supported KnnK!");
-		}
+		else
+			tsdf23<KnnK> << <grid, block >> >(fs);
 
 		cudaUnbindTexture(&g_depth_tex);
 

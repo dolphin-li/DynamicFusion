@@ -61,7 +61,7 @@ namespace dfusion
 			const MapArr* nmap_live = nullptr, const MapArr* nmap_warp = nullptr,
 			GpuMesh* canoMesh = nullptr,
 			const float3* canoPosActive = nullptr,
-			const ushort4* knnIdxActiveView = nullptr,
+			const KnnIdx* knnIdxActiveView = nullptr,
 			const Intr* intr = nullptr, bool warp_nodes = true, bool no_rigid = false);
 		void renderToDepth(const Camera& camera, DepthMap& img);
 

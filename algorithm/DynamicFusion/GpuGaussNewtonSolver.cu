@@ -23,7 +23,7 @@ namespace dfusion
 #define CHECK(a, msg){if(!(a)) throw std::exception(msg);} 
 #define CHECK_LE(a, b){if((a) > (b)) {std::cout << "" << #a << "(" << a << ")<=" << #b << "(" << b << ")";throw std::exception(" ###error!");}} 
 
-	texture<WarpField::KnnIdx, cudaTextureType1D, cudaReadModeElementType> g_nodesKnnTex;
+	texture<KnnIdx, cudaTextureType1D, cudaReadModeElementType> g_nodesKnnTex;
 	texture<float4, cudaTextureType1D, cudaReadModeElementType> g_nodesVwTex;
 	texture<float, cudaTextureType1D, cudaReadModeElementType> g_twistTex;
 
@@ -32,7 +32,7 @@ namespace dfusion
 		return tex1Dfetch(g_nodesVwTex, i);
 	}
 
-	__device__ __forceinline__ WarpField::KnnIdx get_nodesKnn(int i)
+	__device__ __forceinline__ KnnIdx get_nodesKnn(int i)
 	{
 		return tex1Dfetch(g_nodesKnnTex, i);
 	}
@@ -68,20 +68,11 @@ namespace dfusion
 		return (a>0.f) - (a<0.f);
 	}
 
-	__device__ __forceinline__ WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
+	__device__ __forceinline__ void sort_knn(KnnIdx& knn)
 	{
-		return ((WarpField::IdxType*)(&knn))[k];
-	}
-	__device__ __forceinline__ const WarpField::IdxType& knn_k(const WarpField::KnnIdx& knn, int k)
-	{
-		return ((WarpField::IdxType*)(&knn))[k];
-	}
-
-	__device__ __forceinline__ void sort_knn(WarpField::KnnIdx& knn)
-	{
-		for (int i = 1; i < WarpField::KnnK; i++)
+		for (int i = 1; i < KnnK; i++)
 		{
-			WarpField::IdxType x = knn_k(knn,i);
+			KnnIdxType x = knn_k(knn,i);
 			int	j = i;
 			while (j > 0 && knn_k(knn, j - 1) > x)
 			{
@@ -98,9 +89,9 @@ namespace dfusion
 		if (1)
 		{
 			size_t offset;
-			cudaChannelFormatDesc desc = cudaCreateChannelDesc<WarpField::KnnIdx>();
+			cudaChannelFormatDesc desc = cudaCreateChannelDesc<KnnIdx>();
 			cudaBindTexture(&offset, &g_nodesKnnTex, m_nodesKnn.ptr(), &desc,
-				m_nodesKnn.size() * sizeof(WarpField::KnnIdx));
+				m_nodesKnn.size() * sizeof(KnnIdx));
 			if (offset != 0)
 				throw std::exception("GpuGaussNewtonSolver::bindTextures(): non-zero-offset error1!");
 		}
@@ -133,21 +124,13 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --calc data term
-
-//#define ENABLE_GPU_DUMP_DEBUG
-
-	//__device__ float g_totalEnergy;
-
 	struct DataTermCombined
 	{
-		typedef WarpField::KnnIdx KnnIdx;
-		typedef WarpField::IdxType IdxType;
 		enum
 		{
 			CTA_SIZE_X = GpuGaussNewtonSolver::CTA_SIZE_X,
 			CTA_SIZE_Y = GpuGaussNewtonSolver::CTA_SIZE_Y,
 			CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y,
-			KnnK = WarpField::KnnK,
 			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
 			VarPerNode2 = VarPerNode*VarPerNode,
 			LowerPartNum = GpuGaussNewtonSolver::LowerPartNum,
@@ -408,7 +391,6 @@ namespace dfusion
 			return true;
 		}
 
-		template<int maxK>
 		__device__ __forceinline__ void calc_dataterm () const
 		{
 			const int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
@@ -429,7 +411,7 @@ namespace dfusion
 				const KnnIdx knn = vmapKnn(y, x);
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 				Tbx::Dual_quat_cu dqk_0;
-				float wk[maxK];
+				float wk[KnnK];
 
 				// dqk_0
 				{
@@ -445,9 +427,11 @@ namespace dfusion
 
 				// other dqk_k
 #pragma unroll
-				for (int k = 1; k < maxK; k++)
+				for (int k = 1; k < KnnK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
+					if (knnNodeId >= nNodes)
+						break;
 					
 					Tbx::Vec3 r, t;
 					get_twist(knnNodeId, r, t);
@@ -478,10 +462,12 @@ namespace dfusion
 				// paitial_f_partial_T
 				const Tbx::Transfo p_f_p_T = compute_p_f_p_T(n, v, vl, dq);
 
-				for (int knnK = 0; knnK < maxK; knnK++)
+				for (int knnK = 0; knnK < KnnK; knnK++)
 				{
-					float p_f_p_alpha[VarPerNode];
 					int knnNodeId = knn_k(knn, knnK);
+					if (knnNodeId >= nNodes)
+						break;
+					float p_f_p_alpha[VarPerNode];
 					float wk_k = wk[knnK] * inv_norm_dq_bar * 2;
 					
 					//// comput partial_T_partial_alphak, hard code here.
@@ -566,8 +552,7 @@ namespace dfusion
 			}// end if found corr
 		}// end function ()
 
-		template<int maxK>
-		__device__ __forceinline__ Tbx::Dual_quat_cu calc_pixel_dq(WarpField::KnnIdx knn, 
+		__device__ __forceinline__ Tbx::Dual_quat_cu calc_pixel_dq(KnnIdx knn, 
 			Tbx::Point3 v, float* wk)const
 		{
 			Tbx::Dual_quat_cu dqk_0;
@@ -585,8 +570,10 @@ namespace dfusion
 
 			// other dqk_k
 #pragma unroll
-			for (int k = 1; k < maxK; k++)
+			for (int k = 1; k < KnnK; k++)
 			{
+				if (knn_k(knn, k) >= nNodes)
+					break;
 				float4 nodeVw = get_nodesVw(knn_k(knn, k));
 				Tbx::Vec3 nodesV(convert(read_float3_4(nodeVw)) - v);
 				Tbx::Dual_quat_cu dqk_k;
@@ -604,7 +591,7 @@ namespace dfusion
 			return dq;
 		}
 
-		__device__ __forceinline__ void exchange_ri_k(WarpField::KnnIdx knn, 
+		__device__ __forceinline__ void exchange_ri_k(KnnIdx knn, 
 			const float* wk, int k, int i, Tbx::Dual_quat_cu& dq, float& inc)const
 		{
 			Tbx::Vec3 r, t;
@@ -617,7 +604,7 @@ namespace dfusion
 			dq -= old_dqk * wk[k];
 			dq += new_dqk * wk[k] * sign(old_dqk.get_non_dual_part().dot(new_dqk.get_non_dual_part()));
 		}
-		__device__ __forceinline__ void exchange_ti_k(WarpField::KnnIdx knn,
+		__device__ __forceinline__ void exchange_ti_k(KnnIdx knn,
 			const float* wk, int k, int i, Tbx::Dual_quat_cu& dq, float& inc)const
 		{
 			Tbx::Vec3 r, t;
@@ -636,7 +623,6 @@ namespace dfusion
 			return max( 1e-5f, v* 1e-3f);
 		}
 
-		template<int maxK>
 		__device__ __forceinline__ void calc_dataterm_numeric() const
 		{
 			const int x = threadIdx.x + blockIdx.x * blockDim.x;
@@ -653,8 +639,8 @@ namespace dfusion
 
 			// 1. get all nodes params
 			// 2. compute function=================================================
-			float wk[maxK];
-			Tbx::Dual_quat_cu dq = calc_pixel_dq<maxK>(knn, v, wk);
+			float wk[KnnK];
+			Tbx::Dual_quat_cu dq = calc_pixel_dq(knn, v, wk);
 			float norm_dq = dq.norm();
 			if (norm_dq < Tbx::Dual_quat_cu::epsilon())
 				return;
@@ -675,8 +661,10 @@ namespace dfusion
 			const float psi_f = data_term_penalty(f);
 
 			// 3. compute jacobi
-			for (int knnK = 0; knnK < maxK; knnK++)
+			for (int knnK = 0; knnK < KnnK; knnK++)
 			{
+				if (knn_k(knn, knnK) >= nNodes)
+					break;
 				float df[6];
 
 				// 3.0 p_r[0:2]
@@ -731,7 +719,6 @@ namespace dfusion
 			}// end for knnK
 		}// end function ()
 
-		template<int maxK>
 		__device__ __forceinline__ void calcTotalEnergy()const
 		{
 			const int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
@@ -750,7 +737,7 @@ namespace dfusion
 				const KnnIdx knn = vmapKnn(y, x);
 				Tbx::Dual_quat_cu dq(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
 				Tbx::Dual_quat_cu dqk_0;
-				float wk[maxK];
+				float wk[KnnK];
 				// dqk_0
 				{
 					Tbx::Vec3 r, t;
@@ -765,9 +752,11 @@ namespace dfusion
 
 				// other dqk_k
 #pragma unroll
-				for (int k = 1; k < maxK; k++)
+				for (int k = 1; k < KnnK; k++)
 				{
 					int knnNodeId = knn_k(knn, k);
+					if (knnNodeId >= nNodes)
+						break;
 
 					Tbx::Vec3 r, t;
 					get_twist(knnNodeId, r, t);
@@ -803,13 +792,12 @@ namespace dfusion
 		}
 	};
 
-	template<int maxK>
 	__global__ void dataTermCombinedKernel(const DataTermCombined cs)
 	{
 #ifdef CALC_DATA_TERM_NUMERIC
-		cs.calc_dataterm_numeric<maxK>();
+		cs.calc_dataterm_numeric();
 #else
-		cs.calc_dataterm<maxK>();
+		cs.calc_dataterm();
 #endif
 	}
 
@@ -840,31 +828,13 @@ namespace dfusion
 		dim3 grid(1, 1, 1);
 		grid.x = divUp(cs.imgWidth, block.x);
 		grid.y = divUp(cs.imgHeight, block.y);
-		int maxK = min(WarpField::KnnK, m_pWarpField->getNumNodesInLevel(0));
-		switch (maxK)
-		{
-		case 1:
-			dataTermCombinedKernel<1> << <grid, block >> >(cs);
-			break;
-		case 2:
-			dataTermCombinedKernel<2> << <grid, block >> >(cs);
-			break;
-		case 3:
-			dataTermCombinedKernel<3> << <grid, block >> >(cs);
-			break;
-		case 4:
-			dataTermCombinedKernel<4> << <grid, block >> >(cs);
-			break;
-		default:
-			throw std::exception("non supported KnnK in data term calc!");
-		}
+		dataTermCombinedKernel<< <grid, block >> >(cs);
 		cudaSafeCall(cudaGetLastError(), "dataTermCombinedKernel");
 	}
 
-	template<int maxK>
 	__global__ void calcDataTermTotalEnergyKernel(const DataTermCombined cs)
 	{
-		cs.calcTotalEnergy<maxK>();
+		cs.calcTotalEnergy();
 	}
 
 #pragma endregion
@@ -876,9 +846,9 @@ namespace dfusion
 		if (i >= nMaxNodes)
 			return;
 	
-		WarpField::KnnIdx knn = get_nodesKnn(i);
+		KnnIdx knn = get_nodesKnn(i);
 		int numK = -1;
-		for (int k = 0; k < WarpField::KnnK; ++k)
+		for (int k = 0; k < KnnK; ++k)
 		{
 			if (knn_k(knn, k) < nMaxNodes)
 				numK = k;
@@ -924,7 +894,7 @@ namespace dfusion
 		const int iNode = row2nodeId[iBlockRow].nodeId;
 		if (iNode < nMaxNodes)
 		{
-			WarpField::KnnIdx knn = get_nodesKnn(iNode);
+			KnnIdx knn = get_nodesKnn(iNode);
 			if (knn_k(knn, row2nodeId[iBlockRow].k) < nMaxNodes)
 				rptr[iBlockRow] = iBlockRow * BlocksPerRow;
 		}
@@ -948,7 +918,7 @@ namespace dfusion
 		const int iNode = row2nodeId[iBlockRow].nodeId;
 		if (iNode < nMaxNodes)
 		{
-			WarpField::KnnIdx knn = get_nodesKnn(iNode);
+			KnnIdx knn = get_nodesKnn(iNode);
 			int knnNodeId = knn_k(knn, row2nodeId[iBlockRow].k);
 			if (knnNodeId < nMaxNodes)
 			{
@@ -970,9 +940,9 @@ namespace dfusion
 		int iBlockRow = threadIdx.x + blockIdx.x*blockDim.x;
 		if (iBlockRow < nBlockInRows)
 		{
-			WarpField::KnnIdx knn = get_nodesKnn(iBlockRow);
+			KnnIdx knn = get_nodesKnn(iBlockRow);
 			int col_b = B_rptr[iBlockRow];
-			for (int k = 0; k < WarpField::KnnK; ++k)
+			for (int k = 0; k < KnnK; ++k)
 			{
 				int knnNodeId = knn_k(knn, k);
 				if (knnNodeId < nMaxNodes)
@@ -1074,12 +1044,9 @@ namespace dfusion
 #pragma region --calc reg term
 	struct RegTermJacobi
 	{
-		typedef WarpField::KnnIdx KnnIdx;
-		typedef WarpField::IdxType IdxType;
 		typedef GpuGaussNewtonSolver::JrRow2NodeMapper Mapper;
 		enum
 		{
-			KnnK = WarpField::KnnK,
 			VarPerNode = GpuGaussNewtonSolver::VarPerNode,
 			VarPerNode2 = VarPerNode*VarPerNode,
 			ColPerRow = VarPerNode * 2
@@ -1112,7 +1079,7 @@ namespace dfusion
 
 		__device__ __forceinline__ float calc_alpha_reg(int nodeId, int k, int nMaxNodes)const
 		{
-			WarpField::KnnIdx knn = get_nodesKnn(nodeId);
+			KnnIdx knn = get_nodesKnn(nodeId);
 
 			float4 nodeVwi = get_nodesVw(nodeId);
 			Tbx::Point3 vi(convert(read_float3_4(nodeVwi)));
@@ -1120,7 +1087,7 @@ namespace dfusion
 			float invW = min(nodeVwi.w, nodeVwj.w);
 
 			float wk = 0.f, sum_w = 0.f;
-			for (int knn_idx = 0; knn_idx < WarpField::KnnK; knn_idx++)
+			for (int knn_idx = 0; knn_idx < KnnK; knn_idx++)
 			{
 				if (knn_idx < nMaxNodes)
 				{
@@ -1703,24 +1670,7 @@ namespace dfusion
 			dim3 grid(1, 1, 1);
 			grid.x = divUp(cs.imgWidth, block.x);
 			grid.y = divUp(cs.imgHeight, block.y);
-			int maxK = min(WarpField::KnnK, m_pWarpField->getNumNodesInLevel(0));
-			switch (maxK)
-			{
-			case 1:
-				calcDataTermTotalEnergyKernel<1> << <grid, block >> >(cs);
-				break;
-			case 2:
-				calcDataTermTotalEnergyKernel<2> << <grid, block >> >(cs);
-				break;
-			case 3:
-				calcDataTermTotalEnergyKernel<3> << <grid, block >> >(cs);
-				break;
-			case 4:
-				calcDataTermTotalEnergyKernel<4> << <grid, block >> >(cs);
-				break;
-			default:
-				throw std::exception("non supported KnnK in data term energy!");
-			}
+			calcDataTermTotalEnergyKernel << <grid, block >> >(cs);
 			cudaSafeCall(cudaGetLastError(), "calcDataTermTotalEnergyKernel");
 		}
 

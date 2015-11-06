@@ -264,7 +264,7 @@ namespace dfusion
 		unBindNodesDqVwTexture();
 		bindNodesDqVwTexture();
 
-		std::vector<KnnIdx> tmpIdx(m_nodesGraph.size(), make_ushort4(0,0,0,0));
+		std::vector<KnnIdx> tmpIdx(m_nodesGraph.size(), make_knn(0));
 		int ntmpidx = 0;
 		fread(&ntmpidx, sizeof(int), 1, pFile);
 		if (ntmpidx != tmpIdx.size())

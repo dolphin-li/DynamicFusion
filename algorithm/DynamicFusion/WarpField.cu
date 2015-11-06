@@ -7,10 +7,6 @@
 #include "GpuKdTree.h"
 namespace dfusion
 {
-	__device__ __host__ __forceinline__ WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
-	{
-		return ((WarpField::IdxType*)(&knn))[k];
-	}
 #pragma region --warpmesh
 
 	struct MeshWarper
@@ -180,22 +176,15 @@ namespace dfusion
 		int iz = blockDim.z*blockIdx.z + threadIdx.z;
 
 		if (ix < resolution.x && iy < resolution.y && iz < resolution.z)
-		{
-			WarpField::KnnIdx idx = make_ushort4(WarpField::MaxNodeNum, WarpField::MaxNodeNum, 
-				WarpField::MaxNodeNum, WarpField::MaxNodeNum);
-			surf3Dwrite(idx, knnSurf, ix*sizeof(WarpField::KnnIdx), iy, iz);
-		}
+			write_knn(make_knn(WarpField::MaxNodeNum), knnSurf, ix, iy, iz);
 	}
 
-	__global__ void initKnnFieldKernel1(WarpField::KnnIdx* knnPtr, int n)
+	__global__ void initKnnFieldKernel1(KnnIdx* knnPtr, int n)
 	{
 		int ix = blockDim.x*blockIdx.x + threadIdx.x;
 
 		if (ix < n)
-		{
-			knnPtr[ix] = make_ushort4(WarpField::MaxNodeNum, WarpField::MaxNodeNum,
-				WarpField::MaxNodeNum, WarpField::MaxNodeNum);
-		}
+			knnPtr[ix] = make_knn(WarpField::MaxNodeNum);
 	}
 
 	void WarpField::initKnnField()
@@ -284,13 +273,12 @@ namespace dfusion
 				z = int(p1.z);
 
 				// assert knnIdx sorted, thus the 1st should be the nearest
-				WarpField::KnnIdx knnIdx = make_ushort4(0,0,0,0);
-				tex3D(&knnIdx, knnTex, x, y, z);
+				KnnIdx knnIdx = read_knn_tex(knnTex, x, y, z);
 
-				if (knnIdx.x < numNodes)
+				if (knn_k(knnIdx, 0) < numNodes)
 				{
 					float4 nearestVw = make_float4(0, 0, 0, 1);
-					tex1Dfetch(&nearestVw, nodesDqVwTex, knnIdx.x * 3 + 2); // [q0-q1-vw] memory stored
+					tex1Dfetch(&nearestVw, nodesDqVwTex, knn_k(knnIdx, 0) * 3 + 2); // [q0-q1-vw] memory stored
 
 					float3 nearestV = make_float3(nearestVw.x, nearestVw.y, nearestVw.z);
 
@@ -464,74 +452,6 @@ namespace dfusion
 
 			Tbx::Dual_quat_cu dq_blend = WarpField::calc_dual_quat_blend_on_p(knnTex,
 				nodesDqVwTex, make_float3(p.x, p.y, p.z), origion, invVoxelSize);
-
-#if 0
-			if (isnan(dq_blend.get_dual_part().w()))
-			{
-				printf("kernel: %d %f %f %f %f %f\n", threadId, p.x, p.y, p.z, p.w, inv_w);
-				printf("dqb: %f %f %f %f, %f %f %f %f\n", 
-					dq_blend.get_non_dual_part().w(), dq_blend.get_non_dual_part().i(), 
-					dq_blend.get_non_dual_part().j(), dq_blend.get_non_dual_part().k(), 
-					dq_blend.get_dual_part().w(), dq_blend.get_dual_part().i(),
-					dq_blend.get_dual_part().j(), dq_blend.get_dual_part().k());
-				printf("origion: %f %f %f; ivsz: %f\n", origion.x, origion.y, origion.z, invVoxelSize);
-
-				Tbx::Dual_quat_cu dq_blend1(Tbx::Quat_cu(0, 0, 0, 0), Tbx::Quat_cu(0, 0, 0, 0));
-				float3 p1 = (make_float3(p.x, p.y, p.z) - origion)*invVoxelSize;
-				int x = int(p1.x);
-				int y = int(p1.y);
-				int z = int(p1.z);
-				WarpField::KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
-				tex3D(&knnIdx, knnTex, x, y, z);
-
-				printf("knnIdx: (%d, %d, %d) -> (%d %d %d %d)\n", 
-					x,y,z,knnIdx.x, knnIdx.y, knnIdx.z, knnIdx.w);
-
-				if (knn_k(knnIdx, 0) >= WarpField::MaxNodeNum)
-				{
-					dq_blend = Tbx::Dual_quat_cu::identity();
-				}
-				else
-				{
-					Tbx::Dual_quat_cu dq0;
-					for (int k = 0; k < WarpField::KnnK; k++)
-					{
-						if (knn_k(knnIdx, k) < WarpField::MaxNodeNum)
-						{
-							WarpField::IdxType nn3 = knn_k(knnIdx, k) * 3;
-							float4 q0, q1, vw;
-							tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
-							tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
-							tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
-							// note: we store 1.f/radius in vw.w
-							float w = __expf(-norm2(make_float3(vw.x - p.x, vw.y - p.y,
-								vw.z - p.z)) * 2 * (vw.w*vw.w));
-							Tbx::Dual_quat_cu dq = pack_dual_quat(q0, q1);
-							if (k == 0)
-								dq0 = dq;
-							else
-							{
-								if (dq0.get_non_dual_part().dot(dq.get_non_dual_part()) < 0)
-									w = -w;
-							}
-							printf("dq(%d, %f): %f %f %f %f, %f %f %f %f\n", k, w,
-								dq.get_non_dual_part().w(), dq.get_non_dual_part().i(), 
-								dq.get_non_dual_part().j(), dq.get_non_dual_part().k(),
-								dq.get_dual_part().w(), dq.get_dual_part().i(), 
-								dq.get_dual_part().j(), dq.get_dual_part().k());
-							dq_blend1 = dq_blend1 + dq*w;
-						}
-					}
-					printf("bld: %f %f %f %f, %f %f %f %f\n", dq_blend1.get_non_dual_part().w(),
-						dq_blend1.get_non_dual_part().i(), dq_blend1.get_non_dual_part().j(), 
-						dq_blend1.get_non_dual_part().k(),
-						dq_blend1.get_dual_part().w(), dq_blend1.get_dual_part().i(), 
-						dq_blend1.get_dual_part().j(),
-						dq_blend1.get_dual_part().k());
-					dq_blend1.normalize();
-				}
-			}
-#endif
 
 			unpack_dual_quat(dq_blend, nodesDqVw[threadId * 3], nodesDqVw[threadId * 3 + 1]);
 		}
@@ -739,11 +659,10 @@ namespace dfusion
 		if (x < res.x && y < res.y && z < res.z)
 		{
 			// compute all 4 dists stored
-			WarpField::KnnIdx knn;
-			surf3Dread(&knn, knnSurf, x*sizeof(WarpField::KnnIdx), y, z);
+			KnnIdx knn = read_knn_surf(knnSurf, x, y, z);
 			float3 voxelPos = origion + voxelSize*make_float3(x, y, z);
-			float oldDists2[WarpField::KnnK];
-			for (int k = 0; k < WarpField::KnnK; k++)
+			float oldDists2[KnnK];
+			for (int k = 0; k < KnnK; k++)
 			{
 				float4 p;
 				tex1Dfetch(&p, nodesDqVwTex, knn_k(knn, k)*3 + 2);
@@ -759,8 +678,8 @@ namespace dfusion
 
 				// we swap the farest nodes out
 				// note that the knn is kept sorted
-				int swapPos = WarpField::KnnK;
-				for (int k = 0; k < WarpField::KnnK; k++)
+				int swapPos = KnnK;
+				for (int k = 0; k < KnnK; k++)
 				{
 					if (newDist2 < oldDists2[k])
 					{
@@ -769,13 +688,13 @@ namespace dfusion
 					}
 				}
 
-				if (swapPos < WarpField::KnnK)
+				if (swapPos < KnnK)
 				{
-					WarpField::KnnIdx newKnn = knn;
+					KnnIdx newKnn = knn;
 					knn_k(newKnn, swapPos) = iNode;
-					for (int k = swapPos + 1; k < WarpField::KnnK; k++)
+					for (int k = swapPos + 1; k < KnnK; k++)
 						knn_k(newKnn, k) = knn_k(knn, k - 1);
-					surf3Dwrite(newKnn, knnSurf, x*sizeof(WarpField::KnnIdx), y, z);
+					write_knn(newKnn, knnSurf, x, y, z);
 				}
 			}// end for iNode
 		}
@@ -977,7 +896,7 @@ namespace dfusion
 				cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel1-1");
 
 				m_nodeTree[level]->knnSearchGpu(getNodesDqVwPtr(level - 1) + 2, 3,
-					(IdxType*)getNodesEdgesPtr(level - 1), nullptr, m_param.warp_knn_k_eachlevel[level], 
+					(KnnIdxType*)getNodesEdgesPtr(level - 1), nullptr, m_param.warp_knn_k_eachlevel[level], 
 					getNumNodesInLevel(level - 1), KnnK);
 			}
 		}// end if (m_lastNumNodes[0] != m_numNodes[0])
@@ -1015,7 +934,7 @@ namespace dfusion
 			cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel1-1");
 
 			m_nodeTree[0]->knnSearchGpu(getNodesDqVwPtr(0) + 2, 3,
-				(IdxType*)getNodesEdgesPtr(0), nullptr, m_param.warp_knn_k_eachlevel[0],
+				(KnnIdxType*)getNodesEdgesPtr(0), nullptr, m_param.warp_knn_k_eachlevel[0],
 				getNumNodesInLevel(0), KnnK, m_param.graph_single_level);
 		}
 		else if (m_numNodes[0])// else we only update the graph quaternions
@@ -1049,8 +968,7 @@ namespace dfusion
 		}
 	};
 
-
-	__global__ void extract_knn_for_vmap_kernel(PtrStepSz<float4> vmap, PtrStepSz<WarpField::KnnIdx> vmapKnn,
+	__global__ void extract_knn_for_vmap_kernel(PtrStepSz<float4> vmap, PtrStepSz<KnnIdx> vmapKnn,
 		float3 origion, float invVoxelSize, cudaTextureObject_t knnTex, IdxContainter ic)
 	{
 		int u = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1059,8 +977,7 @@ namespace dfusion
 		if (u < vmap.cols && v < vmap.rows)
 		{
 			float3 p = GpuMesh::from_point(vmap(v, u));
-			WarpField::KnnIdx knnIdx = make_ushort4(ic[WarpField::GraphLevelNum], 
-				ic[WarpField::GraphLevelNum], ic[WarpField::GraphLevelNum], ic[WarpField::GraphLevelNum]);
+			KnnIdx knnIdx = make_knn(ic[WarpField::GraphLevelNum]);
 
 			if (!isnan(p.x))
 			{
@@ -1068,8 +985,8 @@ namespace dfusion
 				int x = int(p1.x);
 				int y = int(p1.y);
 				int z = int(p1.z);
-				tex3D(&knnIdx, knnTex, x, y, z);
-				for (int k = 0; k < WarpField::KnnK; k++)
+				knnIdx = read_knn_tex(knnTex, x, y, z);
+				for (int k = 0; k < KnnK; k++)
 				if (knn_k(knnIdx, k) >= WarpField::MaxNodeNum)
 					knn_k(knnIdx, k) = ic[WarpField::GraphLevelNum];
 			}
@@ -1097,7 +1014,7 @@ namespace dfusion
 	}
 
 	__global__ void extract_nodes_info_kernel(const float4* nodesDqVw, float* twist, float4* vw,
-		const WarpField::KnnIdx* nodesKnnIn, WarpField::KnnIdx* nodesKnnOut, 
+		const KnnIdx* nodesKnnIn, KnnIdx* nodesKnnOut, 
 		IdxContainter ic, bool single_graph_level)
 	{
 		int iout = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1127,8 +1044,8 @@ namespace dfusion
 		vw[iout] = nodesDqVw[iin * 3 + 2];
 
 		// write knn
-		WarpField::KnnIdx kid = nodesKnnIn[iin];
-		for (int k = 0; k < WarpField::KnnK; k++)
+		KnnIdx kid = nodesKnnIn[iin];
+		for (int k = 0; k < KnnK; k++)
 		{
 			if (!single_graph_level)
 				knn_k(kid, k) = (knn_k(kid, k) < ic[level + 1] - ic[level] ? 
@@ -1231,12 +1148,12 @@ namespace dfusion
 
 #pragma region --getKnnAt
 
-	__global__ void getKnnAtKernel(WarpField::KnnIdx* data, int3 p, cudaTextureObject_t tex)
+	__global__ void getKnnAtKernel(KnnIdx* data, int3 p, cudaTextureObject_t tex)
 	{
-		tex3D(&data[0], tex, p.x, p.y, p.z);
+		data[0] = read_knn_tex(tex, p.x, p.y, p.z);
 	}
 
-	WarpField::KnnIdx WarpField::getKnnAt(float3 volumePos)const
+	KnnIdx WarpField::getKnnAt(float3 volumePos)const
 	{
 		if (m_volume == nullptr)
 			throw std::exception("WarpField::getKnnAt(): null pointer");
@@ -1245,14 +1162,14 @@ namespace dfusion
 		float3 p = (volumePos - ori) / vsz;
 		return getKnnAt(make_int3(p.x, p.y, p.z));
 	}
-	WarpField::KnnIdx WarpField::getKnnAt(int3 gridXYZ)const
+	KnnIdx WarpField::getKnnAt(int3 gridXYZ)const
 	{
 		if (m_volume == nullptr)
 			throw std::exception("WarpField::getKnnAt(): null pointer");
 		int3 res = m_volume->getResolution();
 		int x = gridXYZ.x, y = gridXYZ.y, z = gridXYZ.z;
 		if (x < 0 || y < 0 || z < 0 || x >= res.x || y >= res.y || z >= res.z)
-			return make_ushort4(MaxNodeNum, MaxNodeNum, MaxNodeNum, MaxNodeNum);
+			return make_knn(MaxNodeNum);
 		static DeviceArray<KnnIdx> knn;
 		knn.create(1);
 
@@ -1260,7 +1177,7 @@ namespace dfusion
 		getKnnAtKernel << <dim3(1), dim3(1) >> >(knn.ptr(), gridXYZ, tex);
 		cudaSafeCall(cudaGetLastError(), "WarpField::getKnnAtKernel");
 
-		WarpField::KnnIdx host;
+		KnnIdx host;
 		cudaSafeCall(cudaMemcpy(&host, knn.ptr(), sizeof(KnnIdx), cudaMemcpyDeviceToHost),
 			"WarpField::getKnnAtKernel, post copy");
 		return host;

@@ -150,15 +150,15 @@ namespace dfusion
 			// each node create 2*3*k rows and each row create at most VarPerNode*2 cols
 			m_Jr_RowCounter.create(m_nodes_for_buffer + 1);
 			setzero(m_Jr_RowCounter);
-			m_Jr_RowMap2NodeId.create(m_nodes_for_buffer * 6 * WarpField::KnnK + 1);
+			m_Jr_RowMap2NodeId.create(m_nodes_for_buffer * 6 * KnnK + 1);
 			setzero(m_Jr_RowMap2NodeId);
 
 			// the energy function of reg term
-			m_f_r.create(m_nodes_for_buffer*VarPerNode*6 + 1);
+			m_f_r.create(m_nodes_for_buffer * KnnK * 6 + 1);
 			setzero(m_f_r);
 
 			// for total energy evaluation
-			m_energy_vec.create(m_vmapKnn.rows()*m_vmapKnn.cols() + m_nodes_for_buffer*WarpField::KnnK);
+			m_energy_vec.create(m_vmapKnn.rows()*m_vmapKnn.cols() + m_nodes_for_buffer*KnnK);
 		}
 
 		bindTextures();

@@ -626,13 +626,13 @@ namespace dfusion
 		template< typename DistanceType, typename IndexType = int >
 		struct SingleResultSet
 		{
-			int bestIndex;
+			IndexType bestIndex;
 			DistanceType bestDist;
 
 			__device__ __host__ SingleResultSet() : 
-				bestIndex(-1), bestDist(INFINITY), 
+				bestIndex(IndexType(-1)), bestDist(INFINITY),
 				resultDist(nullptr), resultIndex(nullptr),
-				selfIndex(-1){ }
+				selfIndex(IndexType(-1)){ }
 
 			__device__ inline float worstDist()
 			{
@@ -649,7 +649,7 @@ namespace dfusion
 
 			DistanceType* resultDist;
 			IndexType* resultIndex;
-			int selfIndex;
+			IndexType selfIndex;
 
 			__device__ inline void setResultLocation(DistanceType* dists, 
 				IndexType* index, int thread, int knnStride, bool excludeSelf)
@@ -693,16 +693,16 @@ namespace dfusion
 		{
 			int foundNeighbors;
 			DistanceType largestHeapDist;
-			int maxDistIndex;
+			IndexType maxDistIndex;
 			const bool sorted;
 
 			__device__ __host__ KnnResultSet(bool sortResults) : 
 				foundNeighbors(0), largestHeapDist(INFINITY), sorted(sortResults),
-				resultIndex_out(0), resultDist_out(0), selfIndex(-1){
+				resultIndex_out(0), resultDist_out(0), selfIndex(IndexType(-1)){
 				for (int i = 0; i < K; i++)
 				{
 					resultDist[i] = INFINITY;
-					resultIndex[i] = -1;
+					resultIndex[i] = IndexType(-1);
 				}
 			}
 
@@ -711,7 +711,7 @@ namespace dfusion
 				return largestHeapDist;
 			}
 
-			__device__ inline void insert(int index, DistanceType dist)
+			__device__ inline void insert(IndexType index, DistanceType dist)
 			{
 				if (index == selfIndex)
 					return;
@@ -741,10 +741,10 @@ namespace dfusion
 			}
 
 			float resultDist[K];
-			int resultIndex[K];
+			IndexType resultIndex[K];
 			float* resultDist_out;
 			IndexType* resultIndex_out;
-			int selfIndex;
+			IndexType selfIndex;
 
 			__device__ inline void setResultLocation(DistanceType* dists, IndexType* index, 
 				int thread, int knnStride, bool excludeSelf)
@@ -755,7 +755,7 @@ namespace dfusion
 					resultDist_out = dists + thread*knnStride;
 				for (int i = 0; i < K; i++) {
 					resultDist[i] = INFINITY;
-					resultIndex[i] = -1;
+					resultIndex[i] = IndexType(-1);
 				}
 				if (excludeSelf)
 					selfIndex = thread;
@@ -898,9 +898,7 @@ namespace dfusion
 				searchNeighbors(q, result);
 				result.finish();
 
-				surf3Dwrite(make_ushort4(result.resultIndex[0], result.resultIndex[1], 
-					result.resultIndex[2], result.resultIndex[3]), 
-					volumeSurf, ix*sizeof(WarpField::KnnIdx), iy, iz);
+				write_knn(make_knn(result.resultIndex), volumeSurf, ix, iy, iz);
 			}
 		}
 	}
@@ -1138,9 +1136,6 @@ namespace dfusion
 	void GpuKdTree::knnSearchGpu(cudaSurfaceObject_t volumeSurf, int3 begin, int3 end,
 		float3 origion, float voxelSize, size_t knn) const
 	{
-		if (knn != 4)
-			throw std::exception("non-supported knn-k");
-
 		if (begin.x >= end.x || begin.y >= end.y || begin.z >= end.z)
 			return;
 
@@ -1153,15 +1148,101 @@ namespace dfusion
 			divUp(end.z - begin.z, threadsPerBlock.z));
 		bool sorted = true;
 
-		KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
-			volumeSurf,
-			begin,
-			end,
-			origion,
-			voxelSize,
-			KdTreeCudaPrivate::KnnResultSet<float, 4>(sorted),
-			knn
-			);
+		switch (knn)
+		{
+		case 0:
+			break;
+		case 1:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 1, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		case 2:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 2, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		case 3:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 3, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		case 4:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 4, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		case 5:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 5, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		case 6:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 6, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		case 7:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 7, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		case 8:
+			KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock >> > (
+				volumeSurf,
+				begin,
+				end,
+				origion,
+				voxelSize,
+				KdTreeCudaPrivate::KnnResultSet<float, 8, KnnIdxType>(sorted),
+				KnnK
+				);
+			break;
+		default:
+			throw std::exception("non-supported knnK!");
+		}
 	}
 
 	void GpuKdTree::update_leftright_and_aabb(

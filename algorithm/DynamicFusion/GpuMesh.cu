@@ -30,11 +30,6 @@ namespace dfusion
 		return p;
 	}
 
-	__device__ __forceinline__ WarpField::IdxType get_by_arrayid(WarpField::KnnIdx knn, int i)
-	{
-		return ((WarpField::IdxType*)(&knn))[i];
-	}
-
 	__global__ void copy_invert_y_kernel(PtrStepSz<float4> gldata,
 		PtrStepSz<PixelRGBA> img)
 	{
@@ -135,7 +130,7 @@ namespace dfusion
 		Tbx::Transfo trans, const float4* nodes, 
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, 
 		float3 origion, float invVoxelSize,
-		const WarpField::KnnIdx* nodesKnn, 
+		const KnnIdx* nodesKnn, 
 		int n, int node_start_id, bool warp_nodes,
 		bool single_level_graph)
 	{
@@ -158,11 +153,11 @@ namespace dfusion
 
 			if (glindex && nodesKnn)
 			{
-				WarpField::IdxType* knnIdx = (WarpField::IdxType*)&(nodesKnn[i]);
-				int start = 2 * WarpField::KnnK * i;
-				for (int k = 0; k < WarpField::KnnK; k++)
+				KnnIdx knn = nodesKnn[i];
+				int start = 2 * KnnK * i;
+				for (int k = 0; k < KnnK; k++)
 				{
-					int nn = knnIdx[k];
+					int nn = knn_k(knn, k);
 					if (nn >= WarpField::MaxNodeNum)
 						break;
 					glindex[start + k*2 + 0] = i + node_start_id;
@@ -187,13 +182,13 @@ namespace dfusion
 		for (int lv = 0; lv < warpField->getNumLevels(); lv++, 
 			gldata += WarpField::MaxNodeNum, 
 			node_start_id += WarpField::MaxNodeNum,
-			glindex += WarpField::MaxNodeNum*2*WarpField::KnnK)
+			glindex += WarpField::MaxNodeNum*2*KnnK)
 		{
 			int n = warpField->getNumNodesInLevel(lv);
 			if (n == 0)
 				return;
 			const float4* nodes = warpField->getNodesDqVwPtr(lv);
-			const WarpField::KnnIdx* indices = nullptr;
+			const KnnIdx* indices = nullptr;
 			if (lv < warpField->getNumLevels() - 1)
 				indices = warpField->getNodesEdgesPtr(lv);
 			Tbx::Transfo tr = warpField->get_rigidTransform();
@@ -283,8 +278,7 @@ namespace dfusion
 		if (i < num)
 		{
 			float3 p = GpuMesh::from_point(verts[i]);
-			WarpField::KnnIdx knnIdx;
-
+	
 			if (!isnan(p.x))
 			{
 				GpuMesh::PointType color = GpuMesh::to_point(make_float3(0.7, 0.7, 0.7), 1);
@@ -292,12 +286,12 @@ namespace dfusion
 				int x = int(p1.x);
 				int y = int(p1.y);
 				int z = int(p1.z);
-				tex3D(&knnIdx, knnTex, x, y, z);
-				for (int k = 0; k < WarpField::KnnK; k++)
-				if (get_by_arrayid(knnIdx, k) == activeKnnId)
+				KnnIdx knnIdx = read_knn_tex(knnTex, x, y, z);
+				for (int k = 0; k < KnnK; k++)
+				if (knn_k(knnIdx, k) == activeKnnId)
 				{
 					float4 nearestVw = make_float4(0, 0, 0, 1);
-					tex1Dfetch(&nearestVw, nodesDqVwTex, get_by_arrayid(knnIdx, k) * 3 + 2); 
+					tex1Dfetch(&nearestVw, nodesDqVwTex, knn_k(knnIdx, k) * 3 + 2); 
 					float w = __expf(-norm2(p - GpuMesh::from_point(nearestVw))*0.5f*nearestVw.w*nearestVw.w);
 					color = GpuMesh::to_point(make_float3(w, 0, 0));
 				}

@@ -95,8 +95,8 @@ namespace dfusion
 		// to prevent allocation each frame
 		int m_nodes_for_buffer;
 
-		DeviceArray2D<WarpField::KnnIdx> m_vmapKnn;
-		DeviceArray<WarpField::KnnIdx> m_nodesKnn;
+		DeviceArray2D<KnnIdx> m_vmapKnn;
+		DeviceArray<KnnIdx> m_nodesKnn;
 		DeviceArray<float4> m_nodesVw;
 
 		// w.r.t x, the variables we will solve for.

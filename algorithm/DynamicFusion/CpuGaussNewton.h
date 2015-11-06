@@ -24,9 +24,9 @@ namespace dfusion
 	private:
 		WarpField* m_pWarpField;
 		EigenContainter* m_egc;
-		DeviceArray2D<ushort4> m_vmapKnn;
+		DeviceArray2D<KnnIdx> m_vmapKnn;
 		DeviceArray<float> m_twist;
 		DeviceArray<float4> m_vw;
-		DeviceArray<ushort4> m_nodesKnn;
+		DeviceArray<KnnIdx> m_nodesKnn;
 	};
 }

@@ -269,9 +269,88 @@ namespace dfusion
 		return b;
 	}
 
+	__device__ __host__ __forceinline__ static Tbx::Quat_cu pack_quat(float4 a)
+	{
+		return Tbx::Quat_cu(a.x, a.y, a.z, a.w);
+	}
+	__device__ __host__ __forceinline__ static float4 unpack_quat(Tbx::Quat_cu a)
+	{
+		return make_float4(a.w(), a.i(), a.j(), a.k());
+	}
+	__device__ __host__ __forceinline__ static Tbx::Dual_quat_cu pack_dual_quat(float4 a, float4 b)
+	{
+		return Tbx::Dual_quat_cu(pack_quat(a), pack_quat(b));
+	}
+	__device__ __host__ __forceinline__ static void unpack_dual_quat(Tbx::Dual_quat_cu dq, float4& a, float4& b)
+	{
+		a = unpack_quat(dq.get_non_dual_part());
+		b = unpack_quat(dq.get_dual_part());
+	}
+	__device__ __forceinline__ float norm2(float3 v)
+	{
+		return v.x*v.x + v.y*v.y + v.z*v.z;
+	}
+
 	// it seems cudaResGLRegister may conflict for 
 	// the same id in different context (especially QT&wGL context)
 	// thus we use this function to explicitly make each id different 
 	// once called, the id will be marked as used
 	bool is_cuda_pbo_vbo_id_used_push_new(unsigned int id);
+
+	/** ***************************************************************
+	* Knn related
+	* ****************************************************************/
+	typedef ushort KnnIdxType;
+	typedef uint4 KnnIdx;
+	enum{
+		KnnK = sizeof(KnnIdx) / sizeof(KnnIdxType)
+	};
+
+	__device__ __host__ __forceinline__ KnnIdxType& knn_k(KnnIdx& knn, int i)
+	{
+		return ((KnnIdxType*)(&knn))[i];
+	}
+	__device__ __host__ __forceinline__ const KnnIdxType& knn_k(const KnnIdx& knn, int i)
+	{
+		return ((KnnIdxType*)(&knn))[i];
+	}
+	__device__ __host__ __forceinline__ KnnIdx make_knn(const ushort* data)
+	{
+		KnnIdx knn;
+		for (int k = 0; k < KnnK; k++)
+			knn_k(knn, k) = data[k];
+		return knn;
+	}
+	__device__ __host__ __forceinline__ KnnIdx make_knn(int c)
+	{
+		KnnIdx knn;
+		for (int k = 0; k < KnnK; k++)
+			knn_k(knn, k) = c;
+		return knn;
+	}
+	__device__ __host__ __forceinline__ KnnIdx make_knn(const int* data)
+	{
+		KnnIdx knn;
+		for (int k = 0; k < KnnK; k++)
+			knn_k(knn, k) = data[k];
+		return knn;
+	}
+#if defined(__CUDACC__)
+	__device__ __forceinline__ KnnIdx read_knn_tex(cudaTextureObject_t knnTex, int x, int y, int z)
+	{
+		KnnIdx knn;
+		tex3D(&knn, knnTex, x, y, z);
+		return knn;
+	}
+	__device__ __forceinline__ KnnIdx read_knn_surf(cudaSurfaceObject_t knnTex, int x, int y, int z)
+	{
+		KnnIdx knn;
+		surf3Dread(&knn, knnTex, x*sizeof(KnnIdx), y, z);
+		return knn;
+	}
+	__device__ __forceinline__ void write_knn(KnnIdx knn, cudaSurfaceObject_t knnTex, int x, int y, int z)
+	{
+		surf3Dwrite(knn, knnTex, x*sizeof(KnnIdx), y, z);
+	}
+#endif
 }

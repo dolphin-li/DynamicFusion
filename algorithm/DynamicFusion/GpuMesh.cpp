@@ -606,7 +606,7 @@ namespace dfusion
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id_warpnodes);
 
 			int bytes_warp = WarpField::MaxNodeNum*WarpField::GraphLevelNum*(sizeof(float4)+
-								+WarpField::KnnK*sizeof(int)* 2);
+								+KnnK*sizeof(int)* 2);
 			int bytes_corr = KINECT_WIDTH*KINECT_HEIGHT*(4*sizeof(float4)+2*sizeof(int));
 			int bytes = max(bytes_warp, bytes_corr);
 			glBufferData(GL_ARRAY_BUFFER, bytes, 0, GL_DYNAMIC_DRAW);
@@ -653,7 +653,7 @@ namespace dfusion
 		const MapArr* nmap_live, const MapArr* nmap_warp, 
 		GpuMesh* canoMesh, 
 		const float3* canoPosActive,
-		const WarpField::KnnIdx* knnIdxActiveView,
+		const KnnIdx* knnIdxActiveView,
 		const Intr* intr, 
 		bool warp_nodes,
 		bool norigid)
@@ -793,13 +793,13 @@ namespace dfusion
 				if (knnIdxActiveView && canoPosActive)
 				{
 					float3 canoPos = *canoPosActive;
-					const WarpField::IdxType *knnPtr = (const WarpField::IdxType *)knnIdxActiveView;
+					const KnnIdxType *knnPtr = (const KnnIdxType*)knnIdxActiveView;
 
 					glDisable(GL_DEPTH_TEST);
 					// render knn
 					g_shader_node->setUniform1f("pointRadius", 0.0021);
 					glColor3f(1, 0, 1);
-					for (int k = 0; k < WarpField::KnnK; k++)
+					for (int k = 0; k < KnnK; k++)
 					{
 						if (knnPtr[k] < warpField->getNumNodesInLevel(0))
 						{
@@ -830,9 +830,9 @@ namespace dfusion
 				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_vbo_id_warpnodes);
 				glColor3fv(colors[param.view_show_graph_level].ptr());
 				glDrawElements(GL_LINES, warpField->getNumNodesInLevel(param.view_show_graph_level)
-					*WarpField::KnnK * 2, GL_UNSIGNED_INT,
+					*KnnK * 2, GL_UNSIGNED_INT,
 					(void*)(WarpField::MaxNodeNum*WarpField::GraphLevelNum*sizeof(float4) +
-					WarpField::MaxNodeNum * 2 * WarpField::KnnK*sizeof(int)* param.view_show_graph_level)
+					WarpField::MaxNodeNum * 2 * KnnK*sizeof(int)* param.view_show_graph_level)
 					);
 				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 				glBindBuffer(GL_ARRAY_BUFFER, 0);

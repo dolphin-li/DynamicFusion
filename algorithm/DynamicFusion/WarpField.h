@@ -10,45 +10,16 @@ namespace dfusion
 	class TsdfVolume;
 	class GpuKdTree;
 
-	__device__ __host__ __forceinline__ static Tbx::Quat_cu pack_quat(float4 a)
-	{
-		return Tbx::Quat_cu(a.x, a.y, a.z, a.w);
-	}
-	__device__ __host__ __forceinline__ static float4 unpack_quat(Tbx::Quat_cu a)
-	{
-		return make_float4(a.w(), a.i(), a.j(), a.k());
-	}
-	__device__ __host__ __forceinline__ static Tbx::Dual_quat_cu pack_dual_quat(float4 a, float4 b)
-	{
-		return Tbx::Dual_quat_cu(pack_quat(a), pack_quat(b));
-	}
-	__device__ __host__ __forceinline__ static void unpack_dual_quat(Tbx::Dual_quat_cu dq, float4& a, float4& b)
-	{
-		a = unpack_quat(dq.get_non_dual_part());
-		b = unpack_quat(dq.get_dual_part());
-	}
-	__device__ __forceinline__ float norm2(float3 v)
-	{
-		return dot(v, v);
-	}
-
 	class WarpField
 	{
 	public:
-		typedef ushort IdxType;
-		typedef ushort4 KnnIdx;
 		enum{
 			GraphLevelNum = 4,
 			MaxNodeNum = 4096,
-			KnnK = 4, // num of KnnIdx
 			KnnInvalidId = MaxNodeNum,
 		};
 
 #if defined(__CUDACC__)
-		__device__ __forceinline__ static IdxType get_by_arrayid(KnnIdx knn, int i)
-		{
-			return ((WarpField::IdxType*)(&knn))[i];
-		}
 		__device__ __forceinline__ static int sign(float a)
 		{
 			return (a > 0) - (a < 0);
@@ -63,10 +34,9 @@ namespace dfusion
 			int x = __float2int_rn(p1.x);
 			int y = __float2int_rn(p1.y);
 			int z = __float2int_rn(p1.z);
-			KnnIdx knnIdx = make_ushort4(0, 0, 0, 0);
-			tex3D(&knnIdx, knnTex, x, y, z);
+			KnnIdx knnIdx = read_knn_tex(knnTex, x, y, z);
 
-			if (get_by_arrayid(knnIdx, 0) >= MaxNodeNum)
+			if (knn_k(knnIdx, 0) >= MaxNodeNum)
 			{
 				dq_blend = Tbx::Dual_quat_cu::identity();
 			}
@@ -76,7 +46,7 @@ namespace dfusion
 				float4 q0, q1, vw;
 				int nn3;
 				//Tbx::Dual_quat_cu dq_avg;
-				nn3 = get_by_arrayid(knnIdx, 0) * 3;
+				nn3 = knn_k(knnIdx, 0) * 3;
 				tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 				tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 				tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);
@@ -87,9 +57,9 @@ namespace dfusion
 				// the other quats
 				for (int k = 1; k < KnnK; k++)
 				{
-					if(get_by_arrayid(knnIdx, k) < MaxNodeNum)
+					if(knn_k(knnIdx, k) < MaxNodeNum)
 					{
-						nn3 = get_by_arrayid(knnIdx, k) * 3;
+						nn3 = knn_k(knnIdx, k) * 3;
 						tex1Dfetch(&q0, nodesDqVwTex, nn3 + 0);
 						tex1Dfetch(&q1, nodesDqVwTex, nn3 + 1);
 						tex1Dfetch(&vw, nodesDqVwTex, nn3 + 2);

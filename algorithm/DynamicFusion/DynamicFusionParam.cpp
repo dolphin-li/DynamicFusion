@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include "definations.h"
 namespace dfusion
 {
 	Param::Param()
@@ -31,10 +32,10 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		// cannot be larger than warpField::knnK
-		warp_knn_k_eachlevel[0] = 4;
-		warp_knn_k_eachlevel[1] = 4;
-		warp_knn_k_eachlevel[2] = 4;
-		warp_knn_k_eachlevel[3] = 4;
+		warp_knn_k_eachlevel[0] = KnnK;
+		warp_knn_k_eachlevel[1] = KnnK;
+		warp_knn_k_eachlevel[2] = KnnK;
+		warp_knn_k_eachlevel[3] = KnnK;
 		set_warp_radius_search_epsilon(0.025);
 		warp_param_softness = 0.5;
 		warp_radius_search_beta = 2;
@@ -71,7 +72,7 @@ namespace dfusion
 		mirror_input = false; 
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
-		graph_single_level = false;
+		graph_single_level = true;
 
 		if (graph_single_level)
 		{

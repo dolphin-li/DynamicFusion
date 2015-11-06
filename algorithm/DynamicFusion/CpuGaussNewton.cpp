@@ -24,17 +24,9 @@ namespace dfusion
 		return sqrt(a.x*a.x + a.y*a.y + a.z*a.z);
 	}
 
-	inline WarpField::IdxType& knn_k(WarpField::KnnIdx& knn, int k)
-	{
-		return ((WarpField::IdxType*)(&knn))[k];
-	}
 
-	typedef WarpField::KnnIdx KnnIdx;
 	struct EigenContainter
 	{
-		enum{
-			KnnK = WarpField::KnnK
-		};
 		typedef float real;
 		typedef Eigen::Matrix<real, -1, 1> Vec;
 		typedef Eigen::Matrix<real, 6, 6> Mat6;
@@ -1392,7 +1384,7 @@ namespace dfusion
 		for (int i = 0; i < knnGraph.size(); i++)
 		{
 			KnnIdx knn = knnGraph[i];
-			for (int k = 0; k < WarpField::KnnK; k++)
+			for (int k = 0; k < KnnK; k++)
 			{
 				int nb = knn_k(knn, k);
 				if (nb < nNodes)
@@ -1488,7 +1480,7 @@ namespace dfusion
 		// extract knn map and copy to cpu
 		m_pWarpField->extract_knn_for_vmap(vmap_cano, m_vmapKnn);
 		m_egc->vmapKnn_.resize(m_egc->imgHeight_*m_egc->imgWidth_);
-		m_vmapKnn.download(m_egc->vmapKnn_.data(), m_egc->imgWidth_*sizeof(WarpField::KnnIdx));
+		m_vmapKnn.download(m_egc->vmapKnn_.data(), m_egc->imgWidth_*sizeof(KnnIdx));
 
 		//extract nodes info and copy to cpu
 		m_pWarpField->extract_nodes_info(m_nodesKnn, m_twist, m_vw);
@@ -1514,7 +1506,7 @@ namespace dfusion
 				for (int i = 0; i < m_egc->nodesKnn_.size(); i++)
 				{
 					KnnIdx knn = m_egc->nodesKnn_[i];
-					for (int k = 0; k < WarpField::KnnK; k++)
+					for (int k = 0; k < KnnK; k++)
 					if (knn_k(knn, k) < m_egc->nodesKnn_.size())
 						fprintf(pFile, "%d %d\n", i, knn_k(knn, k));
 				}

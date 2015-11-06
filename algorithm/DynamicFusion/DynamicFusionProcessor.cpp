@@ -256,13 +256,12 @@ namespace dfusion
 		{
 			// read passed image pos and return selections/related-knns for visualization
 			static int lastX = -1, lastY = -1;
-			static WarpField::KnnIdx lastKnn;
+			static KnnIdx lastKnn;
 			static float3 lastCano;
 			const int x = m_param.view_click_vert_xy[0];
 			const int y = m_param.view_click_vert_xy[1];
-			WarpField::KnnIdx* knnPtr = nullptr;
-			WarpField::KnnIdx knnIdx = make_ushort4(WarpField::MaxNodeNum, WarpField::MaxNodeNum,
-				WarpField::MaxNodeNum, WarpField::MaxNodeNum);
+			KnnIdx* knnPtr = nullptr;
+			KnnIdx knnIdx = make_knn(WarpField::MaxNodeNum);
 			float3* canoPosPtr = nullptr;
 			float3 canoPos = make_float3(0,0,0);
 			if (lastX != x || lastY != y)
@@ -278,7 +277,10 @@ namespace dfusion
 					knnIdx = m_warpField->getKnnAt(canoPos);
 					knnPtr = &knnIdx;
 					canoPosPtr = &canoPos;
-					printf("knnIdx: %d %d %d %d\n", knnIdx.x, knnIdx.y, knnIdx.z, knnIdx.w);
+
+					printf("knnIdx[%d]: ", KnnK);
+					for (int k = 0; k < KnnK; k++)
+						printf("%d\n", knn_k(knnIdx, k));
 				}
 				lastKnn = knnIdx;
 				lastCano = canoPos;
