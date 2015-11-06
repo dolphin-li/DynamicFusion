@@ -32,7 +32,7 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		// cannot be larger than warpField::knnK
-		warp_knn_k_eachlevel[0] = KnnK;
+		warp_knn_k_eachlevel[0] = 4;
 		warp_knn_k_eachlevel[1] = KnnK;
 		warp_knn_k_eachlevel[2] = KnnK;
 		warp_knn_k_eachlevel[3] = KnnK;
@@ -72,7 +72,7 @@ namespace dfusion
 		mirror_input = false; 
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
-		graph_single_level = true;
+		graph_single_level = false;
 
 		if (graph_single_level)
 		{

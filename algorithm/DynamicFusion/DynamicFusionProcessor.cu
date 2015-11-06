@@ -9,7 +9,7 @@ namespace dfusion
 		return (a > 0) - (a < 0);
 	}
 
-	template<int maxK>
+	template<int knnNotZero>
 	__device__ __forceinline__ static Tbx::Dual_quat_cu calc_dual_quat_blend_on_voxel(
 		cudaTextureObject_t knnTex, cudaTextureObject_t nodesDqVwTex, float2 tsdf_prev,
 		int x, int y, int z, float3 origion, float voxelSize, float inv_dw_for_fusion2,
@@ -47,8 +47,9 @@ namespace dfusion
 		fusion_weight += sqrt(dist2_0);
 
 		// the other quats
+		int k = 1;
 #pragma unroll
-		for (int k = 1; k < maxK; k++)
+		for (; k < KnnK; k++)
 		{
 			if (knn_k(knnIdx, k) >= WarpField::MaxNodeNum)
 				break;
@@ -66,7 +67,7 @@ namespace dfusion
 			fusion_weight += sqrt(dist2);
 		}
 		dq_blend *= 1.f/dq_blend.norm();
-		fusion_weight = float(maxK) * nodeRadius / fusion_weight;
+		fusion_weight = float(k) * nodeRadius / fusion_weight;
 		suc = true;
 		return dq_blend;
 	}
@@ -195,7 +196,7 @@ namespace dfusion
 		if (maxK == 0)
 			tsdf23<0> << <grid, block >> >(fs);
 		else
-			tsdf23<KnnK> << <grid, block >> >(fs);
+			tsdf23<1> << <grid, block >> >(fs);
 
 		cudaUnbindTexture(&g_depth_tex);
 

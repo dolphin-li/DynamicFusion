@@ -628,6 +628,7 @@ namespace dfusion
 		{
 			IndexType bestIndex;
 			DistanceType bestDist;
+			enum{ ResultK = 1 };
 
 			__device__ __host__ SingleResultSet() : 
 				bestIndex(IndexType(-1)), bestDist(INFINITY),
@@ -695,6 +696,7 @@ namespace dfusion
 			DistanceType largestHeapDist;
 			IndexType maxDistIndex;
 			const bool sorted;
+			enum{ ResultK = K };
 
 			__device__ __host__ KnnResultSet(bool sortResults) : 
 				foundNeighbors(0), largestHeapDist(INFINITY), sorted(sortResults),
@@ -898,7 +900,10 @@ namespace dfusion
 				searchNeighbors(q, result);
 				result.finish();
 
-				write_knn(make_knn(result.resultIndex), volumeSurf, ix, iy, iz);
+				KnnIdx knn = make_knn(KnnIdxType(-1));
+				for (int k = 0; k < GPUResultSet::ResultK; k++)
+					knn_k(knn, k) = result.resultIndex[k];
+				write_knn(knn, volumeSurf, ix, iy, iz);
 			}
 		}
 	}

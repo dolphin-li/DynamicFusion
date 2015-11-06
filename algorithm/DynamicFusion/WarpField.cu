@@ -650,7 +650,7 @@ namespace dfusion
 
 	__global__ void bruteforce_updateKnn_kernel(cudaTextureObject_t nodesDqVwTex,
 		cudaSurfaceObject_t knnSurf, int3 res, int newNodesBegin, int newNodesEnd,
-		float3 origion, float voxelSize)
+		float3 origion, float voxelSize, int maxK)
 	{
 		int x = threadIdx.x + blockIdx.x*blockDim.x;
 		int y = threadIdx.y + blockIdx.y*blockDim.y;
@@ -662,7 +662,7 @@ namespace dfusion
 			KnnIdx knn = read_knn_surf(knnSurf, x, y, z);
 			float3 voxelPos = origion + voxelSize*make_float3(x, y, z);
 			float oldDists2[KnnK];
-			for (int k = 0; k < KnnK; k++)
+			for (int k = 0; k < maxK; k++)
 			{
 				float4 p;
 				tex1Dfetch(&p, nodesDqVwTex, knn_k(knn, k)*3 + 2);
@@ -678,8 +678,8 @@ namespace dfusion
 
 				// we swap the farest nodes out
 				// note that the knn is kept sorted
-				int swapPos = KnnK;
-				for (int k = 0; k < KnnK; k++)
+				int swapPos = maxK;
+				for (int k = 0; k < maxK; k++)
 				{
 					if (newDist2 < oldDists2[k])
 					{
@@ -688,11 +688,11 @@ namespace dfusion
 					}
 				}
 
-				if (swapPos < KnnK)
+				if (swapPos < maxK)
 				{
 					KnnIdx newKnn = knn;
 					knn_k(newKnn, swapPos) = iNode;
-					for (int k = swapPos + 1; k < KnnK; k++)
+					for (int k = swapPos + 1; k < maxK; k++)
 						knn_k(newKnn, k) = knn_k(knn, k - 1);
 					write_knn(newKnn, knnSurf, x, y, z);
 				}
@@ -711,7 +711,8 @@ namespace dfusion
 		{
 			m_nodeTree[0]->buildTree(m_nodesQuatTransVw.ptr() + 2, m_numNodes[0], 3);
 			cudaSurfaceObject_t surf = getKnnFieldSurface();
-			m_nodeTree[0]->knnSearchGpu(surf, make_int3(0, 0, 0), res, origion, vsz, KnnK);
+			m_nodeTree[0]->knnSearchGpu(surf, make_int3(0, 0, 0), res, origion, vsz, 
+				m_param.warp_knn_k_eachlevel[0]);
 		}
 		// else, collect voxels around the new added node and then perform sub-volume searching
 		else
@@ -781,7 +782,8 @@ namespace dfusion
 				cudaSurfaceObject_t surf = getKnnFieldSurface();
 				cudaTextureObject_t tex = getNodesDqVwTexture();
 				bruteforce_updateKnn_kernel << <grid, block >> >(
-					tex, surf, res, m_lastNumNodes[0], m_numNodes[0], origion, vsz);
+					tex, surf, res, m_lastNumNodes[0], m_numNodes[0], origion, vsz,
+					m_param.warp_knn_k_eachlevel[0]);
 				cudaSafeCall(cudaGetLastError(), "bruteforce_updateKnn_kernel");
 			}
 #endif
@@ -934,7 +936,7 @@ namespace dfusion
 			cudaSafeCall(cudaGetLastError(), "initKnnFieldKernel1-1");
 
 			m_nodeTree[0]->knnSearchGpu(getNodesDqVwPtr(0) + 2, 3,
-				(KnnIdxType*)getNodesEdgesPtr(0), nullptr, m_param.warp_knn_k_eachlevel[0],
+				(KnnIdxType*)getNodesEdgesPtr(0), nullptr, m_param.warp_knn_k_eachlevel[1],
 				getNumNodesInLevel(0), KnnK, m_param.graph_single_level);
 		}
 		else if (m_numNodes[0])// else we only update the graph quaternions
@@ -987,8 +989,10 @@ namespace dfusion
 				int z = int(p1.z);
 				knnIdx = read_knn_tex(knnTex, x, y, z);
 				for (int k = 0; k < KnnK; k++)
-				if (knn_k(knnIdx, k) >= WarpField::MaxNodeNum)
-					knn_k(knnIdx, k) = ic[WarpField::GraphLevelNum];
+				{
+					if (knn_k(knnIdx, k) >= WarpField::MaxNodeNum)
+						knn_k(knnIdx, k) = ic[WarpField::GraphLevelNum];
+				}
 			}
 
 			vmapKnn(v, u) = knnIdx;

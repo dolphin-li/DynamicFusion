@@ -314,10 +314,10 @@ namespace dfusion
 	{
 		return ((KnnIdxType*)(&knn))[i];
 	}
-	__device__ __host__ __forceinline__ KnnIdx make_knn(const ushort* data)
+	__device__ __host__ __forceinline__ KnnIdx make_knn(const ushort* data, int n = KnnK)
 	{
 		KnnIdx knn;
-		for (int k = 0; k < KnnK; k++)
+		for (int k = 0; k < n; k++)
 			knn_k(knn, k) = data[k];
 		return knn;
 	}
@@ -328,10 +328,10 @@ namespace dfusion
 			knn_k(knn, k) = c;
 		return knn;
 	}
-	__device__ __host__ __forceinline__ KnnIdx make_knn(const int* data)
+	__device__ __host__ __forceinline__ KnnIdx make_knn(const int* data, int n = KnnK)
 	{
 		KnnIdx knn;
-		for (int k = 0; k < KnnK; k++)
+		for (int k = 0; k < n; k++)
 			knn_k(knn, k) = data[k];
 		return knn;
 	}
