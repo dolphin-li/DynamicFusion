@@ -895,8 +895,9 @@ void CudaBsrMatrix::toCsr_structure(CudaBsrMatrix& B)const
 {
 	B.m_symbolic = isSymbolic();
 	B.resize(rows(), cols(), 1, 1);
+	B.resize_nnzBlocks(0);
 
-	if (rows() == 0)
+	if (rows() == 0 || nnz() == 0)
 		return;
 
 	// 1. rptr
@@ -921,6 +922,8 @@ void CudaBsrMatrix::toCsr_value(CudaBsrMatrix& B)const
 		throw std::exception("CudaBsrMatrix::toCsr_value(): symbolic cannot touch values");
 	if (B.rows() != rows() || B.cols() != cols() || B.rowsPerBlock() != 1 || B.colsPerBlock() != 1)
 		throw std::exception("CudaBsrMatrix::toCsr_value(): size of B not matched");
+	if (rows() == 0 || nnz() == 0)
+		return;
 
 	CudaBsrMatrix_toCsr_structure_val << <divUp(nnz(), CTA_SIZE), CTA_SIZE >> >(
 		bsrRowPtrTexture(), valueTexture(),
