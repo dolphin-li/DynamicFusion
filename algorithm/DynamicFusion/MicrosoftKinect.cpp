@@ -55,25 +55,18 @@ void Microsoft_Kinect::FreeSpace(){
 int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigned char* pBGRA, 
 	bool map2depth, bool mirror_input)
 {
-	GetDepthMap();
+	GetDepthMap(mirror_input);
 
 	// get depth
 	if (depth)
 	{
-		for (int y = 0; y < dep_height; y++)
-		for (int x = 0; x < dep_width; x++)
+		const int n = dep_height*dep_width;
+		for (int i = 0; i < n; i++)
 		{
-
 #ifdef ENABLE_KINECT_10
-			if (mirror_input)
-				*depth++ = depth_map[y*dep_width + dep_width - 1 - x].depth;
-			else
-				*depth++ = depth_map[y*dep_width + x].depth;
+			depth[i] = depth_map[i].depth;
 #else
-			if (mirror_input)
-				*depth++ = depth_map[y*dep_width + dep_width - 1 - x];
-			else
-				*depth++ = depth_map[y*dep_width + x];
+			depth[i] = depth_map[i];
 #endif
 		}
 	}
@@ -84,7 +77,7 @@ int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigne
 	return 1;
 #endif
 
-	GetColorMap();
+	GetColorMap(mirror_input);
 	// get color
 	if (pBGRA)
 	{
@@ -147,7 +140,7 @@ int Microsoft_Kinect::GetDepthColorIntoBuffer(dfusion::depthtype* depth, unsigne
 }
 
 //	interface functions =======================================================
-int Microsoft_Kinect::GetColorMap(){
+int Microsoft_Kinect::GetColorMap(bool mirror){
 #ifdef ENABLE_KINECT_10
 	NUI_IMAGE_FRAME imageFrame;
 
@@ -161,7 +154,23 @@ int Microsoft_Kinect::GetColorMap(){
 	hr = imageFrame.pFrameTexture->LockRect(0, &LockedRect, NULL, 0);
 	ErrorCheck(hr, "GetColorMap: lock rect");
 
-	memcpy(image_map, LockedRect.pBits, LockedRect.size);
+	for (int y = 0; y < dep_height; y++)
+	{
+		const BGRA32Pixel* pSrc = (const BGRA32Pixel*)LockedRect.pBits + dep_width * y;
+		BGRA32Pixel* pDst = image_map + dep_width * y;
+		if (mirror)
+		for (int x = 0; x < dep_width; x++)
+		{
+			pDst[x] = pSrc[dep_width - 1 - x];
+			std::swap(pDst[x].nRed, pDst[x].nBlue);
+		}
+		else
+		for (int x = 0; x < dep_width; x++)
+		{
+			pDst[x] = pSrc[x];
+			std::swap(pDst[x].nRed, pDst[x].nBlue);
+		}
+	}// end for y
 
 	hr = imageFrame.pFrameTexture->UnlockRect(0);
 	ErrorCheck(hr, "GetColorMap: unlock rect");
@@ -175,10 +184,10 @@ int Microsoft_Kinect::GetColorMap(){
 #endif
 }
 
-int Microsoft_Kinect::GetDepthMap()
+int Microsoft_Kinect::GetDepthMap(bool mirror)
 {
 #ifdef ENABLE_KINECT_10
-		return GetDepthMap10();
+		return GetDepthMap10(mirror);
 #else
 		return GetDepthMap20();
 #endif
@@ -294,7 +303,7 @@ int Microsoft_Kinect::FreeSpace10(){
 #endif
 }
 
-int Microsoft_Kinect::GetDepthMap10(){
+int Microsoft_Kinect::GetDepthMap10(bool mirror){
 #ifdef ENABLE_KINECT_10
 	NUI_IMAGE_FRAME imageFrame;
 
@@ -323,6 +332,18 @@ int Microsoft_Kinect::GetDepthMap10(){
 		dep_width*dep_height * sizeof(NUI_DEPTH_IMAGE_PIXEL),
 		LockedRect.pBits,
 		pTexture->BufferLen());
+
+	for (int y = 0; y < dep_height; y++)
+	{
+		const NUI_DEPTH_IMAGE_PIXEL* pSrc = (const NUI_DEPTH_IMAGE_PIXEL*)LockedRect.pBits + dep_width * y;
+		NUI_DEPTH_IMAGE_PIXEL* pDst = depth_map + dep_width * y;
+		if (mirror)
+		for (int x = 0; x < dep_width; x++)
+			pDst[x] = pSrc[dep_width - 1 - x];
+		else
+		for (int x = 0; x < dep_width; x++)
+			pDst[x] = pSrc[x];
+	}// end for y
 
 	hr = pTexture->UnlockRect(0);
 	ErrorCheck(hr, "error: Microsoft_Kinect::GetDepthMap10, unlock rect");

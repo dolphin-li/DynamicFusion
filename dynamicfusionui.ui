@@ -391,6 +391,19 @@
        <string>no rigid</string>
       </property>
      </widget>
+     <widget class="QCheckBox" name="cbShowColor">
+      <property name="geometry">
+       <rect>
+        <x>150</x>
+        <y>50</y>
+        <width>81</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>show color</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QGroupBox" name="groupBox_7">
      <property name="geometry">

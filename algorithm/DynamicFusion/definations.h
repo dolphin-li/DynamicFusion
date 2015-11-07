@@ -23,6 +23,8 @@ namespace dfusion
 //#define USE_FLOAT_TSDF_VOLUME 
 //#define USE_SHORT_TSDF_VOLUME
 #define USE_HALF_TSDF_VOLUME
+#define ENABLE_COLOR_FUSION
+#define ENABLE_8_NN_GRAPH
 
 	/** **********************************************************************
 	* types
@@ -125,18 +127,54 @@ namespace dfusion
 	}
 #endif
 #ifdef USE_HALF_TSDF_VOLUME
+#ifdef ENABLE_COLOR_FUSION
+	typedef int4 TsdfData; // value(low)-weight(high) stored in a voxel
+#else
 	typedef int TsdfData; // value(low)-weight(high) stored in a voxel
+#endif
 #define TSDF_DIVISOR 1.f
 #if defined(__CUDACC__)
-	__device__ __forceinline__ TsdfData pack_tsdf(float v, float w)
+#ifdef ENABLE_COLOR_FUSION	
+	__device__ __forceinline__ TsdfData pack_tsdf(float v, 
+		float w, float4 rgba)
+	{
+		half2 val[4];
+		val[0] = __floats2half2_rn(v, w);
+		val[1] = __floats2half2_rn(rgba.x, rgba.y);
+		val[2] = __floats2half2_rn(rgba.z, rgba.w);
+		val[3] = __floats2half2_rn(0, 0);
+		return *((TsdfData*)val);
+	}
+	__device__ __forceinline__ float4 unpack_tsdf_rgba(TsdfData td)
+	{
+		float2 rgba[2];
+		rgba[0] = __half22float2(*((half2*)&td.y));
+		rgba[1] = __half22float2(*((half2*)&td.z));
+		return *((float4*)rgba);
+	}
+	__device__ __forceinline__ float2 unpack_tsdf(TsdfData td)
+	{
+		return __half22float2(*((half2*)&td.x));
+	}
+	__device__ __forceinline__ void unpack_tsdf_vw_rgba(TsdfData td,
+		float2& vw, float4& rgba)
+	{
+		vw = __half22float2(*((half2*)&td.x));
+		*((float2*)(&rgba.x)) = __half22float2(*((half2*)&td.y));
+		*((float2*)(&rgba.z)) = __half22float2(*((half2*)&td.z));
+	}
+#else
+	__device__ __forceinline__ TsdfData pack_tsdf(float v, float w,
+		float4 rgba = make_float4(0,0,0,0))
 	{
 		half2 val = __floats2half2_rn(v, w);
-		return *((int*)&val);
+		return *((TsdfData*)&val);
 	}
 	__device__ __forceinline__ float2 unpack_tsdf(TsdfData td)
 	{
 		return __half22float2(*((half2*)&td));
 	}
+#endif
 #endif
 #endif
 
@@ -301,7 +339,11 @@ namespace dfusion
 	* Knn related
 	* ****************************************************************/
 	typedef ushort KnnIdxType;
+#ifdef ENABLE_8_NN_GRAPH
 	typedef uint4 KnnIdx;
+#else
+	typedef uint2 KnnIdx;
+#endif
 	enum{
 		KnnK = sizeof(KnnIdx) / sizeof(KnnIdxType)
 	};

@@ -234,6 +234,7 @@ void DynamicFusionUI::updateUiFromParam()
 
 	ui.cbNoRigid->setChecked(g_dataholder.m_dparam.view_no_rigid);
 	ui.cbShowMesh->setChecked(g_dataholder.m_dparam.view_show_mesh);
+	ui.cbShowColor->setChecked(g_dataholder.m_dparam.view_show_color);
 	ui.cbShowNodes->setChecked(g_dataholder.m_dparam.view_show_nodes);
 	ui.cbShowGraph->setChecked(g_dataholder.m_dparam.view_show_graph);
 	ui.cbShowCorr->setChecked(g_dataholder.m_dparam.view_show_corr);
@@ -290,8 +291,10 @@ void DynamicFusionUI::frameSaving()
 void DynamicFusionUI::frameLive()
 {
 	g_dataholder.m_kinect.GetDepthColorIntoBuffer(g_dataholder.m_depth_h.data(), 
-		nullptr, false, g_dataholder.m_dparam.mirror_input);
+		(uchar*)g_dataholder.m_color_h.data(), true, g_dataholder.m_dparam.mirror_input);
 	g_dataholder.m_depth_d.upload(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH*sizeof(dfusion::depthtype),
+		dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
+	g_dataholder.m_color_d.upload(g_dataholder.m_color_h.data(), dfusion::KINECT_WIDTH*sizeof(dfusion::PixelRGBA),
 		dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
 }
 
@@ -326,7 +329,8 @@ void DynamicFusionUI::updateLoadedStaticVolume()
 void DynamicFusionUI::updateDynamicFusion()
 {
 	if (m_state != DynamicFusionUI::Pause)
-		g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
+		g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d,
+		g_dataholder.m_color_d);
 
 	Camera cam;
 
@@ -564,7 +568,8 @@ void DynamicFusionUI::on_actionLoad_frames_triggered()
 		if (vol_fid < g_dataholder.m_dparam.fusion_dumping_max_frame)
 		{
 			frameLoading();
-			g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d);
+			g_dataholder.m_processor.processFrame(g_dataholder.m_depth_d,
+				g_dataholder.m_color_d);
 			setState(DynamicFusionUI::Pause);
 		}
 	}
@@ -832,6 +837,18 @@ void DynamicFusionUI::on_cbShowMesh_clicked()
 	try
 	{
 		g_dataholder.m_dparam.view_show_mesh = ui.cbShowMesh->isChecked();
+		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+void DynamicFusionUI::on_cbShowColor_clicked()
+{
+	try
+	{
+		g_dataholder.m_dparam.view_show_color = ui.cbShowColor->isChecked();
 		g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
 	}
 	catch (std::exception e)

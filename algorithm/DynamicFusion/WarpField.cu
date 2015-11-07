@@ -13,10 +13,12 @@ namespace dfusion
 	{
 		const GpuMesh::PointType* vsrc;
 		const GpuMesh::PointType* nsrc;
+		const GpuMesh::PointType* csrc;
 		cudaTextureObject_t knnTex;
 		cudaTextureObject_t nodesDqVwTex;
 		GpuMesh::PointType* vdst;
 		GpuMesh::PointType* ndst;
+		GpuMesh::PointType* cdst;
 		int num;
 
 		Tbx::Mat3 R;
@@ -40,6 +42,7 @@ namespace dfusion
 			//ndst[tid] = GpuMesh::to_point(convert(R.rotate(dq_n)));
 			vdst[tid] = GpuMesh::to_point(convert(R*dq_p) + t);
 			ndst[tid] = GpuMesh::to_point(convert(R*dq_n));
+			cdst[tid] = csrc[tid];
 		}
 	};
 
@@ -122,8 +125,10 @@ namespace dfusion
 		warper.nodesDqVwTex = getNodesDqVwTexture();
 		warper.vsrc = src.verts();
 		warper.nsrc = src.normals();
+		warper.csrc = src.colors();
 		warper.vdst = dst.verts();
 		warper.ndst = dst.normals();
+		warper.cdst = dst.colors();
 		warper.num = src.num();
 		warper.origion = m_volume->getOrigion();
 		warper.invVoxelSize = 1.f / m_volume->getVoxelSize();

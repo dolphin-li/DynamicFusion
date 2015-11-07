@@ -64,8 +64,8 @@ public:
 		bool map2depth = true, bool mirror_input = true);
 
 	//	get data
-	int GetDepthMap();
-	int GetColorMap();
+	int GetDepthMap(bool mirror);
+	int GetColorMap(bool mirror);
 	int ReadAccelerometer(float gravity[3]);
 public:
 	//	current frame id
@@ -104,7 +104,7 @@ private:
 	//	kinect v1.0 functions
 	int InitKinect10();
 	int FreeSpace10();
-	int GetDepthMap10();
+	int GetDepthMap10(bool mirror);
 
 	//	kinect v2.0 functions
 	int InitKinect20();

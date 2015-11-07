@@ -32,8 +32,8 @@ namespace dfusion
 		* warp field related
 		* ******************************************************/
 		// cannot be larger than warpField::knnK
-		warp_knn_k_eachlevel[0] = 8;
-		warp_knn_k_eachlevel[1] = KnnK;
+		warp_knn_k_eachlevel[0] = 4;	// graph-pixel association
+		warp_knn_k_eachlevel[1] = KnnK; // finest graph
 		warp_knn_k_eachlevel[2] = KnnK;
 		warp_knn_k_eachlevel[3] = KnnK;
 		set_warp_radius_search_epsilon(0.025);
@@ -94,6 +94,7 @@ namespace dfusion
 		view_errorMap_range = 0.01;
 		view_activeNode_id = -1;
 		view_click_vert_xy[0] = view_click_vert_xy[1] = -1;
+		view_show_color = false;
 
 		view_autoreset = false;
 		view_autoreset_seconds = 20;
@@ -202,6 +203,7 @@ namespace dfusion
 		WRITE_ONE(view_errorMap_range);
 		WRITE_ONE(view_activeNode_id);
 		WRITE_2(view_click_vert_xy);
+		WRITE_ONE(view_show_color);
 		WRITE_ONE(view_autoreset);
 		WRITE_ONE(view_autoreset_seconds);
 
@@ -322,6 +324,7 @@ namespace dfusion
 				READ_ONE_ELSE_IF(view_errorMap_range)
 				READ_ONE_ELSE_IF(view_activeNode_id)
 				READ_2_ELSE_IF(view_click_vert_xy)
+				READ_ONE_ELSE_IF(view_show_color)
 				READ_ONE_ELSE_IF(view_autoreset)
 				READ_ONE_ELSE_IF(view_autoreset_seconds)
 		}

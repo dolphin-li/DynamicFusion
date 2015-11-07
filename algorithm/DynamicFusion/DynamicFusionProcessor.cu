@@ -2,6 +2,7 @@
 #include "TsdfVolume.h"
 #include "WarpField.h"
 #include "device_utils.h"
+#include <helper_math.h>
 namespace dfusion
 {
 	__device__ __forceinline__ int sign(float a)
@@ -85,6 +86,7 @@ namespace dfusion
 
 
 	texture<depthtype, cudaTextureType2D, cudaReadModeElementType> g_depth_tex;
+	texture<uchar4, cudaTextureType2D, cudaReadModeNormalizedFloat> g_color_tex;
 
 	struct Fusioner
 	{
@@ -109,7 +111,8 @@ namespace dfusion
 		template<int maxK>
 		__device__ __forceinline__ void fusion(int x, int y, int z)
 		{
-			float2 tsdf_weight_prev = unpack_tsdf(read_tsdf_surface(volumeTex, x, y, z));
+			TsdfData rawTsdf = read_tsdf_surface(volumeTex, x, y, z);
+			float2 tsdf_weight_prev = unpack_tsdf(rawTsdf);
 			float fusion_weight = 0;
 			bool suc = true;
 			Tbx::Dual_quat_cu dq = calc_dual_quat_blend_on_voxel<maxK>(
@@ -137,8 +140,16 @@ namespace dfusion
 					float tsdf_new = (tsdf_weight_prev.x * tsdf_weight_prev.y + fusion_weight * tsdf)
 						/ (tsdf_weight_prev.y + fusion_weight);
 					float weight_new = min(tsdf_weight_prev.y + fusion_weight, max_weight);
-
-					write_tsdf_surface(volumeTex, pack_tsdf(tsdf_new, weight_new), x, y, z);
+					float4 color = make_float4(0, 0, 0, 0);
+#ifdef ENABLE_COLOR_FUSION
+					//color = unpack_tsdf_rgba(rawTsdf) * 0.0f +
+					//	tex2D(g_color_tex, coo.x, coo.y) * 1.f;
+					color = (unpack_tsdf_rgba(rawTsdf) * tsdf_weight_prev.y +
+						fusion_weight * tex2D(g_color_tex, coo.x, coo.y))
+						/ (tsdf_weight_prev.y + fusion_weight);
+#endif
+					write_tsdf_surface(volumeTex, pack_tsdf(tsdf_new, weight_new,
+						color), x, y, z);
 				}
 			}
 		}
@@ -171,6 +182,13 @@ namespace dfusion
 		cudaBindTexture2D(&offset, &g_depth_tex, m_depth_input.ptr(), &desc, 
 			m_depth_input.cols(), m_depth_input.rows(), m_depth_input.step());
 		assert(offset == 0);
+#ifdef ENABLE_COLOR_FUSION
+		g_color_tex.filterMode = cudaFilterModePoint;
+		desc = cudaCreateChannelDesc<uchar4>();
+		cudaBindTexture2D(&offset, &g_color_tex, m_color_input.ptr(), &desc,
+			m_color_input.cols(), m_color_input.rows(), m_color_input.step());
+		assert(offset == 0);
+#endif
 
 		Fusioner fs;
 		fs.depth = m_depth_input;
@@ -199,6 +217,9 @@ namespace dfusion
 			tsdf23<1> << <grid, block >> >(fs);
 
 		cudaUnbindTexture(&g_depth_tex);
+#ifdef ENABLE_COLOR_FUSION
+		cudaUnbindTexture(&g_color_tex);
+#endif
 
 		cudaSafeCall(cudaGetLastError(), "DynamicFusionProcessor::fusion()");
 	}

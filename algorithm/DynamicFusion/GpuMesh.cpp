@@ -370,6 +370,7 @@ namespace dfusion
 		m_width = 0;
 		m_height = 0;
 		m_current_buffer_size = 0;
+		m_show_color = false;
 
 		m_render_fbo_id = 0;
 		m_render_texture_id = 0;
@@ -681,10 +682,18 @@ namespace dfusion
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_render_fbo_id);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPushAttrib(GL_ALL_ATTRIB_BITS);
-		glEnable(GL_LIGHTING);
-		glEnable(GL_LIGHT0);
+		if (m_show_color)
+		{
+			glDisable(GL_LIGHTING);
+			glDisable(GL_COLOR_MATERIAL);
+		}
+		else
+		{
+			glEnable(GL_LIGHTING);
+			glEnable(GL_LIGHT0);
+			glEnable(GL_COLOR_MATERIAL);
+		}
 		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_COLOR_MATERIAL);
 		glDepthMask(GL_TRUE);
 		glEnable(GL_POINT_SPRITE_ARB);
 		glTexEnvi(GL_POINT_SPRITE_ARB, GL_COORD_REPLACE_ARB, GL_TRUE);
@@ -721,16 +730,19 @@ namespace dfusion
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
 			glVertexPointer(3, GL_FLOAT, sizeof(PointType), 0);
 			glEnableClientState(GL_VERTEX_ARRAY);
-			if (showColorVert)
+			if (showColorVert || m_show_color)
 			{
 				size_t shift1 = m_num*sizeof(PointType)*2;
 				glColorPointer(3, GL_FLOAT, sizeof(PointType), (GLvoid*)shift1);
 				glEnableClientState(GL_COLOR_ARRAY);
 			}
 
-			size_t shift = m_num*sizeof(PointType);
-			glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
-			glEnableClientState(GL_NORMAL_ARRAY);
+			if (!m_show_color)
+			{
+				size_t shift = m_num*sizeof(PointType);
+				glNormalPointer(GL_FLOAT, sizeof(PointType), (GLvoid*)shift);
+				glEnableClientState(GL_NORMAL_ARRAY);
+			}
 
 			glColor3f(0.7, 0.7, 0.7);
 			glDrawArrays(GL_TRIANGLES, 0, m_num);

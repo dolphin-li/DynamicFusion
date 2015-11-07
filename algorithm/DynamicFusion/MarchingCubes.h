@@ -4,7 +4,6 @@
 #include "DynamicFusionParam.h"
 namespace dfusion
 {
-#define USE_AUTOMATIC_INSTEADOF_SCAN
 	class GpuMesh;
 	class TsdfVolume;
 	class MarchingCubes
@@ -47,8 +46,6 @@ namespace dfusion
 		// buffered for each tile
 		DeviceArray<unsigned int> m_voxelVerts;
 		DeviceArray<unsigned int> m_voxelVertsScan;
-		DeviceArray<unsigned int> m_voxelOccupied;
-		DeviceArray<unsigned int> m_voxelOccupiedScan;
 		DeviceArray<unsigned int> m_compVoxelArray;
 		cudaTextureObject_t m_volTex;
 	};

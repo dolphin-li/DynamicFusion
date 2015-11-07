@@ -10,7 +10,7 @@ namespace dfusion
 		if (x < res.x && y < res.y)
 		{
 			for (int z = 0; z < res.z; ++z)
-				write_tsdf_surface(surf, pack_tsdf(0, 0), x, y, z);
+				write_tsdf_surface(surf, pack_tsdf(0, 0, make_float4(0,0,0,0)), x, y, z);
 		}
 	}
 
@@ -41,7 +41,7 @@ namespace dfusion
 			for (int z = 0; z < res.z; ++z)
 			{
 				int pos = (z*res.y + y)*res.x + x;
-				write_tsdf_surface(surf, pack_tsdf(data[pos], 1.f), x, y, z);
+				write_tsdf_surface(surf, pack_tsdf(data[pos], 1.f, make_float4(0,0,0,0)), x, y, z);
 			}
 		}
 	}

@@ -566,7 +566,6 @@ namespace dfusion
 #pragma endregion
 
 #pragma region --classifyVoxel
-#ifdef USE_AUTOMATIC_INSTEADOF_SCAN
 	__device__ int global_count = 0;
 	__device__ int output_count;
 	__device__ unsigned int blocks_done = 0;
@@ -577,7 +576,8 @@ namespace dfusion
 		{
 			CTA_SIZE_X = 32,
 			CTA_SIZE_Y = 8,
-			CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y,
+			CTA_SIZE_Z = 2,
+			CTA_SIZE = CTA_SIZE_X * CTA_SIZE_Y * CTA_SIZE_Z,
 			WARPS_COUNT = CTA_SIZE / Warp::WARP_SIZE
 		};
 
@@ -593,16 +593,15 @@ namespace dfusion
 		{
 			const int tx = threadIdx.x + blockIdx.x * CTA_SIZE_X;
 			const int ty = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
+			const int tz = threadIdx.z + blockIdx.z * CTA_SIZE_Z;
 			const int x = (tx << tile.level) + tile.begin.x;
 			const int y = (ty << tile.level) + tile.begin.y;
+			const int z = (tz << tile.level) + tile.begin.z;
 			const int rx = ((tile.end.x - tile.begin.x) >> tile.level);
 			const int ry = ((tile.end.y - tile.begin.y) >> tile.level);
-			const int rz = ((tile.end.z - tile.begin.z) >> tile.level);
 			const int s = (1 << tile.level);
-			const int ryrx = ry*rx;
-			const int tyrx_tx = ty*rx + tx;
 
-			if (__all(x >= tile.end.x) || __all(y >= tile.end.y))
+			if (x >= tile.end.x || y >= tile.end.y || z >= tile.end.z)
 				return;
 
 			int ftid = Block::flattenedThreadId();
@@ -611,48 +610,42 @@ namespace dfusion
 
 			volatile __shared__ int warps_buffer[WARPS_COUNT];
 
-			for (int tz = 0; tz < rz; tz ++)
+			float field[8];
+			float2 tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0));
+			field[0] = tdata.x * (tdata.y >= minWeights);
+			tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0));
+			field[1] = tdata.x * (tdata.y >= minWeights);
+			tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0));
+			field[2] = tdata.x * (tdata.y >= minWeights);
+			tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0));
+			field[3] = tdata.x * (tdata.y >= minWeights);
+			tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s));
+			field[4] = tdata.x * (tdata.y >= minWeights);
+			tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s));
+			field[5] = tdata.x * (tdata.y >= minWeights);
+			tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s));
+			field[6] = tdata.x * (tdata.y >= minWeights);
+			tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s));
+			field[7] = tdata.x * (tdata.y >= minWeights);
+
+			int cubeindex = 0;
+			if (field[0] && field[1] && field[2] && field[3] && field[4]
+				&& field[5] && field[6] && field[7])// exactly 0 means no value, thus should be ignored
 			{
-				int z = (tz << tile.level) + tile.begin.z;
-				if (z >= tile.end.z)
-					break;
-				float field[8];
-				float2 tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0));
-				field[0] = tdata.x * (tdata.y >= minWeights);
-				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0));
-				field[1] = tdata.x * (tdata.y >= minWeights);
-				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0));
-				field[2] = tdata.x * (tdata.y >= minWeights);
-				tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0));
-				field[3] = tdata.x * (tdata.y >= minWeights);
-				tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s));
-				field[4] = tdata.x * (tdata.y >= minWeights);
-				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s));
-				field[5] = tdata.x * (tdata.y >= minWeights);
-				tdata = unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s));
-				field[6] = tdata.x * (tdata.y >= minWeights);
-				tdata = unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s));
-				field[7] = tdata.x * (tdata.y >= minWeights);
+				cubeindex |= (int(field[0] < isoValue) << 0);
+				cubeindex |= (int(field[1] < isoValue) << 1);//  * 2;
+				cubeindex |= (int(field[2] < isoValue) << 2);//  * 4;
+				cubeindex |= (int(field[3] < isoValue) << 3);//  * 8;
+				cubeindex |= (int(field[4] < isoValue) << 4);//  * 16;
+				cubeindex |= (int(field[5] < isoValue) << 5);//  * 32;
+				cubeindex |= (int(field[6] < isoValue) << 6);//  * 64;
+				cubeindex |= (int(field[7] < isoValue) << 7);//  * 128;
+			}
 
-				int cubeindex = 0;
-				if (field[0] && field[1] && field[2] && field[3] && field[4]
-					&& field[5] && field[6] && field[7])// exactly 0 means no value, thus should be ignored
-				{
-					cubeindex |= (int(field[0] < isoValue) << 0);
-					cubeindex |= (int(field[1] < isoValue) << 1);//  * 2;
-					cubeindex |= (int(field[2] < isoValue) << 2);//  * 4;
-					cubeindex |= (int(field[3] < isoValue) << 3);//  * 8;
-					cubeindex |= (int(field[4] < isoValue) << 4);//  * 16;
-					cubeindex |= (int(field[5] < isoValue) << 5);//  * 32;
-					cubeindex |= (int(field[6] < isoValue) << 6);//  * 64;
-					cubeindex |= (int(field[7] < isoValue) << 7);//  * 128;
-				}
-
-				int numVerts = g_numVertsTable[cubeindex];
-				int total = __popc(__ballot(numVerts > 0));
-				if (total == 0)
-					continue;
-
+			int numVerts = g_numVertsTable[cubeindex];
+			int total = __popc(__ballot(numVerts > 0));
+			if (total)
+			{
 				if (lane_id == 0)
 				{
 					int old = atomicAdd(&global_count, total);
@@ -663,18 +656,10 @@ namespace dfusion
 				int offs = Warp::binaryExclScan(__ballot(numVerts > 0));
 				if (old_global_voxels_count + offs < tile.max_num_activeVoxels && numVerts > 0)
 				{
-					voxels_indeces[old_global_voxels_count + offs] = ryrx * tz + tyrx_tx;
+					voxels_indeces[old_global_voxels_count + offs] = ry*rx * tz + ty*rx + tx;
 					vetexes_number[old_global_voxels_count + offs] = numVerts;
 				}
-
-				bool full = old_global_voxels_count + total >= tile.max_num_activeVoxels;
-
-				if (full)
-					break;
-
-			} /* for(int z = 0; z < VOLUME_Z - 1; z++) */
-
-
+			}
 			/////////////////////////
 			// prepare for future scans
 			if (ftid == 0)
@@ -693,68 +678,7 @@ namespace dfusion
 		} /* operator () */
 	};
 	__global__ void getOccupiedVoxelsKernel(const OccupiedVoxels ov) { ov(); }
-#else
-	// classify voxel based on number of vertices it will generate
-	// one thread per voxel
-	__global__ void classifyVoxelKernel(cudaTextureObject_t tex, 
-		MarchingCubes::Tile tile, unsigned int* voxelVerts, 
-		unsigned int* voxelOccupied, float isoValue)
-	{
-		const int tx = threadIdx.x + blockIdx.x * blockDim.x;
-		const int ty = threadIdx.y + blockIdx.y * blockDim.y;
-		int tz = threadIdx.z + blockIdx.z * (blockDim.z << 3);
-		const int x = (tx << tile.level) + tile.begin.x;
-		const int y = (ty << tile.level) + tile.begin.y;
-		const int rx = ((tile.end.x - tile.begin.x) >> tile.level);
-		const int ry = ((tile.end.y - tile.begin.y) >> tile.level);
-		const int s = (1 << tile.level);
-		const int ryrx = ry*rx;
-		const int tyrx_tx = ty*rx + tx;
 
-		if (x >= tile.end.x && y >= tile.end.y)
-			return;
-
-		for (int block_iter = 0; block_iter < 8; block_iter++, tz += blockDim.z)
-		{
-			const int z = (tz << tile.level) + tile.begin.z;
-			if (z < tile.end.z)
-			{
-				// calculate flag indicating if each vertex is inside or outside isosurface
-				int cubeindex = 0;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + 0)).x < isoValue) << 0);
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + 0)).x < isoValue) << 1);//  * 2;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + 0)).x < isoValue) << 2);//  * 4;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + 0)).x < isoValue) << 3);//  * 8;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + 0, z + s)).x < isoValue) << 4);//  * 16;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + 0, z + s)).x < isoValue) << 5);//  * 32;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + s, y + s, z + s)).x < isoValue) << 6);//  * 64;
-				cubeindex |= (int(unpack_tsdf(read_tsdf_texture(tex, x + 0, y + s, z + s)).x < isoValue) << 7);//  * 128;
-
-				// read number of vertices from texture
-				int numVerts = g_numVertsTable[cubeindex];
-				int pos = tz*ryrx + tyrx_tx;
-				voxelVerts[pos] = numVerts;
-				voxelOccupied[pos] = (numVerts > 0);
-			}
-		}// end for block_iter
-	}
-
-	// compact voxel array 
-	__global__ void compactVoxelsKernel(unsigned int *compactedVoxelArray,
-		unsigned int *voxelOccupied, unsigned int *voxelOccupiedScan, unsigned int numVoxels)
-	{
-		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
-		unsigned int i = __mul24(blockId, blockDim.x<<3) + threadIdx.x;
-
-#pragma unroll
-		for (int k = 0; k < 8; k++)
-		{
-			if (voxelOccupied[i] && (i < numVoxels))
-				compactedVoxelArray[voxelOccupiedScan[i]] = i;
-			i += blockDim.x;
-		}
-	}
-#endif
 	static unsigned int get_scanned_sum(unsigned int* d_ary, unsigned int* d_scan, int n)
 	{
 		if (n == 0)
@@ -773,34 +697,6 @@ namespace dfusion
 
 	void MarchingCubes::classifyVoxel(Tile& tile)
 	{
-#ifndef USE_AUTOMATIC_INSTEADOF_SCAN
-		dim3 block(32, 8, 2);
-		dim3 grid(divUp((tile.end.x - tile.begin.x)>>tile.level, block.x), 
-			divUp((tile.end.y - tile.begin.y)>>tile.level, block.y),
-			divUp((tile.end.z - tile.begin.z)>>tile.level, block.z<<3));
-
-		// compute number of vertices of each voxel
-		classifyVoxelKernel << <grid, block >> >(m_volTex, tile, m_voxelVerts.ptr(),
-			m_voxelOccupied.ptr(), m_param.marching_cube_isoValue);
-		cudaSafeCall(cudaGetLastError(), "classifyVoxel");
-
-		// scan to get total number of vertices
-		cudpp_wrapper::exlusive_scan(m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
-		cudpp_wrapper::exlusive_scan(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_voxels);
-		tile.num_activeVoxels = get_scanned_sum(m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
-		tile.nverts = get_scanned_sum(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_voxels);
-		cudaSafeCall(cudaGetLastError(), "scan");
-
-		if (tile.num_activeVoxels == 0)
-			return;
-
-		// compact voxel index array
-		dim3 block1(512);
-		dim3 grid1(divUp(tile.num_voxels, block1.x<<3));
-		compactVoxelsKernel << <grid1, block1 >> >(m_compVoxelArray.ptr(), 
-			m_voxelOccupied.ptr(), m_voxelOccupiedScan.ptr(), tile.num_voxels);
-		cudaSafeCall(cudaGetLastError(), "compact voxels");
-#else
 		int zero_mem = 0;
 		cudaSafeCall(cudaMemcpyToSymbol(output_count, &zero_mem, sizeof(int)),
 			"MarchingCubes::classifyVoxel 1");
@@ -818,9 +714,11 @@ namespace dfusion
 		ov.isoValue = m_param.marching_cube_isoValue;
 		ov.minWeights = m_param.marchingCube_min_valied_weight;
 
-		dim3 block(OccupiedVoxels::CTA_SIZE_X, OccupiedVoxels::CTA_SIZE_Y);
+		dim3 block(OccupiedVoxels::CTA_SIZE_X, OccupiedVoxels::CTA_SIZE_Y,
+			OccupiedVoxels::CTA_SIZE_Z);
 		dim3 grid(divUp((tile.end.x - tile.begin.x) >> tile.level, block.x), 
-			divUp((tile.end.y - tile.begin.y) >> tile.level, block.y));
+			divUp((tile.end.y - tile.begin.y) >> tile.level, block.y),
+			divUp((tile.end.z - tile.begin.z) >> tile.level, block.z));
 
 		getOccupiedVoxelsKernel << <grid, block >> >(ov);
 		cudaSafeCall(cudaGetLastError(),
@@ -840,7 +738,6 @@ namespace dfusion
 		// scan to get total number of vertices
 		thrust_wrapper::exclusive_scan(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_activeVoxels);
 		tile.nverts = get_scanned_sum(m_voxelVerts.ptr(), m_voxelVertsScan.ptr(), tile.num_activeVoxels);
-#endif
 	}
 #pragma endregion
 
@@ -854,12 +751,21 @@ namespace dfusion
 	{
 		return a + t*(b - a);
 	}
+	__device__ __forceinline__ float4 lerp(float4 a, float4 b, float t)
+	{
+		return a + t*(b - a);
+	}
 
 	// compute interpolated vertex along an edge
 	__device__ __forceinline__ float3 vertexInterp(float isolevel, float3 p0, float3 p1, float f0, float f1)
 	{
 		float t = (isolevel - f0) / (f1 - f0);
 		return dfusion::lerp(p0, p1, t);
+	}
+	__device__ __forceinline__ float4 colorInterp(float isolevel, float4 p0, float4 p1, float f0, float f1)
+	{
+		float t = (isolevel - f0) / (f1 - f0);
+		return dfusion::lerp(p0, p1, t) * 1.5; // make it brighter
 	}
 
 	// calculate triangle normal
@@ -874,7 +780,11 @@ namespace dfusion
 	// version that calculates flat surface normal for each triangle
 	__global__ void generateTrianglesKernel(GpuMesh::PointType *pos, GpuMesh::PointType *norm,
 		cudaTextureObject_t tex, MarchingCubes::Tile tile,
-		unsigned int *compactedVoxelArray, unsigned int *numVertsScanned, float isoValue, float minWeights)
+		unsigned int *compactedVoxelArray, unsigned int *numVertsScanned, float isoValue, float minWeights
+#ifdef ENABLE_COLOR_FUSION
+		,GpuMesh::PointType* color
+#endif
+		)
 	{
 		unsigned int blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
 		unsigned int tid = __mul24(blockId, blockDim.x<<3) + threadIdx.x;
@@ -903,6 +813,7 @@ namespace dfusion
 
 				// calculate cell vertex positions
 				float3 v[8];
+				float field[8];
 				v[0] = make_float3(tile.origion.x + gridPos.x * tile.voxelSize,
 					tile.origion.y + gridPos.y * tile.voxelSize,
 					tile.origion.z + gridPos.z * tile.voxelSize);
@@ -914,8 +825,26 @@ namespace dfusion
 				v[6] = make_float3(v[0].x + svsz, v[0].y + svsz, v[0].z + svsz);
 				v[7] = make_float3(v[0].x, v[0].y + svsz, v[0].z + svsz);
 
-
-				float field[8];
+#ifdef ENABLE_COLOR_FUSION
+				float4 c[8];
+				float2 tdata;
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + 0), tdata, c[0]);
+				field[0] = tdata.x * (tdata.y >= minWeights);
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + 0), tdata, c[1]);
+				field[1] = tdata.x * (tdata.y >= minWeights);
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + 0), tdata, c[2]);
+				field[2] = tdata.x * (tdata.y >= minWeights);
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + 0), tdata, c[3]);
+				field[3] = tdata.x * (tdata.y >= minWeights);
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + s), tdata, c[4]);
+				field[4] = tdata.x * (tdata.y >= minWeights);
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + s), tdata, c[5]);
+				field[5] = tdata.x * (tdata.y >= minWeights);
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + s, gridPos.z + s), tdata, c[6]);
+				field[6] = tdata.x * (tdata.y >= minWeights);
+				unpack_tsdf_vw_rgba(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + s), tdata, c[7]);
+				field[7] = tdata.x * (tdata.y >= minWeights);
+#else
 				float2 tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + 0, gridPos.z + 0));
 				field[0] = tdata.x * (tdata.y >= minWeights);
 				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + s, gridPos.y + 0, gridPos.z + 0));
@@ -932,6 +861,7 @@ namespace dfusion
 				field[6] = tdata.x * (tdata.y >= minWeights);
 				tdata = unpack_tsdf(read_tsdf_texture(tex, gridPos.x + 0, gridPos.y + s, gridPos.z + s));
 				field[7] = tdata.x * (tdata.y >= minWeights);
+#endif
 
 				// recalculate flag, faster than store in global memory
 				int cubeindex = 0;
@@ -964,6 +894,22 @@ namespace dfusion
 				vertlist[(GEN_TRI_N_THREADS * 9) + threadIdx.x] = vertexInterp(isoValue, v[1], v[5], field[1], field[5]);
 				vertlist[(GEN_TRI_N_THREADS * 10) + threadIdx.x] = vertexInterp(isoValue, v[2], v[6], field[2], field[6]);
 				vertlist[(GEN_TRI_N_THREADS * 11) + threadIdx.x] = vertexInterp(isoValue, v[3], v[7], field[3], field[7]);
+#ifdef ENABLE_COLOR_FUSION
+				__shared__ float4 clorlist[12 * GEN_TRI_N_THREADS];
+
+				clorlist[threadIdx.x] = colorInterp(isoValue, c[0], c[1], field[0], field[1]);
+				clorlist[GEN_TRI_N_THREADS + threadIdx.x] = colorInterp(isoValue, c[1], c[2], field[1], field[2]);
+				clorlist[(GEN_TRI_N_THREADS * 2) + threadIdx.x] = colorInterp(isoValue, c[2], c[3], field[2], field[3]);
+				clorlist[(GEN_TRI_N_THREADS * 3) + threadIdx.x] = colorInterp(isoValue, c[3], c[0], field[3], field[0]);
+				clorlist[(GEN_TRI_N_THREADS * 4) + threadIdx.x] = colorInterp(isoValue, c[4], c[5], field[4], field[5]);
+				clorlist[(GEN_TRI_N_THREADS * 5) + threadIdx.x] = colorInterp(isoValue, c[5], c[6], field[5], field[6]);
+				clorlist[(GEN_TRI_N_THREADS * 6) + threadIdx.x] = colorInterp(isoValue, c[6], c[7], field[6], field[7]);
+				clorlist[(GEN_TRI_N_THREADS * 7) + threadIdx.x] = colorInterp(isoValue, c[7], c[4], field[7], field[4]);
+				clorlist[(GEN_TRI_N_THREADS * 8) + threadIdx.x] = colorInterp(isoValue, c[0], c[4], field[0], field[4]);
+				clorlist[(GEN_TRI_N_THREADS * 9) + threadIdx.x] = colorInterp(isoValue, c[1], c[5], field[1], field[5]);
+				clorlist[(GEN_TRI_N_THREADS * 10) + threadIdx.x] = colorInterp(isoValue, c[2], c[6], field[2], field[6]);
+				clorlist[(GEN_TRI_N_THREADS * 11) + threadIdx.x] = colorInterp(isoValue, c[3], c[7], field[3], field[7]);
+#endif
 				__syncthreads();
 
 				// output triangle vertices
@@ -971,22 +917,20 @@ namespace dfusion
 
 				for (int i = 0; i < numVerts; i += 3)
 				{
-#ifndef USE_AUTOMATIC_INSTEADOF_SCAN
-					unsigned int index = numVertsScanned[voxelId] + i;
-#else
 					unsigned int index = numVertsScanned[tid] + i;
-#endif
 
 					float3 *v[3];
-					unsigned int edge;
-					edge = g_triTable[cubeindex][i];
-					v[2] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
-
-					edge = g_triTable[cubeindex][i + 1];
-					v[1] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
-
-					edge = g_triTable[cubeindex][i + 2];
-					v[0] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
+#ifdef ENABLE_COLOR_FUSION
+					float4 *c[3];
+#endif
+					for (int k = 0; k < 3; k++)
+					{
+						unsigned int edge = g_triTable[cubeindex][i + k];
+						v[2-k] = &vertlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
+#ifdef ENABLE_COLOR_FUSION
+						c[2-k] = &clorlist[(edge*GEN_TRI_N_THREADS) + threadIdx.x];
+#endif
+					}
 
 					// calculate triangle surface normal
 					float3 n = calcNormal(v[0], v[1], v[2]);
@@ -1001,6 +945,11 @@ namespace dfusion
 
 						pos[index + 2] = GpuMesh::to_point(*v[2]);
 						norm[index + 2] = GpuMesh::to_point(n);
+#ifdef ENABLE_COLOR_FUSION
+						color[index] = *c[0];
+						color[index + 1] = *c[1];
+						color[index + 2] = *c[2];
+#endif
 					}
 				}// end for i
 			}// end if tid < activeVoxels
@@ -1022,7 +971,11 @@ namespace dfusion
 			m_volTex, tile,
 			m_compVoxelArray, m_voxelVertsScan, 
 			m_param.marching_cube_isoValue,
-			m_param.marchingCube_min_valied_weight);
+			m_param.marchingCube_min_valied_weight
+#ifdef ENABLE_COLOR_FUSION
+			,result.colors()
+#endif
+			);
 		cudaSafeCall(cudaGetLastError(), "generateTriangles");
 		result.unlockVertsNormals();
 	}

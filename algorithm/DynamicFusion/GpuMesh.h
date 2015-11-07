@@ -50,6 +50,9 @@ namespace dfusion
 		const PointType* verts()const{ return m_verts_d; }
 		PointType* normals(){ return m_normals_d; }
 		const PointType* normals()const { return m_normals_d; }
+		PointType* colors(){ return m_colors_d; }
+		const PointType* colors()const { return m_colors_d; }
+		void setShowColor(bool c) { m_show_color = c; }
 
 		int num()const{ return m_num; }
 		void toObjMesh(ObjMesh& omesh);
@@ -94,6 +97,7 @@ namespace dfusion
 		int m_width;
 		int m_height;
 		int m_current_buffer_size;
+		bool m_show_color;
 
 		unsigned int m_vbo_id;
 		cudaGraphicsResource* m_cuda_res;

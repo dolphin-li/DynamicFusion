@@ -26,7 +26,9 @@ public:
 	dfusion::LightSource m_lights;
 
 	std::vector<dfusion::depthtype> m_depth_h;
+	std::vector<dfusion::PixelRGBA> m_color_h;
 	dfusion::DepthMap m_depth_d;
+	dfusion::ColorMap m_color_d;
 	dfusion::ColorMap m_warpedview_shading;
 	dfusion::ColorMap m_canoview_shading;
 	dfusion::ColorMap m_errorMap_shading;

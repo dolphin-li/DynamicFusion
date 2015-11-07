@@ -44,6 +44,7 @@ public:
 
 	void on_cbNoRigid_clicked();
 	void on_cbShowMesh_clicked();
+	void on_cbShowColor_clicked();
 	void on_cbShowNodes_clicked();
 	void on_cbShowGraph_clicked();
 	void on_cbShowCorr_clicked();

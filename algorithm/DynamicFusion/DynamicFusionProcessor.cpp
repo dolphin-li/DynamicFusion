@@ -109,6 +109,8 @@ namespace dfusion
 			m_canoMesh = new GpuMesh();
 		if (m_warpedMesh == nullptr)
 			m_warpedMesh = new GpuMesh();
+		m_canoMesh->setShowColor(m_param.view_show_color);
+		m_warpedMesh->setShowColor(m_param.view_show_color);
 
 		// marching cube
 		if (m_marchCube == nullptr)
@@ -194,6 +196,11 @@ namespace dfusion
 		if (m_warpField)
 			m_warpField->setActiveVisualizeNodeId(m_param.view_activeNode_id);
 
+		if (m_canoMesh)
+			m_canoMesh->setShowColor(m_param.view_show_color);
+		if (m_warpedMesh)
+			m_warpedMesh->setShowColor(m_param.view_show_color);
+
 		if (reCreate)
 			init(param);
 		else if (reSet)
@@ -221,10 +228,11 @@ namespace dfusion
 		m_frame_id = 0;
 	}
 
-	void DynamicFusionProcessor::processFrame(const DepthMap& depth)
+	void DynamicFusionProcessor::processFrame(const DepthMap& depth,
+		const ColorMap& color)
 	{
 		depth.copyTo(m_depth_input);
-
+		color.copyTo(m_color_input);
 
 		Tbx::Transfo rigid = rigid_align();
 		m_warpField->set_rigidTransform(rigid);

@@ -24,7 +24,7 @@ namespace dfusion
 		void save(const char* volume_name);
 		void load(const char* volume_name);
 
-		void processFrame(const DepthMap& depth);
+		void processFrame(const DepthMap& depth, const ColorMap& color);
 
 		// if not use_ray_casting, then use marching_cube
 		void shading(const Camera& userCam, LightSource light, ColorMap& img, bool use_ray_casting);
@@ -74,6 +74,7 @@ namespace dfusion
 			RIGID_ALIGN_PYD_LEVELS = 3
 		};
 		DepthMap m_depth_input;
+		ColorMap m_color_input;
 		std::vector<DepthMap> m_depth_curr_pyd;
 		std::vector<MapArr> m_vmap_curr_pyd;
 		std::vector<MapArr> m_nmap_curr_pyd;

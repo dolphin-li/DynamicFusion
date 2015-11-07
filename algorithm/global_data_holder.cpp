@@ -7,7 +7,9 @@ void GlobalDataHolder::init()
 {
 	m_kinect.InitKinect();
 	m_depth_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
+	m_color_h.resize(dfusion::KINECT_WIDTH*dfusion::KINECT_HEIGHT);
 	m_depth_d.create(dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
+	m_color_d.create(dfusion::KINECT_WIDTH, dfusion::KINECT_HEIGHT);
 
 	m_lights.pos = make_float3(0, 0, 0);
 	m_lights.amb = make_float3(0.3, 0.3, 0.3);

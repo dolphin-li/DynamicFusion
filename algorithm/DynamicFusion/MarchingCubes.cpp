@@ -29,10 +29,6 @@ namespace dfusion
 			m_voxelVerts.create(m_tiles[0].max_num_activeVoxels);
 			m_voxelVertsScan.create(m_tiles[0].max_num_activeVoxels);
 			m_compVoxelArray.create(m_tiles[0].max_num_activeVoxels);
-#ifndef USE_AUTOMATIC_INSTEADOF_SCAN
-			m_voxelOccupied.create(m_tiles[0].max_num_activeVoxels);
-			m_voxelOccupiedScan.create(m_tiles[0].max_num_activeVoxels);
-#endif
 		}
 	}
 
@@ -108,11 +104,7 @@ namespace dfusion
 						((tile.end.y - tile.begin.y) >> m_param.marching_cube_level) * 
 						((tile.end.z - tile.begin.z) >> m_param.marching_cube_level);
 					tile.num_activeVoxels = 0;
-#ifdef USE_AUTOMATIC_INSTEADOF_SCAN
 					tile.max_num_activeVoxels = ceil(tile.num_voxels * m_param.marching_cube_max_activeVoxel_ratio);
-#else
-					tile.max_num_activeVoxels = tile.num_voxels;
-#endif
 
 					m_tiles.push_back(tile);
 				}
