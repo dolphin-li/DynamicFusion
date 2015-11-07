@@ -26,6 +26,8 @@ namespace dfusion
 #define ENABLE_COLOR_FUSION
 #define ENABLE_8_NN_GRAPH
 
+#define COLOR_FUSION_BRIGHTNESS 1.5 // multiplied after colors extracted from Marching Cubes.
+
 	/** **********************************************************************
 	* types
 	* ***********************************************************************/

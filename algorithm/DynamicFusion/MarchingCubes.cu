@@ -765,7 +765,7 @@ namespace dfusion
 	__device__ __forceinline__ float4 colorInterp(float isolevel, float4 p0, float4 p1, float f0, float f1)
 	{
 		float t = (isolevel - f0) / (f1 - f0);
-		return dfusion::lerp(p0, p1, t) * 1.5; // make it brighter
+		return dfusion::lerp(p0, p1, t) * COLOR_FUSION_BRIGHTNESS; // make it brighter
 	}
 
 	// calculate triangle normal
