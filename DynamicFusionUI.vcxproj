@@ -348,6 +348,9 @@
     <ClInclude Include="algorithm\DynamicFusion\MicrosoftKinect.h" />
     <ClInclude Include="algorithm\DynamicFusion\RayCaster.h" />
     <ClInclude Include="algorithm\DynamicFusion\TsdfVolume.h" />
+    <ClInclude Include="algorithm\DynamicFusion\VoxelHash\voxel_block_hash_table.cuh" />
+    <ClInclude Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_device.h" />
+    <ClInclude Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_internal.h" />
     <ClInclude Include="algorithm\DynamicFusion\WarpField.h" />
     <ClInclude Include="algorithm\FreeImage\CFreeImage.h" />
     <ClInclude Include="algorithm\global_data_holder.h" />
@@ -452,6 +455,11 @@
     <CudaCompile Include="algorithm\DynamicFusion\MarchingCubes.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\RayCaster.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\TsdfVolume.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_allocation.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_selection.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_streaming.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_update.cu" />
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_utils.cu" />
     <CudaCompile Include="algorithm\DynamicFusion\WarpField.cu" />
   </ItemGroup>
   <ItemGroup>

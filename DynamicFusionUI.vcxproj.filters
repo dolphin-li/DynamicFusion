@@ -74,6 +74,9 @@
     <Filter Include="algorithm\DynamicFusion\cudpp\MordernGpu">
       <UniqueIdentifier>{983460d9-9284-4afa-bbfb-143f9088438e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="algorithm\DynamicFusion\voxelHash">
+      <UniqueIdentifier>{3471bb37-bf17-431d-b610-67dcdc742b20}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -581,6 +584,15 @@
     <ClInclude Include="algorithm\DynamicFusion\CudaCholeskeySolver.h">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\VoxelHash\voxel_block_hash_table.cuh">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_device.h">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_internal.h">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
@@ -630,6 +642,21 @@
     </CudaCompile>
     <CudaCompile Include="algorithm\DynamicFusion\CudaCholeskeySolver.cu">
       <Filter>algorithm\DynamicFusion</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_allocation.cu">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_selection.cu">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_streaming.cu">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_block_update.cu">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_utils.cu">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
