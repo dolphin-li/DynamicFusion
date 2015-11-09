@@ -914,7 +914,15 @@ namespace dfusion
 		for (int i = 0; i < componentsFlag.size(); i++)
 		{
 			if (componentsToRemove.find(componentsFlag[i]) != componentsToRemove.end())
+			{
 				idxMap[i] = -1;
+				if (i < m_lastNumNodes[0])
+				{
+					//printf("illegal: %d < %d, current: %d\n", i, m_lastNumNodes[0], m_numNodes[0]);
+					//throw std::exception("error in removing small components, last nodes not illegal!");
+					idxMap[i] = totalIdx++;
+				}
+			}
 			else
 				idxMap[i] = totalIdx++;
 		}
@@ -926,13 +934,13 @@ namespace dfusion
 			m_meshPointsSorted.create(m_numNodes[0] * 3 * 1.5);
 		cudaSafeCall(cudaMemcpy(m_meshPointsSorted, m_nodesQuatTransVw, m_numNodes[0] * sizeof(float4)* 3,
 			cudaMemcpyDeviceToDevice), "WarpField::remove_small_graph_components, cudaMemcpy2");
-		cudaSafeCall(cudaMemcpy(m_meshPointsKey, idxMap.data(), m_numNodes[0],
+		cudaSafeCall(cudaMemcpy(m_meshPointsKey, idxMap.data(), m_numNodes[0] * sizeof(int),
 			cudaMemcpyHostToDevice), "WarpField::remove_small_graph_components, cudaMemcpy3");
 		copy_nodes_kernel << <divUp(m_numNodes[0], 256), 256 >> >(m_nodesQuatTransVw,
 			m_meshPointsSorted, m_meshPointsKey, m_numNodes[0]);
 		cudaSafeCall(cudaGetLastError(), "WarpField::remove_small_graph_components, copy nodes");
 
-		printf("%d %d\n", m_numNodes[0], totalIdx);
+		printf("Nodes Removal: %d -> %d, last=%d\n", m_numNodes[0], totalIdx, m_lastNumNodes[0]);
 		m_numNodes[0] = totalIdx;
 
 		updateGraph_singleLevel();

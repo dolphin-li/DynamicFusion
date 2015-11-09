@@ -73,7 +73,7 @@ namespace dfusion
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
 		graph_single_level = true;
-		graph_remove_small_components_ratio = 10.1f;
+		graph_remove_small_components_ratio = 10.1f; //code not ready, use this param>=1.f to disable
 
 		if (graph_single_level)
 		{
