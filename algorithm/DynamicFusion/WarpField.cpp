@@ -120,9 +120,6 @@ namespace dfusion
 
 		insertNewNodes(src);
 
-		if (m_lastNumNodes[0] != m_numNodes[0])
-			updateAnnField();
-
 		if (m_param.graph_single_level)
 		{
 			updateGraph_singleLevel();
@@ -132,6 +129,11 @@ namespace dfusion
 			for (int lv = 1; lv < GraphLevelNum; lv++)
 				updateGraph(lv);
 		}
+
+		remove_small_graph_components();
+
+		if (m_lastNumNodes[0] != m_numNodes[0])
+			updateAnnField();
 	}
 
 	void WarpField::bindKnnFieldSurface()
@@ -279,4 +281,5 @@ namespace dfusion
 		printf("warp field loaded: %d %d %d %d nodes\n", m_numNodes[0],
 			m_numNodes[1], m_numNodes[2], m_numNodes[3]);
 	}
+
 }

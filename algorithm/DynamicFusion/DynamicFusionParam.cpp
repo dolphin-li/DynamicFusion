@@ -33,7 +33,7 @@ namespace dfusion
 		* ******************************************************/
 		// cannot be larger than warpField::knnK
 		warp_knn_k_eachlevel[0] = 4;	// graph-pixel association
-		warp_knn_k_eachlevel[1] = KnnK; // finest graph
+		warp_knn_k_eachlevel[1] = 4; // finest graph
 		warp_knn_k_eachlevel[2] = KnnK;
 		warp_knn_k_eachlevel[3] = KnnK;
 		set_warp_radius_search_epsilon(0.025);
@@ -73,11 +73,12 @@ namespace dfusion
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
 		graph_single_level = true;
+		graph_remove_small_components_ratio = 10.1f;
 
 		if (graph_single_level)
 		{
 			fusion_lambda = 300;
-			fusion_GaussNewton_fixedStep = 0.f;
+			fusion_GaussNewton_fixedStep = 0.5f;
 			warp_param_softness = 0;
 			fusion_GaussNewton_diag_regTerm = 1e-6;
 		}
@@ -190,6 +191,7 @@ namespace dfusion
 		WRITE_ONE(load_frameIndx_plus_num);
 		WRITE_ONE(solver_enable_nan_check);
 		WRITE_ONE(graph_single_level);
+		WRITE_ONE(graph_remove_small_components_ratio);
 
 		/** *****************************************************
 		* visualization related
@@ -311,6 +313,7 @@ namespace dfusion
 				READ_ONE_ELSE_IF(load_frameIndx_plus_num)
 				READ_ONE_ELSE_IF(solver_enable_nan_check)
 				READ_ONE_ELSE_IF(graph_single_level)
+				READ_ONE_ELSE_IF(graph_remove_small_components_ratio)
 
 				/** *****************************************************
 				* visualization related

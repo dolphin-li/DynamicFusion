@@ -154,6 +154,7 @@ namespace dfusion
 		void updateAnnField();
 		void updateGraph(int level);
 		void updateGraph_singleLevel();
+		void remove_small_graph_components();
 
 		void bindKnnFieldSurface();
 		void unBindKnnFieldSurface();

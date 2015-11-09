@@ -44,9 +44,7 @@ struct VisibilityMarker{
 			return false;
 
 		//	calculate projection onto the screen, if out of camera range, not visible
-		int2 ukr;
-		ukr.x = __float2int_rn (p.x * intr.fx / p.z + intr.cx);
-		ukr.y = __float2int_rn (p.y * intr.fy / p.z + intr.cy);
+		float3 ukr = intr.xyz2uvd(X, Y, Z);
 		if (ukr.x < 0 || ukr.y < 0 || ukr.x >= cols || ukr.y >= rows )
 			return false;
 

@@ -122,6 +122,7 @@ namespace dfusion
 		int load_frameIndx_plus_num;
 		bool solver_enable_nan_check;
 		bool graph_single_level;
+		float graph_remove_small_components_ratio;
 
 		/** *****************************************************
 		* visualization related

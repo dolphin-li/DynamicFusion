@@ -5,6 +5,9 @@
 #include "cudpp\thrust_wrapper.h"
 #include "cudpp\ModerGpuWrapper.h"
 #include "GpuKdTree.h"
+#include <set>
+#include <algorithm>
+#include <queue>
 namespace dfusion
 {
 #pragma region --warpmesh
@@ -104,9 +107,6 @@ namespace dfusion
 		if (x < warper.w && y < warper.h)
 			warper(x, y);
 	}
-
-
-
 
 	void WarpField::warp(GpuMesh& src, GpuMesh& dst)
 	{
@@ -793,6 +793,149 @@ namespace dfusion
 			}
 #endif
 		}
+	}
+#pragma endregion
+
+#pragma region remove small graph components
+
+	struct sort_int2_less
+	{
+		bool operator()(const int2& left, const int2& right)const
+		{
+			return (left.x < right.x) || (left.x == right.x && left.y < right.y);
+		}
+	};
+
+	__global__ void copy_nodes_kernel(float4* dst, const float4* src, const int* idxMap, int nSrc)
+	{
+		int iSrc = threadIdx.x + blockIdx.x * blockDim.x;
+		if (iSrc < nSrc)
+		{
+			int iDst = idxMap[iSrc];
+			if (iDst >= 0)
+			{
+				for (int k = 0; k < 3; k++)
+					dst[iDst * 3 + k] = src[iSrc * 3 + k];
+			}
+		}
+	}
+
+	void WarpField::remove_small_graph_components()
+	{
+		// we only perform removal for single-level graph
+		if (!m_param.graph_single_level || m_numNodes[0] <= 1
+			|| m_param.graph_remove_small_components_ratio >= 1.f
+			|| m_numNodes[0] == m_lastNumNodes[0])
+			return;
+
+		std::vector<KnnIdx> knnGraph(m_numNodes[0]);
+		cudaSafeCall(cudaMemcpy(knnGraph.data(), m_nodesGraph.ptr(), m_numNodes[0] * sizeof(KnnIdx),
+			cudaMemcpyDeviceToHost), "WarpField::remove_small_graph_components, cudaMemcpy1");
+
+		std::vector<int2> edges;
+		edges.reserve(knnGraph.size() * KnnK);
+		for (int i = 0; i < knnGraph.size(); i++)
+		{
+			KnnIdx knn = knnGraph[i];
+			for (int k = 0; k < KnnK; k++)
+			{
+				int nb = knn_k(knn, k);
+				if (nb < m_numNodes[0])
+				{
+					edges.push_back(make_int2(i, nb));
+					edges.push_back(make_int2(nb, i));
+				}
+			}// k
+		}// i
+		std::sort(edges.begin(), edges.end(), sort_int2_less());
+
+		std::vector<int> edgeHeader(m_numNodes[0] + 1, 0);
+		for (int i = 1; i < edges.size(); i++)
+		{
+			if (edges[i].x != edges[i - 1].x)
+				edgeHeader[edges[i].x] = i;
+		}
+		edgeHeader[m_numNodes[0]] = edges.size();
+
+		// find indepedent components
+		std::set<int> verts;
+		for (int i = 0; i < m_numNodes[0]; i++)
+			verts.insert(i);
+
+		std::vector<int> componentsSize;
+		std::vector<int> componentsFlag(m_numNodes[0], -1);
+
+		while (!verts.empty())
+		{
+			componentsSize.push_back(0);
+			int& cpSz = componentsSize.back();
+
+			auto set_iter = verts.begin();
+			std::queue<int> queue;
+			queue.push(*set_iter);
+			verts.erase(set_iter);
+
+			while (!queue.empty())
+			{
+				const int v = queue.front();
+				queue.pop();
+				cpSz++;
+				componentsFlag[v] = componentsSize.size() - 1;
+
+				for (int i = edgeHeader[v]; i < edgeHeader[v + 1]; i++)
+				{
+					const int v1 = edges[i].y;
+					set_iter = verts.find(v1);
+					if (set_iter != verts.end())
+					{
+						queue.push(v1);
+						verts.erase(set_iter);
+					}
+				}// end for i
+			}// end while
+		}// end while verts
+
+		// if only one components, then nothing to remove
+		if (componentsSize.size() <= 1)
+			return;
+
+		// find idx that map origional nodes to removed nodes set
+		const int thre = std::lroundf(m_param.graph_remove_small_components_ratio * m_numNodes[0]);
+		std::set<int> componentsToRemove;
+		for (int i = 0; i < componentsSize.size(); i++)
+		if (componentsSize[i] < thre)
+			componentsToRemove.insert(i);
+
+		if (componentsToRemove.size() == 0)
+			return;
+
+		int totalIdx = 0;
+		std::vector<int> idxMap(componentsFlag.size());
+		for (int i = 0; i < componentsFlag.size(); i++)
+		{
+			if (componentsToRemove.find(componentsFlag[i]) != componentsToRemove.end())
+				idxMap[i] = -1;
+			else
+				idxMap[i] = totalIdx++;
+		}
+
+		//
+		if (m_meshPointsKey.size() < m_numNodes[0])
+			m_meshPointsKey.create(m_numNodes[0] * 1.5);
+		if (m_meshPointsSorted.size() < m_numNodes[0] * 3)
+			m_meshPointsSorted.create(m_numNodes[0] * 3 * 1.5);
+		cudaSafeCall(cudaMemcpy(m_meshPointsSorted, m_nodesQuatTransVw, m_numNodes[0] * sizeof(float4)* 3,
+			cudaMemcpyDeviceToDevice), "WarpField::remove_small_graph_components, cudaMemcpy2");
+		cudaSafeCall(cudaMemcpy(m_meshPointsKey, idxMap.data(), m_numNodes[0],
+			cudaMemcpyHostToDevice), "WarpField::remove_small_graph_components, cudaMemcpy3");
+		copy_nodes_kernel << <divUp(m_numNodes[0], 256), 256 >> >(m_nodesQuatTransVw,
+			m_meshPointsSorted, m_meshPointsKey, m_numNodes[0]);
+		cudaSafeCall(cudaGetLastError(), "WarpField::remove_small_graph_components, copy nodes");
+
+		printf("%d %d\n", m_numNodes[0], totalIdx);
+		m_numNodes[0] = totalIdx;
+
+		updateGraph_singleLevel();
 	}
 #pragma endregion
 
