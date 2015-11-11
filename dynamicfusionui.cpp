@@ -529,6 +529,35 @@ void DynamicFusionUI::on_actionSave_triggered()
 	}
 }
 
+void DynamicFusionUI::on_actionExport_mesh_triggered()
+{
+	try
+	{
+		setState(DynamicFusionUI::Pause);
+		QString name = QFileDialog::getSaveFileName(this, "save", "", "*.obj");
+		if (!name.isEmpty())
+		{
+			try
+			{
+				if (!name.endsWith(".obj"))
+					name.append(".obj");
+				ObjMesh mesh;
+				g_dataholder.m_processor.getWarpedMesh()->toObjMesh(mesh);
+				mesh.saveObj(name.toStdString().c_str());
+			}
+			catch (std::exception e)
+			{
+				std::cout << e.what() << std::endl;
+			}
+		}
+		restoreState();
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+
 void DynamicFusionUI::on_actionLoad_triggered()
 {
 	try

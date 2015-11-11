@@ -39,6 +39,7 @@ namespace dfusion
 		TsdfVolume* getVolume();
 		const GpuGaussNewtonSolver* getSolver()const;
 		GpuGaussNewtonSolver* getSolver();
+		GpuMesh* getWarpedMesh(){ return m_warpedMesh; }
 
 		void updateParam(const Param& param);
 
@@ -64,6 +65,9 @@ namespace dfusion
 		void VoxelBlockAllocation(const DepthMap& depth_float_frame_d);
 		void VisibleVoxelBlockSelection();
 		void VoxelBlockUpdate(const DepthMap& depth_float_frame_d);
+		void OutActiveRegionVoxelBlockSelection();
+		int GPU2HostStreaming();
+		int Host2GPUStreaming();
 #endif
 	private:
 		Param m_param;

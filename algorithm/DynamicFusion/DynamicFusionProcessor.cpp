@@ -712,5 +712,200 @@ namespace dfusion
 			m_sparseVolume->delete_hash_entry_,
 			0.99f);
 	}
+
+	void DynamicFusionProcessor::OutActiveRegionVoxelBlockSelection()
+	{
+		Tbx::Transfo c2w = m_warpField->get_rigidTransform().fast_invert();
+		Tbx::Point3	active_region_center(0, 0, m_sparseVolume->active_region_offset_);
+		active_region_center = c2w * active_region_center;
+
+		float3	center, chunk_min_xyz = convert(active_region_center);
+		int3	chunk_dim;
+		chunk_min_xyz.x = CHUNK_MIN_X;
+		chunk_min_xyz.y = CHUNK_MIN_Y;
+		chunk_min_xyz.z = CHUNK_MIN_Z;
+		chunk_dim.x = CHUNK_DIM_X;
+		chunk_dim.y = CHUNK_DIM_Y;
+		chunk_dim.z = CHUNK_DIM_Z;
+
+		selectOutActiveRegionHashEntry(
+			m_sparseVolume->hash_entry_scan_,
+			m_sparseVolume->selected_hash_entry_number_,
+			center,
+			m_sparseVolume->active_region_radius_,
+			chunk_min_xyz,
+			chunk_dim,
+			m_sparseVolume->getBlockSize(),
+			m_sparseVolume->hash_entry_,
+			m_sparseVolume->selected_hash_entry_);
+	}
+
+	int DynamicFusionProcessor::GPU2HostStreaming(){
+		//	select all entry out of active region
+		OutActiveRegionVoxelBlockSelection();
+
+		//	copy all selected entry and corresponding voxel blocks to buffer
+		m_sparseVolume->selected_hash_entry_number_ = std::min(
+			m_sparseVolume->selected_hash_entry_number_, BUFFER_SIZE);
+		if (m_sparseVolume->selected_hash_entry_number_)
+		{
+			int3	chunk_dim;
+			chunk_dim.x = CHUNK_DIM_X, chunk_dim.y = CHUNK_DIM_Y, chunk_dim.z = CHUNK_DIM_Z;
+			float3	chunk_min_xyz;
+			chunk_min_xyz.x = CHUNK_MIN_X, chunk_min_xyz.y = CHUNK_MIN_Y, chunk_min_xyz.z = CHUNK_MIN_Z;
+
+			streamGPU2Buffer(
+				m_sparseVolume->hash_entry_,
+				BUCKET_SIZE,
+				m_sparseVolume->hash_bucket_atomic_lock_,
+				m_sparseVolume->voxel_block_,
+				m_sparseVolume->voxel_block_buffer_,
+				m_sparseVolume->available_voxel_block_,
+				m_sparseVolume->hash_parameters_,
+				m_sparseVolume->selected_hash_entry_,
+				m_sparseVolume->selected_hash_entry_number_,
+				chunk_dim,
+				chunk_min_xyz,
+				CHUNK_SIZE,
+				m_sparseVolume->getBlockSize(),
+				m_sparseVolume->chunk_on_CPU_);
+			//std::cout << "streamed out: " << selected_hash_entry_number << std::endl;
+		}
+
+		//	transfer buffer to host
+		if (m_sparseVolume->selected_hash_entry_number_)
+		{
+			cudaMemcpy(m_sparseVolume->selected_hash_entry_h_.data(), m_sparseVolume->selected_hash_entry_.ptr(), 
+				sizeof(HashEntry)*m_sparseVolume->selected_hash_entry_number_, cudaMemcpyDeviceToHost);
+			cudaMemcpy(m_sparseVolume->voxel_block_buffer_h_.data(), m_sparseVolume->voxel_block_buffer_.ptr(),
+				sizeof(VoxelBlock)*m_sparseVolume->selected_hash_entry_number_, cudaMemcpyDeviceToHost);
+		}
+
+		//	insert voxel blocks into corresponding chunk
+		for (int i = 0; i<m_sparseVolume->selected_hash_entry_number_; i++){
+			//	calculate chunk id
+			ldp::Int3 block_grid(
+				m_sparseVolume->selected_hash_entry_h_[i].position[0],
+				m_sparseVolume->selected_hash_entry_h_[i].position[1],
+				m_sparseVolume->selected_hash_entry_h_[i].position[2]);
+			ldp::Float3 block_xyz = block_grid * m_sparseVolume->getBlockSize() + ldp::Float3(1e-4f, 1e-4f, 1e-4f);
+			ldp::Float3 chunk_min_xyz(CHUNK_MIN_X, CHUNK_MIN_Y, CHUNK_MIN_Z);
+			ldp::Int3 chunk_grid = (block_xyz - chunk_min_xyz) / CHUNK_SIZE;
+			int chunk_idx = (chunk_grid.z * CHUNK_DIM_Y + chunk_grid.y) * CHUNK_DIM_X + chunk_grid.x;
+
+			if (!m_sparseVolume->chunk_[chunk_idx]){
+				m_sparseVolume->chunk_[chunk_idx] = new Chunk;
+			}
+
+			m_sparseVolume->chunk_[chunk_idx]->AddData(m_sparseVolume->selected_hash_entry_h_[i], 
+				m_sparseVolume->voxel_block_buffer_h_[i]);
+		}
+
+		return m_sparseVolume->selected_hash_entry_number_;
+	}
+
+	int DynamicFusionProcessor::Host2GPUStreaming(){
+		yz::Matrix4x4f c2w = world2camera_record.back().Inverse();
+		yz::Vec3f	active_region_center(0, 0, active_region_offset);
+		active_region_center = c2w.TransformVector(active_region_center);
+
+		yz::Vec3f chunk_min_xyz(CHUNK_MIN_X, CHUNK_MIN_Y, CHUNK_MIN_Z);
+		int chunk_to_stream = -1;
+		float dist;
+
+		//	get lower and upper limit of chunks to check distance
+		yz::Vec3f r = active_region_center - chunk_min_xyz;
+		int chunk_x_min = yz::myMax(0, (r.x - active_region_radius) / CHUNK_SIZE);
+		int chunk_x_max = yz::myMin(CHUNK_DIM_X - 1, (r.x + active_region_radius) / CHUNK_SIZE);
+		int chunk_y_min = yz::myMax(0, (r.y - active_region_radius) / CHUNK_SIZE);
+		int chunk_y_max = yz::myMin(CHUNK_DIM_Y - 1, (r.y + active_region_radius) / CHUNK_SIZE);
+		int chunk_z_min = yz::myMax(0, (r.z - active_region_radius) / CHUNK_SIZE);
+		int chunk_z_max = yz::myMin(CHUNK_DIM_Z - 1, (r.z + active_region_radius) / CHUNK_SIZE);
+
+		//	find the chunk whose furthest point is most close to active_region_center
+		for (int k = chunk_z_min; k <= chunk_z_max; k++){
+			for (int j = chunk_y_min; j <= chunk_y_max; j++){
+				for (int i = chunk_x_min; i <= chunk_x_max; i++){
+					int idx = (k * CHUNK_DIM_Y + j) * CHUNK_DIM_X + i;
+					if (!chunk[idx])	//	this chunk is empty, skip it
+						continue;
+
+					yz::Vec3f aabb_min = chunk_min_xyz + yz::Vec3f(i, j, k) * CHUNK_SIZE;
+					yz::Vec3f corner[8] = {
+						aabb_min + yz::Vec3f(0, 0, 0) * CHUNK_SIZE,
+						aabb_min + yz::Vec3f(1, 0, 0) * CHUNK_SIZE,
+						aabb_min + yz::Vec3f(0, 1, 0) * CHUNK_SIZE,
+						aabb_min + yz::Vec3f(1, 1, 0) * CHUNK_SIZE,
+						aabb_min + yz::Vec3f(0, 0, 1) * CHUNK_SIZE,
+						aabb_min + yz::Vec3f(1, 0, 1) * CHUNK_SIZE,
+						aabb_min + yz::Vec3f(0, 1, 1) * CHUNK_SIZE,
+						aabb_min + yz::Vec3f(1, 1, 1) * CHUNK_SIZE };
+					float far_dist = 0;
+					for (int ii = 0; ii < 8; ii++){
+						float len = (corner[ii] - active_region_center).Length();
+						if (len > far_dist)
+							far_dist = len;
+					}
+					if (far_dist < active_region_radius){// this chunk is completely inside the active sphere
+						if (chunk_to_stream == -1){
+							chunk_to_stream = idx;
+							dist = far_dist;
+						}
+						else if (far_dist < dist){
+							chunk_to_stream = idx;
+							dist = far_dist;
+						}
+					}
+				}
+			}
+		}
+
+		//	if no chunk to stream, just return
+		if (chunk_to_stream == -1)
+			return chunk_to_stream;
+
+		//	setup the chunk buffer on host
+		int block_num = chunk[chunk_to_stream]->hash_entry.size();
+		int i = 0;
+		for (std::list<VoxelBlock>::iterator iter = chunk[chunk_to_stream]->voxel_block.begin();
+			iter != chunk[chunk_to_stream]->voxel_block.end();
+			iter++, i++)
+		{
+			selected_hash_entry_h[i] = chunk[chunk_to_stream]->hash_entry[i];
+			voxel_block_buffer_h[i] = *iter;
+		}
+		if (i != block_num){
+			std::cout << "error: KinectFusionReconstruction::Host2GPUStreaming, size don't match" << std::endl;
+		}
+
+		//	delete the chunk on CPU
+		delete chunk[chunk_to_stream];
+		chunk[chunk_to_stream] = NULL;
+
+		//	transfer host to buffer
+		if (block_num){
+			cpyh2d(selected_hash_entry.ptr(), &selected_hash_entry_h[0], sizeof(HashEntry)*block_num);
+			cpyh2d(voxel_block_buffer.ptr(), &voxel_block_buffer_h[0], sizeof(VoxelBlock)*block_num);
+		}
+
+		if (block_num){
+			selected_hash_entry_number = block_num;
+			streamBuffer2GPU(
+				hash_entry,
+				BUCKET_SIZE,
+				hash_bucket_atomic_lock,
+				voxel_block,
+				voxel_block_buffer,
+				available_voxel_block,
+				hash_parameters,
+				selected_hash_entry,
+				selected_hash_entry_number,
+				chunk_on_CPU,
+				chunk_to_stream);
+			//std::cout << "streamed in: " << selected_hash_entry_number << std::endl;
+		}
+
+		return chunk_to_stream;
+	}
 #endif
 }

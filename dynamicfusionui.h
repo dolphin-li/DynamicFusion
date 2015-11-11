@@ -24,6 +24,7 @@ public:
 	void on_actionLoad_volume_triggered();
 	void on_actionSave_current_mesh_triggered();
 	void on_actionPause_triggered();
+	void on_actionExport_mesh_triggered();
 	void on_rbRayCasting_clicked();
 	void on_rbMarchCube_clicked();
 	void on_pbReset_clicked();

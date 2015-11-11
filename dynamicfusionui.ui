@@ -44,6 +44,7 @@
     </property>
     <addaction name="actionSave"/>
     <addaction name="actionLoad"/>
+    <addaction name="actionExport_mesh"/>
    </widget>
    <widget class="QMenu" name="menuOp">
     <property name="title">
@@ -886,6 +887,11 @@
    </property>
    <property name="shortcut">
     <string>Space</string>
+   </property>
+  </action>
+  <action name="actionExport_mesh">
+   <property name="text">
+    <string>export mesh</string>
    </property>
   </action>
  </widget>
