@@ -132,7 +132,6 @@ void selectVisibleHashEntry(
 	update voxel block (fuse depth into volume)
 */
 void updateVoxelBlock(
-	DeviceArray2D<float>&			depthScaled,
 	const PtrStepSz<float>&			depth, 
 	const dfusion::Intr&			intr,
 	const dfusion::Mat33&			Rw2c,

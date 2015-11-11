@@ -232,6 +232,9 @@
     <ClCompile Include="algorithm\DynamicFusion\CudaUtil.cpp">
       <Filter>algorithm\DynamicFusion</Filter>
     </ClCompile>
+    <ClCompile Include="algorithm\DynamicFusion\SparseVolume.cpp">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="dynamicfusionui.ui">
@@ -593,6 +596,12 @@
     <ClInclude Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_internal.h">
       <Filter>algorithm\DynamicFusion\voxelHash</Filter>
     </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\SparseVolume.h">
+      <Filter>algorithm\DynamicFusion</Filter>
+    </ClInclude>
+    <ClInclude Include="algorithm\DynamicFusion\VoxelHash\chunk.h">
+      <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="algorithm\DynamicFusion\kinect_util.cu">
@@ -657,6 +666,9 @@
     </CudaCompile>
     <CudaCompile Include="algorithm\DynamicFusion\VoxelHash\voxel_hashing_utils.cu">
       <Filter>algorithm\DynamicFusion\voxelHash</Filter>
+    </CudaCompile>
+    <CudaCompile Include="algorithm\DynamicFusion\SparseVolume.cu">
+      <Filter>algorithm\DynamicFusion</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>

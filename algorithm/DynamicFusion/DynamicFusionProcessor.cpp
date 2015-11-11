@@ -12,6 +12,7 @@
 #include "VolumeData.h"
 #include "CpuGaussNewton.h"
 #include "GpuGaussNewtonSolver.h"
+#include "SparseVolume.h"
 namespace dfusion
 {
 //#define ENABLE_CPU_DEBUG
@@ -56,6 +57,9 @@ namespace dfusion
 		m_warpField = nullptr;
 		m_frame_id = 0;
 		m_gsSolver = nullptr;
+#ifdef SPARSE_VOLUME_TESTING
+		m_sparseVolume = nullptr;
+#endif
 	}
 
 	DynamicFusionProcessor::~DynamicFusionProcessor()
@@ -69,6 +73,9 @@ namespace dfusion
 		DFUSION_SAFE_DELETE(m_warpedMesh);
 		DFUSION_SAFE_DELETE(m_warpField);
 		DFUSION_SAFE_DELETE(m_gsSolver);
+#ifdef SPARSE_VOLUME_TESTING
+		DFUSION_SAFE_DELETE(m_sparseVolume);
+#endif
 	}
 
 	void DynamicFusionProcessor::init(Param param)
@@ -103,6 +110,19 @@ namespace dfusion
 			-(m_param.volume_resolution[1]-1) * 0.5f / m_param.voxels_per_meter, 
 			-KINECT_NEAREST_METER - float(m_param.volume_resolution[2]-1) / m_param.voxels_per_meter)
 			);
+#ifdef SPARSE_VOLUME_TESTING
+		if (m_sparseVolume == nullptr)
+			m_sparseVolume = new SparseVolume();
+		m_sparseVolume->init(make_int3(
+			m_param.volume_resolution[0],
+			m_param.volume_resolution[1],
+			m_param.volume_resolution[2]),
+			1.f / m_param.voxels_per_meter,
+			make_float3(-(m_param.volume_resolution[0] - 1)*0.5f / m_param.voxels_per_meter,
+			-(m_param.volume_resolution[1] - 1) * 0.5f / m_param.voxels_per_meter,
+			-KINECT_NEAREST_METER - float(m_param.volume_resolution[2] - 1) / m_param.voxels_per_meter)
+			);
+#endif
 
 		// mesh
 		if (m_canoMesh == nullptr)
@@ -232,7 +252,9 @@ namespace dfusion
 		const ColorMap& color)
 	{
 		depth.copyTo(m_depth_input);
+
 		color.copyTo(m_color_input);
+		//eroseColor(color, m_color_input, 1);
 
 		Tbx::Transfo rigid = rigid_align();
 		m_warpField->set_rigidTransform(rigid);
@@ -454,6 +476,22 @@ namespace dfusion
 	void DynamicFusionProcessor::nonRigidTsdfFusion()
 	{
 		fusion();
+
+#ifdef SPARSE_VOLUME_TESTING
+		cudaSafeCall(cudaThreadSynchronize(), "1");
+		ldp::tic();
+		VoxelBlockAllocation(m_depth_input);
+		cudaSafeCall(cudaThreadSynchronize(), "2");
+		VisibleVoxelBlockSelection();
+		cudaSafeCall(cudaThreadSynchronize(), "3");
+		printf("%d %d %d %d\n", m_sparseVolume->voxel_block_number_,
+			m_sparseVolume->selected_voxel_block_number_,
+			m_sparseVolume->hash_entry_size_,
+			m_sparseVolume->selected_hash_entry_number_);
+		VoxelBlockUpdate(m_depth_input);
+		cudaSafeCall(cudaThreadSynchronize(), "4");
+		ldp::toc("sparse fusion");
+#endif
 	}
 
 	void DynamicFusionProcessor::surfaceExtractionMC()
@@ -587,4 +625,92 @@ namespace dfusion
 
 		return Tbx::Transfo(c2v_Rcurr, c2v_tcurr).fast_invert();
 	}
+
+	//===============================Sparse Volume Testing=========================================
+#ifdef SPARSE_VOLUME_TESTING
+	void DynamicFusionProcessor::VoxelBlockAllocation(const DepthMap& depth_float_frame_d)
+	{
+		//	hen a new frame arrives, we insure that all the voxels 
+		// within truncation distance of the depth pixel are allocated
+		Tbx::Transfo c2w = m_warpField->get_rigidTransform().fast_invert();
+		Mat33  device_Rc2w = convert(c2w.get_mat3());
+		float3 device_tc2w = convert(c2w.get_translation());
+
+		int3	chunk_dim;
+		chunk_dim.x = CHUNK_DIM_X, chunk_dim.y = CHUNK_DIM_Y, chunk_dim.z = CHUNK_DIM_Z;
+		float3	chunk_min_xyz;
+		chunk_min_xyz.x = CHUNK_MIN_X, chunk_min_xyz.y = CHUNK_MIN_Y, chunk_min_xyz.z = CHUNK_MIN_Z;
+
+		allocVoxelBlock(
+			depth_float_frame_d,
+			m_kinect_intr,
+			device_Rc2w,
+			device_tc2w,
+			m_sparseVolume->getBlockSize(),
+			m_sparseVolume->getTsdfTruncDist(),
+			m_sparseVolume->hash_entry_,
+			BUCKET_SIZE,
+			m_sparseVolume->hash_bucket_atomic_lock_,
+			m_sparseVolume->voxel_block_,
+			m_sparseVolume->available_voxel_block_,
+			m_sparseVolume->hash_parameters_,
+			m_sparseVolume->voxel_block_number_,
+			chunk_dim,
+			chunk_min_xyz,
+			CHUNK_SIZE,
+			m_sparseVolume->chunk_on_CPU_);
+	}
+
+	void DynamicFusionProcessor::VisibleVoxelBlockSelection()
+	{
+		Tbx::Transfo w2c = m_warpField->get_rigidTransform();
+
+		Mat33  device_Rw2c = convert(w2c.get_mat3());
+		float3 device_tw2c = convert(w2c.get_translation());
+
+		selectVisibleHashEntry(
+			m_sparseVolume->hash_entry_scan_,
+			m_sparseVolume->selected_hash_entry_number_,
+			m_kinect_intr,
+			dfusion::KINECT_WIDTH,
+			dfusion::KINECT_HEIGHT,
+			0.3f,
+			8.0f,
+			device_Rw2c,
+			device_tw2c,
+			m_sparseVolume->getBlockSize(),
+			m_sparseVolume->hash_entry_,
+			m_sparseVolume->selected_hash_entry_,
+			nullptr);
+
+		m_sparseVolume->selected_voxel_block_number_ = m_sparseVolume->selected_hash_entry_number_;
+	}
+
+	void DynamicFusionProcessor::VoxelBlockUpdate(const DepthMap& depth_float_frame_d)
+	{
+		Tbx::Transfo w2c = m_warpField->get_rigidTransform();
+
+		Mat33  device_Rw2c = convert(w2c.get_mat3());
+		float3 device_tw2c = convert(w2c.get_translation());
+
+		updateVoxelBlock(
+			depth_float_frame_d,
+			m_kinect_intr,
+			device_Rw2c,
+			device_tw2c,
+			m_sparseVolume->getBlockSize(),
+			m_sparseVolume->getVoxelSize(),
+			m_sparseVolume->getTsdfTruncDist(),
+			m_sparseVolume->hash_entry_,
+			BUCKET_SIZE,
+			m_sparseVolume->hash_bucket_atomic_lock_,
+			m_sparseVolume->voxel_block_,
+			m_sparseVolume->available_voxel_block_,
+			m_sparseVolume->hash_parameters_,
+			m_sparseVolume->selected_hash_entry_,
+			m_sparseVolume->selected_hash_entry_number_,
+			m_sparseVolume->delete_hash_entry_,
+			0.99f);
+	}
+#endif
 }

@@ -404,6 +404,32 @@
        <string>show color</string>
       </property>
      </widget>
+     <widget class="QPushButton" name="pbSaveCamera">
+      <property name="geometry">
+       <rect>
+        <x>150</x>
+        <y>80</y>
+        <width>75</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>save camera</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pbLoadCamera">
+      <property name="geometry">
+       <rect>
+        <x>150</x>
+        <y>110</y>
+        <width>75</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>load camera</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QGroupBox" name="groupBox_7">
      <property name="geometry">

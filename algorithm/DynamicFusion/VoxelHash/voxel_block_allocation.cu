@@ -12,6 +12,8 @@
 #include <helper_math.h>
 #include "device_utils.h"
 
+#define GPRINT(a) {cudaSafeCall(cudaThreadSynchronize(), #a);printf("%s\n",#a);}
+
 //	==================================================================
 __global__ void initHashBucketAtomicLock(PtrSz<unsigned int> hash_bucket_atomic_lock){
 	int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -162,14 +164,14 @@ void allocVoxelBlock(
 	int blocksPerGrid = divUp(hash_bucket_atomic_lock.size(), threadPerBlock);
 
 	initHashBucketAtomicLock<<<blocksPerGrid, threadPerBlock>>>(hash_bucket_atomic_lock);
-
-
+	cudaSafeCall(cudaGetLastError(), "allocVoxelBlock::initHashBucketAtomicLock");
+	GPRINT(1);
 	//	initial voxel block number
-	static std::vector<int> param;
+	std::vector<int> param;
 	param.resize( hash_parameters.size() );
-	hash_parameters.download(&param[0]);
+	hash_parameters.download(param.data());
 	voxel_block_number = param[0];
-
+	GPRINT(2);
 
 	//	alloc block
 	VoxelBlockAllocator allocator;
@@ -200,15 +202,16 @@ void allocVoxelBlock(
 	dim3 block (32, 8);
 	dim3 grid (divUp (depth.cols, block.x), divUp (depth.rows, block.y));
 
-	voxelBlockAllocKernel<<<grid, block>>>(allocator);
+	voxelBlockAllocKernel << <grid, block >> >(allocator);
+	cudaSafeCall(cudaGetLastError(), "allocVoxelBlock::voxelBlockAllocKernel");
 
-
+	GPRINT(3);
 	//	clear the data of new allocated voxel blocks
 	//	in the previous function, only allocation is performed for hash table
 	//	so the new allocated voxel blocks are from voxel_block_number to new voxel_block_number
 	param.resize( hash_parameters.size() );
-	hash_parameters.download(&param[0]);
-
+	hash_parameters.download(param.data());
+	GPRINT(4);
 	int start_id	= voxel_block_number;
 	int end_id		= param[0];
 	if( end_id > start_id ){
@@ -216,6 +219,7 @@ void allocVoxelBlock(
 		int blocksPerGrid = end_id - start_id;
 		resetVoxelBlock<<<blocksPerGrid, threadPerBlock>>>(
 			voxel_block, available_voxel_block, start_id);
+		cudaSafeCall(cudaGetLastError(), "allocVoxelBlock::resetVoxelBlock");
 
 		voxel_block_number = end_id;
 	}

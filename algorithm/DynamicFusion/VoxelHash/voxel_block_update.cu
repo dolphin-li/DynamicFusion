@@ -82,11 +82,11 @@ struct VoxelBlockUpdater{
 		CTA_SIZE = BLOCK_DIM * BLOCK_DIM * BLOCK_DIM
 	};
 	
-	PtrStepSz<float>	depthScaled;	//	the scaled depth
+	PtrStepSz<float>			depth;			//	the scaled depth
 	dfusion::Intr				intr;			//	intrinsic parameters of camera
 
 	dfusion::Mat33				Rw2c;			//	world to camera
-	float3				tw2c;
+	float3						tw2c;
 
 	float				block_size;		//	edge length of the block cube, voxel_size * BLOCK_DIM
 	float				voxel_size;		//	edge length of the voxel cube
@@ -129,18 +129,20 @@ struct VoxelBlockUpdater{
 		xyz = Rw2c * xyz + tw2c;
 
 		//	project the point onto screen
+		float3 uvd = intr.xyz2uvd(xyz);
 		int2 ukr;
-		ukr.x = __float2int_rn (xyz.x * intr.fx / xyz.z + intr.cx);
-		ukr.y = __float2int_rn (xyz.y * intr.fy / xyz.z + intr.cy);
+		ukr.x = __float2int_rn (uvd.x);
+		ukr.y = __float2int_rn (uvd.y);
 
 		//	if this voxel is in the view frustum
-		if (ukr.x >= 0 && ukr.y >= 0 && ukr.x < depthScaled.cols && ukr.y < depthScaled.rows ){
+		if (ukr.x >= 0 && ukr.y >= 0 && ukr.x < depth.cols && ukr.y < depth.rows){
 			//	calculate signed distance function
-			float Dp_scaled = depthScaled.ptr (ukr.y)[ukr.x];	//	meters
-			float sdf = Dp_scaled - length(xyz);
+			float depthVal = depth(ukr.y, ukr.x) * 0.001f;
+			float3 dxyz = intr.uvd2xyz(make_float3(ukr.x, ukr.y, depthVal));
+			float sdf = xyz.z - dxyz.z;
 
 			//	if the projection point has depth value and this voxel is able to update
-			if (Dp_scaled > 0.001f && sdf >= -trunc_dist)		//	meters
+			if (depthVal > 0.001f && sdf >= -trunc_dist)		//	meters
 			{
 				float _tsdf = min (1.0f, sdf / trunc_dist);		//	range -1 to +1, negative means behind observed depth
 
@@ -215,10 +217,9 @@ __global__ void deleteVoxelBlockKernel( const VoxelBlockDeleter deleter ){
 
 //	==================================================================
 void updateVoxelBlock(
-	DeviceArray2D<float>&			depthScaled,
 	const PtrStepSz<float>&			depth, 
-	const dfusion::Intr&						intr,
-	const dfusion::Mat33&					Rw2c,
+	const dfusion::Intr&			intr,
+	const dfusion::Mat33&			Rw2c,
 	const float3&					tw2c,
 	float							block_size, 
 	float							voxel_size,
@@ -234,17 +235,11 @@ void updateVoxelBlock(
 	DeviceArray<unsigned char>		delete_hash_entry,
 	float							abs_tsdf_thre )
 {
-	//scales depth along ray and converts mm -> meters. 
-	depthScaled.create (depth.rows, depth.cols);
-
-	dim3 block_scale (32, 8);
-	dim3 grid_scale (divUp (depth.cols, block_scale.x), divUp (depth.rows, block_scale.y));
-
-	createScaleDepth<<<grid_scale, block_scale>>>(depth, depthScaled, intr);
-
+	if (visible_hash_entry_number == 0)
+		return;
 	//	update each voxel in voxel block
 	VoxelBlockUpdater updater;
-	updater.depthScaled		= depthScaled;
+	updater.depth			= depth;
 	updater.intr			= intr;
 
 	updater.Rw2c			= Rw2c;
@@ -270,7 +265,8 @@ void updateVoxelBlock(
 	int threadPerBlock = 256;
 	int blocksPerGrid = divUp(hash_bucket_atomic_lock.size(), threadPerBlock);
 
-	initHashBucketAtomicLock<<<blocksPerGrid, threadPerBlock>>>( hash_bucket_atomic_lock );
+	initHashBucketAtomicLock << <blocksPerGrid, threadPerBlock >> >(hash_bucket_atomic_lock);
+	cudaSafeCall(cudaGetLastError(), "updateVoxelBlock::initHashBucketAtomicLock");
 
 	//	delete hash entries that has been marked to delete
 	VoxelBlockDeleter deleter;
@@ -290,7 +286,7 @@ void updateVoxelBlock(
 	blocksPerGrid = divUp(visible_hash_entry_number, threadPerBlock);
 
 	deleteVoxelBlockKernel<<<blocksPerGrid, threadPerBlock>>>( deleter );
-
+	cudaSafeCall(cudaGetLastError(), "updateVoxelBlock::deleteVoxelBlockKernel");
 }
 
 

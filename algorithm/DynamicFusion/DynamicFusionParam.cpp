@@ -33,7 +33,7 @@ namespace dfusion
 		* ******************************************************/
 		// cannot be larger than warpField::knnK
 		warp_knn_k_eachlevel[0] = 4;	// graph-pixel association
-		warp_knn_k_eachlevel[1] = 4; // finest graph
+		warp_knn_k_eachlevel[1] = KnnK; // finest graph
 		warp_knn_k_eachlevel[2] = KnnK;
 		warp_knn_k_eachlevel[3] = KnnK;
 		set_warp_radius_search_epsilon(0.025);

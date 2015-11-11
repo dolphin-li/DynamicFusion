@@ -5,12 +5,14 @@
 class Camera;
 namespace dfusion
 {
+//#define SPARSE_VOLUME_TESTING
 	class TsdfVolume;
 	class RayCaster;
 	class GpuMesh;
 	class MarchingCubes;
 	class WarpField;
 	class GpuGaussNewtonSolver;
+	class SparseVolume;
 	class DynamicFusionProcessor
 	{
 	public:
@@ -52,8 +54,17 @@ namespace dfusion
 		void updateRegularizationGraph();
 		void updateKNNField();
 
+		void eroseColor(const ColorMap& src, ColorMap& dst, int nRadius);
+
 		Tbx::Transfo rigid_align();
 		void fusion();
+	protected:
+		//===================Sparse Volume Testing===========================
+#ifdef SPARSE_VOLUME_TESTING
+		void VoxelBlockAllocation(const DepthMap& depth_float_frame_d);
+		void VisibleVoxelBlockSelection();
+		void VoxelBlockUpdate(const DepthMap& depth_float_frame_d);
+#endif
 	private:
 		Param m_param;
 		Camera* m_camera;
@@ -75,6 +86,7 @@ namespace dfusion
 		};
 		DepthMap m_depth_input;
 		ColorMap m_color_input;
+		ColorMap m_color_tmp;
 		std::vector<DepthMap> m_depth_curr_pyd;
 		std::vector<MapArr> m_vmap_curr_pyd;
 		std::vector<MapArr> m_nmap_curr_pyd;
@@ -96,5 +108,10 @@ namespace dfusion
 		DeviceArray2D<float4> m_nmap_warp;
 
 		GpuGaussNewtonSolver* m_gsSolver;
+
+		//===============Sparse Volume Testing====================
+#ifdef SPARSE_VOLUME_TESTING
+		SparseVolume* m_sparseVolume;
+#endif
 	};
 }

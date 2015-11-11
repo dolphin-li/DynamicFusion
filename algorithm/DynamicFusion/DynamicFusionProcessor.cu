@@ -142,11 +142,19 @@ namespace dfusion
 					float weight_new = min(tsdf_weight_prev.y + fusion_weight, max_weight);
 					float4 color = make_float4(0, 0, 0, 0);
 #ifdef ENABLE_COLOR_FUSION
-					//color = unpack_tsdf_rgba(rawTsdf) * 0.0f +
-					//	tex2D(g_color_tex, coo.x, coo.y) * 1.f;
-					color = (unpack_tsdf_rgba(rawTsdf) * tsdf_weight_prev.y +
-						fusion_weight * tex2D(g_color_tex, coo.x, coo.y))
-						/ (tsdf_weight_prev.y + fusion_weight);
+					float4 newColor = tex2D(g_color_tex, coo.x, coo.y);
+					if (newColor.x != 0.f && newColor.y != 0.f
+						&& newColor.z != 0.f)
+					{
+#if 0
+						color = unpack_tsdf_rgba(rawTsdf) * 0.0f +
+							tex2D(g_color_tex, coo.x, coo.y) * 1.f;
+#else
+						color = (unpack_tsdf_rgba(rawTsdf) * tsdf_weight_prev.y +
+							fusion_weight * newColor)
+							/ (tsdf_weight_prev.y + fusion_weight);
+#endif
+					}
 #endif
 					write_tsdf_surface(volumeTex, pack_tsdf(tsdf_new, weight_new,
 						color), x, y, z);
@@ -222,5 +230,187 @@ namespace dfusion
 #endif
 
 		cudaSafeCall(cudaGetLastError(), "DynamicFusionProcessor::fusion()");
+	}
+
+#pragma region --min-filter
+
+	const static int BLOCK_DIM_X = 32;
+	const static int BLOCK_DIM_Y = 16;
+	const static int MAX_FILTER_RADIUS = 16;
+	const static int X_HALO_STEPS = (MAX_FILTER_RADIUS + BLOCK_DIM_X - 1) / BLOCK_DIM_X;
+	const static int Y_HALO_STEPS = (MAX_FILTER_RADIUS + BLOCK_DIM_Y - 1) / BLOCK_DIM_Y;
+	const static int X_PATCH_PER_BLOCK = 4;
+	const static int Y_PATCH_PER_BLOCK = 4;
+
+	template<int Radius>
+	__global__ void erose_filter_row(uchar4*  __restrict__ dst,
+		const uchar4*  __restrict__ src, int nX, int nY, int pitch)
+	{
+		// Data cache: threadIdx.x , threadIdx.y
+		enum{ SMEM_X_LEN = (X_PATCH_PER_BLOCK + 2 * X_HALO_STEPS) * BLOCK_DIM_X };
+		enum{ SMEM_Y_LEN = BLOCK_DIM_Y };
+		__shared__ uchar4 smem[SMEM_Y_LEN][SMEM_X_LEN];
+
+		const int baseX = (blockIdx.x * X_PATCH_PER_BLOCK - X_HALO_STEPS) * BLOCK_DIM_X + threadIdx.x;
+		const int baseY = blockIdx.y * BLOCK_DIM_Y + threadIdx.y;
+		if (baseY >= nY)
+			return;
+
+		src += baseY * pitch + baseX;
+		dst += baseY * pitch + baseX;
+
+		//Load main data and right halo
+#pragma unroll
+		for (int patchId = 0; patchId < X_HALO_STEPS * 2 + X_PATCH_PER_BLOCK; patchId++)
+		{
+			const int pbx = patchId * BLOCK_DIM_X;
+			smem[threadIdx.y][threadIdx.x + pbx] =
+				(pbx + baseX < nX && pbx + baseX >= 0) ? src[pbx] : make_uchar4(255,255,255,255);
+		}
+
+		//Compute and store results
+		__syncthreads();
+#pragma unroll
+		for (int patchId = X_HALO_STEPS; patchId < X_HALO_STEPS + X_PATCH_PER_BLOCK; patchId++)
+		{
+			const int pbx = patchId * BLOCK_DIM_X;
+			if (baseX + pbx < nX)
+			{
+				uchar4 s = smem[threadIdx.y][threadIdx.x + pbx];
+#pragma unroll
+				for (int j = -Radius; j <= Radius; j++)
+				{
+					if (smem[threadIdx.y][threadIdx.x + pbx + j].x == 0
+						&& smem[threadIdx.y][threadIdx.x + pbx + j].y == 0
+						&& smem[threadIdx.y][threadIdx.x + pbx + j].z == 0)
+						s = make_uchar4(0, 0, 0, 0);
+				}
+				dst[pbx] = s;
+			}
+		}
+	}
+
+	template<int Radius>
+	__global__ void erose_filter_col(uchar4*  __restrict__ dst,
+		const uchar4*  __restrict__ src, int nX, int nY, int pitch)
+	{
+		// Data cache: threadIdx.x , threadIdx.y
+		enum{ SMEM_X_LEN = BLOCK_DIM_X };
+		enum{ SMEM_Y_LEN = (Y_PATCH_PER_BLOCK + 2 * Y_HALO_STEPS) * BLOCK_DIM_Y };
+		__shared__ uchar4 smem[SMEM_Y_LEN][SMEM_X_LEN];
+
+		const int baseX = blockIdx.x * BLOCK_DIM_X + threadIdx.x;
+		const int baseY = (blockIdx.y * Y_PATCH_PER_BLOCK - Y_HALO_STEPS) * BLOCK_DIM_Y + threadIdx.y;
+		if (baseX >= nX)
+			return;
+
+		src += baseY * pitch + baseX;
+		dst += baseY * pitch + baseX;
+
+		//Load main data and lower halo
+#pragma unroll
+		for (int patchId = 0; patchId < Y_HALO_STEPS * 2 + Y_PATCH_PER_BLOCK; patchId++)
+		{
+			const int pby = patchId * BLOCK_DIM_Y;
+			smem[threadIdx.y + pby][threadIdx.x] =
+				(pby + baseY < nY && pby + baseY >= 0) ? src[pby * pitch] : make_uchar4(255,255,255,255);
+		}
+
+		//Compute and store results
+		__syncthreads();
+#pragma unroll
+		for (int patchId = Y_HALO_STEPS; patchId < Y_HALO_STEPS + Y_PATCH_PER_BLOCK; patchId++)
+		{
+			const int pby = patchId * BLOCK_DIM_Y;
+			if (baseY + pby < nY)
+			{
+				uchar4 s = smem[threadIdx.y + pby][threadIdx.x];
+#pragma unroll
+				for (int j = -Radius; j <= Radius; j++)
+				{
+					if (smem[threadIdx.y + pby + j][threadIdx.x].x == 0
+						&& smem[threadIdx.y + pby + j][threadIdx.x].y == 0
+						&& smem[threadIdx.y + pby + j][threadIdx.x].z == 0)
+						s = make_uchar4(0, 0, 0, 0);
+				}
+				dst[pby * pitch] = s;
+			}
+		}
+	}
+
+
+	template<int Radius>
+	static void erose_filter_row_caller(uchar4* dst, const uchar4* src,
+		int nX, int nY, int pitch)
+	{
+		dim3 block(BLOCK_DIM_X, BLOCK_DIM_Y);
+		dim3 grid(divUp(nX, block.x*X_PATCH_PER_BLOCK), divUp(nY, block.y), 1);
+
+		erose_filter_row<Radius> << <grid, block >> >(dst, src, nX, nY, pitch);
+	}
+
+	template<int Radius>
+	static void erose_filter_col_caller(uchar4* dst, const uchar4* src,
+		int nX, int nY, int pitch)
+	{
+		dim3 block(BLOCK_DIM_X, BLOCK_DIM_Y, 1);
+		dim3 grid(divUp(nX, block.x), divUp(nY, block.y*Y_PATCH_PER_BLOCK), 1);
+
+		erose_filter_col<Radius> << <grid, block >> >(dst, src, nX, nY, pitch);
+	}
+
+	void erose_filter(uchar4* dst_d, const uchar4* src_d,
+		int nX, int nY, int pitch,
+		int radius, int dim)
+	{
+		if (src_d == dst_d)
+			throw std::exception("min_filter: src and dst cannot be the same memory!");
+		if (radius <= 0 || radius >= MAX_FILTER_RADIUS)
+			throw std::exception("min_filter: error, non supported kernel size!");
+		if (dim > 2 || dim < 0)
+			throw std::exception("min_filter: illegal input dim");
+
+		typedef void(*row_caller_t)(uchar4* dst, const uchar4* src,
+			int nX, int nY, int pitch);
+		typedef void(*col_caller_t)(uchar4* dst, const uchar4* src,
+			int nX, int nY, int pitch);
+		static const row_caller_t row_callers[MAX_FILTER_RADIUS] =
+		{
+			0, erose_filter_row_caller<1>, erose_filter_row_caller<2>, erose_filter_row_caller<3>,
+			erose_filter_row_caller<4>, erose_filter_row_caller<5>, erose_filter_row_caller<6>,
+			erose_filter_row_caller<7>, erose_filter_row_caller<8>, erose_filter_row_caller<9>,
+			erose_filter_row_caller<10>, erose_filter_row_caller<11>, erose_filter_row_caller<12>,
+			erose_filter_row_caller<13>, erose_filter_row_caller<14>, erose_filter_row_caller<15>,
+		};
+		static const col_caller_t col_callers[MAX_FILTER_RADIUS] =
+		{
+			0, erose_filter_col_caller<1>, erose_filter_col_caller<2>, erose_filter_col_caller<3>,
+			erose_filter_col_caller<4>, erose_filter_col_caller<5>, erose_filter_col_caller<6>,
+			erose_filter_col_caller<7>, erose_filter_col_caller<8>, erose_filter_col_caller<9>,
+			erose_filter_col_caller<10>, erose_filter_col_caller<11>, erose_filter_col_caller<12>,
+			erose_filter_col_caller<13>, erose_filter_col_caller<14>, erose_filter_col_caller<15>,
+		};
+
+		if (dim == 0)
+		{
+			row_callers[radius](dst_d, src_d, nX, nY, pitch);
+		}
+		if (dim == 1)
+		{
+			col_callers[radius](dst_d, src_d, nX, nY, pitch);
+		}
+		cudaSafeCall(cudaGetLastError(), "erose_filter");
+	}
+#pragma endregion
+
+	void DynamicFusionProcessor::eroseColor(const ColorMap& src, ColorMap& dst, int nRadius)
+	{
+		m_color_tmp.create(src.rows(), src.cols());
+		dst.create(src.rows(), src.cols());
+
+		erose_filter((uchar4*)m_color_tmp.ptr(), (const uchar4*)src.ptr(), src.cols(), 
+			src.rows(), src.step() / sizeof(uchar4), nRadius, 0);
+		erose_filter((uchar4*)dst.ptr(), (const uchar4*)m_color_tmp.ptr(), src.cols(),
+			src.rows(), src.step() / sizeof(uchar4), nRadius, 0);
 	}
 }

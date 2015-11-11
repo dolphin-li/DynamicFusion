@@ -23,7 +23,7 @@ namespace dfusion
 //#define USE_FLOAT_TSDF_VOLUME 
 //#define USE_SHORT_TSDF_VOLUME
 #define USE_HALF_TSDF_VOLUME
-#define ENABLE_COLOR_FUSION
+//#define ENABLE_COLOR_FUSION
 #define ENABLE_8_NN_GRAPH
 
 #define COLOR_FUSION_BRIGHTNESS 1.5 // multiplied after colors extracted from Marching Cubes.

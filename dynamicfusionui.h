@@ -69,6 +69,8 @@ public:
 	void on_pbDebug_clicked();
 	void on_sbFrmIdxPlus_valueChanged(int v);
 	void on_pbUpdateParam_clicked();
+	void on_pbSaveCamera_clicked();
+	void on_pbLoadCamera_clicked();
 
 	void on_cbEnableRigid_clicked();
 protected:

@@ -21,11 +21,25 @@ public:
 			mkdir(m_currentPath.toStdString());
 		g_dataholder.m_dparam.save(fullfile(m_currentPath.toStdString(), "_param.param.txt").c_str());
 	}
-	void push_depth(const std::vector<dfusion::depthtype>& depth, int id)
+	void push_depth(const std::vector<dfusion::depthtype>& depth, 
+		const std::vector<dfusion::PixelRGBA>* color, int id)
 	{
 		QMutexLocker locker(g_mutex);
 		m_depths.push_back(depth);
 		m_ids.push_back(id);
+		if (color)
+		{
+			m_colors.push_back(QImage(dfusion::KINECT_WIDTH,
+				dfusion::KINECT_HEIGHT, QImage::Format_RGBA8888));
+			const dfusion::PixelRGBA* src = color->data();
+			QImage& img = m_colors.back();
+			for (int y = 0; y < dfusion::KINECT_HEIGHT; y++)
+			for (int x = 0; x < dfusion::KINECT_WIDTH; x++)
+			{
+				dfusion::PixelRGBA p = src[y*dfusion::KINECT_WIDTH + x];
+				img.setPixel(x, y, qRgba(p.r, p.g, p.b, p.a));
+			}
+		}
 	}
 protected:
 	void run()
@@ -36,27 +50,38 @@ protected:
 			{
 				int id = 0;
 				const std::vector<dfusion::depthtype>* depth = nullptr;
+				const QImage* color = nullptr;
 				{
 					QMutexLocker locker(g_mutex);
 					id = m_ids.front();
 					depth = &m_depths.front();
+					if (m_colors.size())
+						color = &m_colors.front();
 				}
 
 				QDir dir(m_currentPath);
 				QString name = dir.absoluteFilePath(QString().sprintf("%08d.depth", id));
 				g_dataholder.saveDepth(*depth, name.toStdString());
 				printf("saved: %s\n", name.toStdString().c_str());
+				if (color)
+				{
+					name = dir.absoluteFilePath(QString().sprintf("%08d.png", id));
+					color->save(name);
+				}
 
 				{
 					QMutexLocker locker(g_mutex);
 					m_ids.pop_front();
 					m_depths.pop_front();
+					if (m_colors.size())
+						m_colors.pop_front();
 				}
 			}
 		}
 	}
 private:
 	QQueue<std::vector<dfusion::depthtype>> m_depths;
+	QQueue<QImage> m_colors;
 	QQueue<int> m_ids;
 	QString m_currentPath;
 };
@@ -268,24 +293,51 @@ void DynamicFusionUI::frameLoading()
 	if (!dir.exists())
 		throw std::exception(("error input path:" + m_currentPath.toStdString()).c_str());
 	QString name = dir.absoluteFilePath(QString().sprintf("%08d.depth", m_frameIndex));
-	m_frameIndex += g_dataholder.m_dparam.load_frameIndx_plus_num;
 
 	try
 	{
 		g_dataholder.loadDepth(g_dataholder.m_depth_h, name.toStdString());
-		g_dataholder.m_depth_d.upload(g_dataholder.m_depth_h.data(), dfusion::KINECT_WIDTH*sizeof(dfusion::depthtype),
+		g_dataholder.m_depth_d.upload(g_dataholder.m_depth_h.data(), 
+			dfusion::KINECT_WIDTH*sizeof(dfusion::depthtype),
 			dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
+
+#ifdef ENABLE_COLOR_FUSION
+		name = dir.absoluteFilePath(QString().sprintf("%08d.png", m_frameIndex));
+		QImage img(name);
+		if (!img.isNull())
+		{
+			for (int y = 0; y < dfusion::KINECT_HEIGHT; y++)
+			for (int x = 0; x < dfusion::KINECT_WIDTH; x++)
+			{
+				QRgb p = img.pixel(x, y);
+				dfusion::PixelRGBA& d = g_dataholder.m_color_h[y*dfusion::KINECT_WIDTH + x];
+				d.r = qRed(p);
+				d.g = qGreen(p);
+				d.b = qBlue(p);
+				d.a = qAlpha(p);
+			}
+		}
+		g_dataholder.m_color_d.upload(g_dataholder.m_color_h.data(), 
+			dfusion::KINECT_WIDTH*sizeof(dfusion::PixelRGBA),
+			dfusion::KINECT_HEIGHT, dfusion::KINECT_WIDTH);
+#endif
 	}
 	catch (std::exception e)
 	{
 		setState(Pause);
 		std::cout << e.what() << std::endl;
 	}
+
+	m_frameIndex += g_dataholder.m_dparam.load_frameIndx_plus_num;
 }
 
 void DynamicFusionUI::frameSaving()
 {
-	g_saveThread.push_depth(g_dataholder.m_depth_h, m_frameIndex++);
+	const std::vector<dfusion::PixelRGBA>* cl = nullptr;
+#ifdef ENABLE_COLOR_FUSION
+	cl = &g_dataholder.m_color_h;
+#endif
+	g_saveThread.push_depth(g_dataholder.m_depth_h, cl, m_frameIndex++);
 }
 
 void DynamicFusionUI::frameLive()
@@ -384,7 +436,7 @@ void DynamicFusionUI::updateDynamicFusion()
 			img.save(name);
 		}
 		// raw view
-		if (0)
+		if (1)
 		{
 			std::vector<uchar4> tmpMap;
 			ui.widgetDepth->download_currentmap(tmpMap);
@@ -408,7 +460,7 @@ void DynamicFusionUI::updateDynamicFusion()
 		}
 #if 1
 		// error map
-		if (1)
+		if (0)
 		{
 			std::vector<uchar4> tmpMap(g_dataholder.m_errorMap_shading.rows()
 				*g_dataholder.m_errorMap_shading.cols() * sizeof(uchar4));
@@ -1013,4 +1065,42 @@ void DynamicFusionUI::on_cbEnableRigid_clicked()
 {
 	g_dataholder.m_dparam.fusion_enable_rigidSolver = ui.cbEnableRigid->isChecked();
 	g_dataholder.m_processor.updateParam(g_dataholder.m_dparam);
+}
+
+void DynamicFusionUI::on_pbSaveCamera_clicked()
+{
+	try
+	{
+		QString name = QFileDialog::getSaveFileName(this, "save camera", "", "*.camera.txt");
+		if (!name.isEmpty())
+		{
+			if (!name.endsWith(".camera.txt"))
+				name.append(".camera.txt");
+			Camera cam;
+			ui.widgetWarpedView->getCameraInfo(cam);
+			cam.save(name.toStdString().c_str());
+		}
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+
+void DynamicFusionUI::on_pbLoadCamera_clicked()
+{
+	try
+	{
+		QString name = QFileDialog::getOpenFileName(this, "open camera", "../data", "*.camera.txt");
+		if (!name.isEmpty())
+		{
+			Camera cam;
+			cam.load(name.toStdString().c_str());
+			ui.widgetWarpedView->setCameraInfo(cam);
+		}
+	}
+	catch (std::exception e)
+	{
+		std::cout << e.what() << std::endl;
+	}
 }

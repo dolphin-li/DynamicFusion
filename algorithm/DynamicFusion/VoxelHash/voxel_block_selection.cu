@@ -296,7 +296,8 @@ void selectVisibleHashEntry(
 
 	int threadPerBlock = 256;
 	int blocksPerGrid = divUp(hash_entry.size(), threadPerBlock);
-	visibilityMarkerKernel<<<blocksPerGrid, threadPerBlock>>>( marker );
+	visibilityMarkerKernel << <blocksPerGrid, threadPerBlock >> >(marker);
+	cudaSafeCall(cudaGetLastError(), "selectVisibleHashEntry::visibilityMarkerKernel");
 
 	//	scan
 	scan_exclusive( hash_entry_scan );
@@ -305,11 +306,16 @@ void selectVisibleHashEntry(
 	//	create visible hash entry table
 	createSelectedEntry<<<blocksPerGrid, threadPerBlock>>>(
 		hash_entry, hash_entry_scan_d_ptr, visible_hash_entry);
+	cudaSafeCall(cudaGetLastError(), "selectVisibleHashEntry::createSelectedEntry");
 
 	//	calculate vertex list
-	blocksPerGrid = divUp(visible_hash_entry_number, threadPerBlock);
-	createVoxelBlockVertexList<<<blocksPerGrid, threadPerBlock>>>(
-		visible_hash_entry, block_size, selected_voxel_block_vertex_list_d, visible_hash_entry_number);
+	if (selected_voxel_block_vertex_list_d && visible_hash_entry_number)
+	{
+		blocksPerGrid = divUp(visible_hash_entry_number, threadPerBlock);
+		createVoxelBlockVertexList << <blocksPerGrid, threadPerBlock >> >(
+			visible_hash_entry, block_size, selected_voxel_block_vertex_list_d, visible_hash_entry_number);
+		cudaSafeCall(cudaGetLastError(), "selectVisibleHashEntry::createVoxelBlockVertexList");
+	}
 }
 
 
