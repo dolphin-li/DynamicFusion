@@ -1012,6 +1012,7 @@ namespace dfusion
 
 		// draw cano normals as colors
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		g_shader_cano->begin();
 		glColorPointer(3, GL_FLOAT, sizeof(PointType), (void*)(canoMesh->num()*sizeof(PointType)));
 		glDrawArrays(GL_TRIANGLES, 0, m_num);
 		// read the buffer

@@ -33,7 +33,7 @@ namespace dfusion
 		* ******************************************************/
 		// cannot be larger than warpField::knnK
 		warp_knn_k_eachlevel[0] = 4;	// graph-pixel association
-		warp_knn_k_eachlevel[1] = KnnK; // finest graph
+		warp_knn_k_eachlevel[1] = 4; // finest graph
 		warp_knn_k_eachlevel[2] = KnnK;
 		warp_knn_k_eachlevel[3] = KnnK;
 		set_warp_radius_search_epsilon(0.025);
@@ -72,7 +72,7 @@ namespace dfusion
 		mirror_input = false; 
 		load_frameIndx_plus_num = 1;
 		solver_enable_nan_check = false;
-		graph_single_level = true;
+		graph_single_level = false;
 		graph_remove_small_components_ratio = 10.1f; //code not ready, use this param>=1.f to disable
 
 		if (graph_single_level)
